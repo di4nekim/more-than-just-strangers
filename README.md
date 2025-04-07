@@ -5,4 +5,8 @@
 - React
 - Node.js
 - Next.js
-- PostgreSQL
+- DynamoDB
+- AWS API Gateway (WebSockets)
+- AWS Lambda
+- AWS Cognito
+- DynamoDB
