@@ -47,16 +47,20 @@ exports.handler = async (event) => {
             // Retrieve undelivered messages from MessageQueue
             const messageQuery = {
                 TableName: process.env.MESSAGE_QUEUE_TABLE,
-                IndexName: "receiverId-index",
                 KeyConditionExpression: "receiverId = :userId",
-                ExpressionAttributeValues: { ":userId": userId },
+                FilterExpression: "delivered = :delivered",
+                ExpressionAttributeValues: {
+                    ":userId": userId,
+                    ":delivered": false
+                }
             };
 
             const messageResults = await dynamoDB.query(messageQuery).promise();
 
-            // Send all undelivered messages
+            // Process undelivered messages
             for (const message of messageResults.Items || []) {
                 try {
+                    // Send message through WebSocket connection
                     await apiGateway.postToConnection({
                         ConnectionId: connectionId,
                         Data: JSON.stringify({
