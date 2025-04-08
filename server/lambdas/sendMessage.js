@@ -79,7 +79,28 @@ exports.handler = async (event) => {
                     console.error('Error sending message:', sendError);
                     return { statusCode: 500, body: "Error sending message: " + sendError.message };
                 }
+            } else {
+                // Queue the message if no active connection
+                const queueParams = {
+                    TableName: process.env.MESSAGE_QUEUE_TABLE,
+                    Item: {
+                        messageId: Date.now().toString(), // Simple unique ID
+                        senderId,
+                        receiverId,
+                        message,
+                        timestamp: new Date().toISOString(),
+                        delivered: false
+                    }
+                };
+                
+                try {
+                    await dynamoDB.put(queueParams).promise();
+                } catch (queueError) {
+                    console.error('Error queuing message:', queueError);
+                    return { statusCode: 500, body: "Error queuing message: " + queueError.message };
+                }
             }
+            
 
             return { statusCode: 200, body: 'Message sent successfully' };
         } catch (dbError) {
