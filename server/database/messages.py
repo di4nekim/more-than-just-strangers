@@ -5,7 +5,7 @@ dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
 
 # Create table in your AWS account
 table = dynamodb.create_table(
-    TableName='Chat',
+    TableName='Messages',
     KeySchema=[
         {'AttributeName': 'ChatID', 'KeyType': 'HASH'},  # Partition key
         {'AttributeName': 'Timestamp', 'KeyType' : 'RANGE'}
@@ -20,5 +20,5 @@ table = dynamodb.create_table(
     }
 )
 
-table.meta.client.get_waiter('table_exists').wait(TableName='Chat')
+table.meta.client.get_waiter('table_exists').wait(TableName='Messages')
 print(f"Table {table.table_name} created successfully!")
