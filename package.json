@@ -10,6 +10,7 @@
     "test": "jest server/lambdas/__tests__"
   },
   "dependencies": {
+    "dotenv": "^16.5.0",
     "next": "15.1.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

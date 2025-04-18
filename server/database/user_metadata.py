@@ -3,12 +3,12 @@ from botocore.exceptions import ClientError
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
-TABLE_NAME = "userMetaData"
+TABLE_NAME = "UserMetaData"
 
 try:
     # Create table in your AWS account
     table = dynamodb.create_table(
-        TableName='userMetaData',
+        TableName='UserMetaData',
         KeySchema=[
             {'AttributeName': 'UserID', 'KeyType': 'HASH'},  # Partition key
         ],
@@ -21,7 +21,7 @@ try:
         }
     )
     # wait until table exists before enabling TTL
-    table.meta.client.get_waiter('table_exists').wait(TableName='userMetaData')
+    table.meta.client.get_waiter('table_exists').wait(TableName='UserMetaData')
 except ClientError as e:
     if e.response['Error']['Code'] == 'ResourceInUseException':
         print("Table already exists!")
@@ -33,7 +33,7 @@ table = dynamodb.Table(TABLE_NAME)
 # enable TTL
 try:
     table.meta.client.update_time_to_live(
-    TableName='userMetaData',
+    TableName='UserMetaData',
     TimeToLiveSpecification={
         'Enabled' : True,
         'AttributeName' : 'TTL'

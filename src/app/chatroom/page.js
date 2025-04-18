@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const messageEndRef = useRef(null);
+  let socket = useRef(null);
 
   const scrollToBottom = () => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -17,25 +19,34 @@ export default function ChatRoom() {
   }, [messages]);
 
   useEffect(() => {
-    const socket = new WebSocket('wss://DUMMY-API-GATEWAY-ENDPOINT');
+    socket.current = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT);
 
-    socket.onopen = () => {
+    socket.current.onopen = () => {
       setIsConnected(true);
       console.log('WebSocket connected');
     };
 
-    socket.onclose = () => {
+    socket.current.onclose = () => {
       setIsConnected(false);
       console.log('WebSocket disconnected');
     };
 
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      setMessages((prev) => [...prev, message]);
+    socket.current.onmessage = (event) => {
+      try {
+        console.log('Received message:', event.data);
+        const message = JSON.parse(event.data);
+        setMessages((prev) => [...prev, message]);
+      } catch (error) {
+        console.error('Error parsing message:', error, 'Message data:', event.data);
+      }
+    };
+
+    socket.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
     };
 
     return () => {
-      socket.close();
+      socket.current.close();
     };
   }, []);
 
@@ -43,18 +54,27 @@ export default function ChatRoom() {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    if (isConnected) {
-      socket.send(JSON.stringify({
+    if (isConnected && socket.current) {
+      const messageObject = {
+        id: uuidv4(),
+        sender: 'user',
+        text: newMessage
+      };
+
+      socket.current.send(JSON.stringify({
         action: 'sendMessage',
         data: {
           senderId: 'DUMMY_USER_ID',
-          message: newMessage
+          message: newMessage,
+          messageId: messageObject.id
         }
       }));
 
+      setMessages((prev) => [...prev, messageObject]);
+
       setNewMessage('');
     } else {
-      console.error('WebSocket is not connected');
+      console.error('WebSocket is not connected or socket is undefined');
     }
   };
 

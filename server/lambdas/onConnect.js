@@ -1,6 +1,10 @@
+require('dotenv').config();
+
 // stores connection ID in dynamoDB
 // modified to deliver msgs in messageQueue, if exists
 const { createDynamoDB, createApiGateway } = require('./config/aws');
+const boto3 = require('boto3');
+const uuid = require('uuid');
 
 exports.handler = async (event) => {
     const dynamoDB = createDynamoDB();
