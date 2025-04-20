@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for onDisconnect.js</title>
+    <title>Code coverage report for userMetadataHandler.js</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="prettify.css" />
     <link rel="stylesheet" href="base.css" />
@@ -19,13 +19,13 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="index.html">All files</a> onDisconnect.js</h1>
+        <h1><a href="index.html">All files</a> userMetadataHandler.js</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/22</span>
             </div>
         
             
@@ -39,14 +39,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>0/8</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/22</span>
             </div>
         
             
@@ -108,42 +108,24 @@
 <a name='L43'></a><a href='#L43'>43</a>
 <a name='L44'></a><a href='#L44'>44</a>
 <a name='L45'></a><a href='#L45'>45</a>
-<a name='L46'></a><a href='#L46'>46</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -151,54 +133,99 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// removes disconnected user's connectionID from dynamoDB, cleans up stale connections
-const { createDynamoDB } = <span class="cstat-no" title="statement not covered" >require('./config/aws');</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const AWS = <span class="cstat-no" title="statement not covered" >require('aws-sdk');</span>
+const cognito = <span class="cstat-no" title="statement not covered" >new AWS.CognitoIdentityServiceProvider();</span>
+const dynamodb = <span class="cstat-no" title="statement not covered" >new AWS.DynamoDB.DocumentClient();</span>
+<span class="cstat-no" title="statement not covered" >require('dotenv').config({ path: '.env.local' });</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >exports.handler = <span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
-    const dynamoDB = <span class="cstat-no" title="statement not covered" >createDynamoDB();</span>
-    
-<span class="cstat-no" title="statement not covered" >    try {</span>
-        const connectionId = <span class="cstat-no" title="statement not covered" >event.requestContext.connectionId;</span>
 &nbsp;
-        // Find the connection in the database
-        const scanParams = <span class="cstat-no" title="statement not covered" >{</span>
-            TableName: process.env.CONNECTIONS_TABLE,
-            FilterExpression: 'connectionId = :connectionId',
-            ExpressionAttributeValues: {
-                ':connectionId': connectionId
-            }
+// const USER_POOL_ID = 'eu-north-1';
+const USER_POOL_ID = <span class="cstat-no" title="statement not covered" >process.env.AWS_REGION;</span>
+const DYNAMODB_TABLE = <span class="cstat-no" title="statement not covered" >"UserMetaData";</span>
+&nbsp;
+async function <span class="fstat-no" title="function not covered" >getAllUsers(</span>) {
+    const users = <span class="cstat-no" title="statement not covered" >[];</span>
+    const response = <span class="cstat-no" title="statement not covered" >await cognito.listUsers({ UserPoolId: USER_POOL_ID }).promise();</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    response.Users.forEach(<span class="fstat-no" title="function not covered" >us</span>er =&gt; {</span>
+        const userData = <span class="cstat-no" title="statement not covered" >{</span>
+            sub: user.Attributes.find(<span class="fstat-no" title="function not covered" >at</span>tr =&gt; <span class="cstat-no" title="statement not covered" >attr.Name === 'sub')</span>.Value,
+            name: user.Attributes.find(<span class="fstat-no" title="function not covered" >at</span>tr =&gt; <span class="cstat-no" title="statement not covered" >attr.Name === 'name')</span>?.Value || 'Unknown',
+            email: user.Attributes.find(<span class="fstat-no" title="function not covered" >at</span>tr =&gt; <span class="cstat-no" title="statement not covered" >attr.Name === 'email')</span>?.Value || 'No Email'
         };
+<span class="cstat-no" title="statement not covered" >        users.push(userData);</span>
+    });
 &nbsp;
-        const scanResult = <span class="cstat-no" title="statement not covered" >await dynamoDB.scan(scanParams).promise();</span>
-<span class="cstat-no" title="statement not covered" >        if (!scanResult.Items || scanResult.Items.length === 0) {</span>
-<span class="cstat-no" title="statement not covered" >            return { statusCode: 404, body: 'Connection not found' };</span>
-        }
+<span class="cstat-no" title="statement not covered" >    return users;</span>
+}
 &nbsp;
-        const connection = <span class="cstat-no" title="statement not covered" >scanResult.Items[0];</span>
-&nbsp;
-        // Update the connection status
-        const updateParams = <span class="cstat-no" title="statement not covered" >{</span>
-            TableName: process.env.CONNECTIONS_TABLE,
-            Key: {
-                userId: connection.userId,
-                otherUserId: connection.otherUserId
-            },
-            UpdateExpression: 'SET connectionId = :nullValue',
-            ExpressionAttributeValues: {
-                ':nullValue': null
+async function <span class="fstat-no" title="function not covered" >storeUsersInDynamoDB(</span>users) {
+    const promises = <span class="cstat-no" title="statement not covered" >users.map(<span class="fstat-no" title="function not covered" >us</span>er =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >        return dynamodb.put({</span>
+            TableName: DYNAMODB_TABLE,
+            Item: {
+                PK: user.sub,
+                Name: user.name,
+                Email: user.email,
+                IsOnline: false,
+                LastActive: 'Never',
+                IsTyping: false,
+                OnlineStatus: 'Offline',
+                CurrChatPartnerID: '',
+                TTL: Math.floor(Date.now() / 1000) + 3600
             }
-        };
+        }).promise();
+    });
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        await dynamoDB.update(updateParams).promise();</span>
-<span class="cstat-no" title="statement not covered" >        return { statusCode: 200, body: 'Disconnected successfully' };</span>
-    } catch (error) {
-<span class="cstat-no" title="statement not covered" >        console.error('Error in onDisconnect:', error);</span>
-<span class="cstat-no" title="statement not covered" >        return { statusCode: 500, body: "Error disconnecting: " + error.message };</span>
-    }
-};
-&nbsp;</pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >    await Promise.all(promises);</span>
+}
+&nbsp;
+<span class="cstat-no" title="statement not covered" >exports.handler = <span class="fstat-no" title="function not covered" >as</span>ync (event, context) =&gt; {</span>
+    const cognitoUsers = <span class="cstat-no" title="statement not covered" >await getAllUsers();</span>
+<span class="cstat-no" title="statement not covered" >    await storeUsersInDynamoDB(cognitoUsers);</span>
+<span class="cstat-no" title="statement not covered" >    return {</span>
+        statusCode: 200,
+        body: 'Users successfully added!'
+    };
+}; </pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->

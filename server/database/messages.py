@@ -1,7 +1,12 @@
 import boto3
+import os
+from dotenv import load_dotenv
 
-# Initialize DynamoDB client
-dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
+# Load environment variables from .env.local
+load_dotenv('.env.local')
+
+# Initialize DynamoDB resource with region from environment variable
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION'))
 
 # Create table in your AWS account
 table = dynamodb.create_table(

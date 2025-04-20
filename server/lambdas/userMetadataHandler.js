@@ -1,8 +1,11 @@
 const AWS = require('aws-sdk');
 const cognito = new AWS.CognitoIdentityServiceProvider();
 const dynamodb = new AWS.DynamoDB.DocumentClient();
+require('dotenv').config({ path: '.env.local' });
 
-const USER_POOL_ID = 'eu-north-1';
+
+// const USER_POOL_ID = 'eu-north-1';
+const USER_POOL_ID = process.env.AWS_REGION;
 const DYNAMODB_TABLE = "UserMetaData";
 
 async function getAllUsers() {

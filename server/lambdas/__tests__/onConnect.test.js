@@ -19,15 +19,22 @@ describe('onConnect Lambda Function', () => {
         AWSMock.setSDKInstance(AWS);
     });
 
+    afterAll(() => {
+        // Restore AWS mocks after all tests
+        AWSMock.restore();
+    });
+
     test('should successfully handle a connection with valid parameters', async () => {
         // Mock successful DynamoDB operations
         AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
             callback(null, { Item: null }); // No existing connection
         });
 
-        AWSMock.mock('DynamoDB.DocumentClient', 'put', (params, callback) => {
+        const putSpy = jest.fn((params, callback) => {
             callback(null, {});
         });
+
+        AWSMock.mock('DynamoDB.DocumentClient', 'put', putSpy);
 
         AWSMock.mock('DynamoDB.DocumentClient', 'query', (params, callback) => {
             callback(null, { Items: [] }); // No undelivered messages
@@ -36,6 +43,20 @@ describe('onConnect Lambda Function', () => {
         const response = await handler(validEvent);
         expect(response.statusCode).toBe(200);
         expect(response.body).toBe('Connected and undelivered messages sent');
+
+        // Verify that the put method was called with the correct parameters
+        expect(putSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                TableName: process.env.CONNECTIONS_TABLE,
+                Item: {
+                    userId: 'user1',
+                    otherUserId: 'user2',
+                    connectionId: 'test-connection-id',
+                    timestamp: expect.any(String) // Check that timestamp is a string
+                }
+            }),
+            expect.any(Function)
+        );
     });
 
     test('should return 400 when userId is missing', async () => {
@@ -87,4 +108,6 @@ describe('onConnect Lambda Function', () => {
         expect(response.statusCode).toBe(409);
         expect(response.body).toBe('Connection already exists');
     });
+
+    // Additional test cases from the provided script can be added here if needed
 }); 

@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for onDisconnect.js</title>
+    <title>Code coverage report for messageQueueHandler.js</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="prettify.css" />
     <link rel="stylesheet" href="base.css" />
@@ -19,34 +19,34 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="index.html">All files</a> onDisconnect.js</h1>
+        <h1><a href="index.html">All files</a> messageQueueHandler.js</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/4</span>
+                <span class='fraction'>0/0</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/1</span>
+                <span class='fraction'>0/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/15</span>
+                <span class='fraction'>0/18</span>
             </div>
         
             
@@ -108,33 +108,28 @@
 <a name='L43'></a><a href='#L43'>43</a>
 <a name='L44'></a><a href='#L44'>44</a>
 <a name='L45'></a><a href='#L45'>45</a>
-<a name='L46'></a><a href='#L46'>46</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -148,57 +143,104 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// removes disconnected user's connectionID from dynamoDB, cleans up stale connections
-const { createDynamoDB } = <span class="cstat-no" title="statement not covered" >require('./config/aws');</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const AWS = <span class="cstat-no" title="statement not covered" >require('aws-sdk');</span>
+const dynamodb = <span class="cstat-no" title="statement not covered" >new AWS.DynamoDB.DocumentClient();</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >exports.handler = <span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
-    const dynamoDB = <span class="cstat-no" title="statement not covered" >createDynamoDB();</span>
-    
-<span class="cstat-no" title="statement not covered" >    try {</span>
-        const connectionId = <span class="cstat-no" title="statement not covered" >event.requestContext.connectionId;</span>
-&nbsp;
-        // Find the connection in the database
-        const scanParams = <span class="cstat-no" title="statement not covered" >{</span>
-            TableName: process.env.CONNECTIONS_TABLE,
-            FilterExpression: 'connectionId = :connectionId',
-            ExpressionAttributeValues: {
-                ':connectionId': connectionId
-            }
-        };
-&nbsp;
-        const scanResult = <span class="cstat-no" title="statement not covered" >await dynamoDB.scan(scanParams).promise();</span>
-<span class="cstat-no" title="statement not covered" >        if (!scanResult.Items || scanResult.Items.length === 0) {</span>
-<span class="cstat-no" title="statement not covered" >            return { statusCode: 404, body: 'Connection not found' };</span>
+// Handler for adding a message to the queue
+<span class="cstat-no" title="statement not covered" >exports.addMessageToQueue = <span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
+    const { chatId, senderId, receiverId, message } = <span class="cstat-no" title="statement not covered" >JSON.parse(event.body);</span>
+    const params = <span class="cstat-no" title="statement not covered" >{</span>
+        TableName: 'MessageQueue',
+        Item: {
+            messageId: AWS.util.uuid.v4(),
+            chatId: chatId,
+            senderId: senderId,
+            receiverId: receiverId,
+            message: message,
+            timestamp: new Date().toISOString(),
+            delivered: false
         }
+    };
 &nbsp;
-        const connection = <span class="cstat-no" title="statement not covered" >scanResult.Items[0];</span>
-&nbsp;
-        // Update the connection status
-        const updateParams = <span class="cstat-no" title="statement not covered" >{</span>
-            TableName: process.env.CONNECTIONS_TABLE,
-            Key: {
-                userId: connection.userId,
-                otherUserId: connection.otherUserId
-            },
-            UpdateExpression: 'SET connectionId = :nullValue',
-            ExpressionAttributeValues: {
-                ':nullValue': null
-            }
+<span class="cstat-no" title="statement not covered" >    try {</span>
+<span class="cstat-no" title="statement not covered" >        await dynamodb.put(params).promise();</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 200,
+            body: JSON.stringify({ message: 'Message added to queue successfully' })
         };
-&nbsp;
-<span class="cstat-no" title="statement not covered" >        await dynamoDB.update(updateParams).promise();</span>
-<span class="cstat-no" title="statement not covered" >        return { statusCode: 200, body: 'Disconnected successfully' };</span>
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >        console.error('Error in onDisconnect:', error);</span>
-<span class="cstat-no" title="statement not covered" >        return { statusCode: 500, body: "Error disconnecting: " + error.message };</span>
+<span class="cstat-no" title="statement not covered" >        console.error(error);</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 500,
+            body: JSON.stringify({ error: 'Could not add message to queue' })
+        };
     }
 };
-&nbsp;</pre></td></tr></table></pre>
+&nbsp;
+// Handler for fetching undelivered messages
+<span class="cstat-no" title="statement not covered" >exports.fetchUndeliveredMessages = <span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
+    const { receiverId } = <span class="cstat-no" title="statement not covered" >event.pathParameters;</span>
+    const params = <span class="cstat-no" title="statement not covered" >{</span>
+        TableName: 'MessageQueue',
+        FilterExpression: 'receiverId = :receiverId AND delivered = :delivered',
+        ExpressionAttributeValues: {
+            ':receiverId': receiverId,
+            ':delivered': false
+        }
+    };
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    try {</span>
+        const data = <span class="cstat-no" title="statement not covered" >await dynamodb.scan(params).promise();</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 200,
+            body: JSON.stringify(data.Items)
+        };
+    } catch (error) {
+<span class="cstat-no" title="statement not covered" >        console.error(error);</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 500,
+            body: JSON.stringify({ error: 'Could not fetch undelivered messages' })
+        };
+    }
+}; </pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
