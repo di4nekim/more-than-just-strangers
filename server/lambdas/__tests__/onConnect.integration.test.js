@@ -1,6 +1,18 @@
-const AWS = require('aws-sdk');
-const { handler } = require('../onConnect');
-require('dotenv').config();
+import AWS from 'aws-sdk';
+import { handler } from '../onConnect';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
+
+console.log('Environment Variables:', {
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_REGION: process.env.AWS_REGION,
+    CONNECTIONS_TABLE: process.env.CONNECTIONS_TABLE,
+    MESSAGES_TABLE: process.env.MESSAGES_TABLE,
+    MESSAGE_QUEUE_TABLE: process.env.MESSAGE_QUEUE_TABLE,
+    USER_METADATA_TABLE: process.env.USER_METADATA_TABLE,
+});
 
 // Initialize DynamoDB Document Client
 const dynamoDB = new AWS.DynamoDB.DocumentClient({
@@ -10,12 +22,11 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE;
 
 // Helper function to get connection from DynamoDB
-async function getConnection(userId, otherUserId) {
+async function getConnection(connectionId) {
     const params = {
         TableName: CONNECTIONS_TABLE,
         Key: {
-            userId,
-            otherUserId
+            connectionId
         }
     };
     const result = await dynamoDB.get(params).promise();
@@ -23,12 +34,11 @@ async function getConnection(userId, otherUserId) {
 }
 
 // Helper function to delete connection from DynamoDB
-async function deleteConnection(userId, otherUserId) {
+async function deleteConnection(connectionId) {
     const params = {
         TableName: CONNECTIONS_TABLE,
         Key: {
-            userId,
-            otherUserId
+            connectionId
         }
     };
     await dynamoDB.delete(params).promise();
@@ -48,16 +58,16 @@ describe('onConnect Integration Tests', () => {
 
     afterEach(async () => {
         // Clean up the test data
-        await deleteConnection(testEvent.queryStringParameters.userId, testEvent.queryStringParameters.otherUserId);
+        await deleteConnection(testEvent.requestContext.connectionId);
     });
 
     test('should store a new connection in DynamoDB', async () => {
         const response = await handler(testEvent);
         expect(response.statusCode).toBe(200);
 
-        const connection = await getConnection(testEvent.queryStringParameters.userId, testEvent.queryStringParameters.otherUserId);
+        const connection = await getConnection(testEvent.requestContext.connectionId);
         expect(connection).toBeDefined();
-        expect(connection.connectionId).toBe(testEvent.requestContext.connectionId);
+        expect(connection.ConnectionID).toBe(testEvent.requestContext.connectionId);
     });
 
     test('should not create a duplicate connection', async () => {
@@ -69,4 +79,6 @@ describe('onConnect Integration Tests', () => {
         expect(response.statusCode).toBe(409);
         expect(response.body).toBe('Connection already exists');
     });
-}); 
+});
+
+module.exports = { handler }; 

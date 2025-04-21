@@ -1,4 +1,4 @@
-const AWS = require('aws-sdk');
+import AWS from 'aws-sdk';
 
 // Configure AWS SDK
 AWS.config.update({
@@ -17,7 +17,7 @@ const createApiGateway = () => new AWS.ApiGatewayManagementApi({
 const dynamoDB = createDynamoDB();
 const apiGateway = createApiGateway();
 
-module.exports = {
+export {
     AWS,
     dynamoDB,
     apiGateway,

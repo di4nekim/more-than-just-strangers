@@ -1,8 +1,10 @@
-const AWS = require('aws-sdk');
+import AWS from 'aws-sdk';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
+
 const cognito = new AWS.CognitoIdentityServiceProvider();
 const dynamodb = new AWS.DynamoDB.DocumentClient();
-require('dotenv').config({ path: '.env.local' });
-
 
 // const USER_POOL_ID = 'eu-north-1';
 const USER_POOL_ID = process.env.AWS_REGION;
@@ -45,7 +47,7 @@ async function storeUsersInDynamoDB(users) {
     await Promise.all(promises);
 }
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
     const cognitoUsers = await getAllUsers();
     await storeUsersInDynamoDB(cognitoUsers);
     return {

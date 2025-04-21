@@ -1,6 +1,6 @@
-const AWS = require('aws-sdk');
-const AWSMock = require('aws-sdk-mock');
-const { handler } = require('../onDisconnect');
+import AWS from 'aws-sdk';
+import AWSMock from 'aws-sdk-mock';
+import { handler } from '../onDisconnect';
 
 describe('onDisconnect Lambda Function', () => {
     const validEvent = {

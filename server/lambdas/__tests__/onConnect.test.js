@@ -1,6 +1,6 @@
-const { handler } = require('../onConnect');
-const AWS = require('aws-sdk');
-const AWSMock = require('aws-sdk-mock');
+import { handler } from '../onConnect';
+import AWS from 'aws-sdk';
+import AWSMock from 'aws-sdk-mock';
 
 describe('onConnect Lambda Function', () => {
     const validEvent = {
@@ -109,5 +109,5 @@ describe('onConnect Lambda Function', () => {
         expect(response.body).toBe('Connection already exists');
     });
 
-    // Additional test cases from the provided script can be added here if needed
 }); 
+

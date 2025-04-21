@@ -1,6 +1,6 @@
-const AWS = require('aws-sdk');
-const AWSMock = require('aws-sdk-mock');
-const { handler } = require('../sendMessage');
+import AWS from 'aws-sdk';
+import AWSMock from 'aws-sdk-mock';
+import { handler } from '../sendMessage';
 
 describe('sendMessage Lambda Function', () => {
     const validEvent = {

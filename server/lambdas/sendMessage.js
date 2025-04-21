@@ -1,41 +1,14 @@
 // sends message to the user's active websocket connection
 // modified to either send msg immediately or put into messageQueue
-const { createDynamoDB, createApiGateway } = require('./config/aws');
-const WebSocket = require('ws');
+import { createDynamoDB, createApiGateway } from './config/aws';
+import dotenv from 'dotenv';
 
+dotenv.config({ path: '.env.local' });
 
-
-exports.handler = async (event) => {
-
+export const handler = async (event) => {
+    
     const dynamoDB = createDynamoDB();
-    const apiGateway = createApiGateway();
-
-    // For testing purposes
-    const ws = new WebSocket('wss://your-api-gateway-endpoint');
-
-    ws.on('open', function open() {
-    console.log('Connected to WebSocket');
-    ws.send(JSON.stringify({
-        action: 'sendMessage',
-        data: {
-        senderId: 'testUser',
-        message: 'Hello, world!',
-        messageId: 'testMessageId'
-        }
-    }));
-    });
-
-    ws.on('message', function incoming(data) {
-    console.log('Received:', data);
-    });
-
-    ws.on('error', function error(err) {
-    console.error('WebSocket error:', err);
-    });
-
-    ws.on('close', function close() {
-    console.log('WebSocket connection closed');
-    });
+    const connectionId = event.requestContext.connectionId;
     
     try {
         let body;
@@ -64,8 +37,7 @@ exports.handler = async (event) => {
             const getParams = {
                 TableName: process.env.CONNECTIONS_TABLE,
                 Key: {
-                    userId: senderId,
-                    otherUserId: receiverId
+                    connectionId: connectionId
                 }
             };
 

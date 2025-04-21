@@ -1,15 +1,8 @@
-const AWS = require('aws-sdk');
-const AWSMock = require('aws-sdk-mock');
+import AWS from 'aws-sdk';
+import AWSMock from 'aws-sdk-mock';
+import dotenv from 'dotenv';
 
-// Set environment variables first
-process.env.NODE_ENV = 'test';
-process.env.AWS_REGION = 'us-east-1';
-process.env.AWS_ACCESS_KEY_ID = 'test';
-process.env.AWS_SECRET_ACCESS_KEY = 'test';
-process.env.WEBSOCKET_API_URL = 'wss://test-api-gateway.execute-api.us-east-1.amazonaws.com/prod';
-process.env.CONNECTIONS_TABLE = 'Connections';
-process.env.MESSAGES_TABLE = 'Messages';
-process.env.MESSAGE_QUEUE_TABLE = 'MessageQueue';
+dotenv.config({ path: '.env.local' });
 
 // Set up AWS SDK mocking first
 AWSMock.setSDKInstance(AWS);
@@ -25,13 +18,10 @@ AWS.config.update({
 
 // Mock DynamoDB DocumentClient methods
 beforeEach(() => {
-  // Mock DynamoDB.DocumentClient methods
   const mockDocumentClient = {
     get: jest.fn().mockImplementation((params) => {
-      if (params.TableName === process.env.CONNECTIONS_TABLE) {
-        return Promise.resolve({ Item: { connectionId: 'test-connection-id' } });
-      } else if (params.TableName === process.env.MESSAGES_TABLE) {
-        return Promise.resolve({ Item: { messageId: 'test-message-id' } });
+      if (params.TableName === process.env.CONNECTIONS_TABLE && params.Key.ConnectionID === 'test-connection-id') {
+        return Promise.resolve({ Item: { ConnectionID: 'test-connection-id' } });
       }
       return Promise.resolve({ Item: null });
     }),
@@ -39,7 +29,7 @@ beforeEach(() => {
     update: jest.fn().mockResolvedValue({}),
     scan: jest.fn().mockImplementation((params) => {
       if (params.TableName === process.env.CONNECTIONS_TABLE) {
-        return Promise.resolve({ Items: [{ connectionId: 'test-connection-id' }] });
+        return Promise.resolve({ Items: [{ ConnectionID: 'test-connection-id' }] });
       }
       return Promise.resolve({ Items: [] });
     }),
@@ -92,4 +82,53 @@ beforeEach(() => {
 // Clean up mocks after each test
 afterEach(() => {
   AWSMock.restore();
+});
+
+// Helper function to delete connection from DynamoDB
+async function deleteConnection(connectionId) {
+    const params = {
+        TableName: process.env.CONNECTIONS_TABLE,
+        Key: {
+            ConnectionID: connectionId
+        }
+    };
+    const dynamoDB = new AWS.DynamoDB.DocumentClient();
+    await dynamoDB.delete(params).promise();
+}
+
+// Integration test suite
+describe('onConnect Integration Tests', () => {
+    const testEvent = {
+        requestContext: {
+            connectionId: 'test-connection-id'
+        },
+        queryStringParameters: {
+            userId: 'integrationUser1',
+            otherUserId: 'integrationUser2'
+        }
+    };
+
+    afterEach(async () => {
+        // Clean up the test data
+        await deleteConnection(testEvent.requestContext.connectionId);
+    });
+
+    test('should store a new connection in DynamoDB', async () => {
+        const response = await handler(testEvent);
+        expect(response.statusCode).toBe(200);
+
+        const connection = await getConnection(testEvent.requestContext.connectionId);
+        expect(connection).toBeDefined();
+        expect(connection.ConnectionID).toBe(testEvent.requestContext.connectionId);
+    });
+
+    test('should not create a duplicate connection', async () => {
+        // First connection
+        await handler(testEvent);
+
+        // Attempt to create duplicate connection
+        const response = await handler(testEvent);
+        expect(response.statusCode).toBe(409);
+        expect(response.body).toBe('Connection already exists');
+    });
 });

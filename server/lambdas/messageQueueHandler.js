@@ -1,8 +1,9 @@
-const AWS = require('aws-sdk');
+import AWS from 'aws-sdk';
+
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 // Handler for adding a message to the queue
-exports.addMessageToQueue = async (event) => {
+export const addMessageToQueue = async (event) => {
     const { chatId, senderId, receiverId, message } = JSON.parse(event.body);
     const params = {
         TableName: 'MessageQueue',
@@ -33,7 +34,7 @@ exports.addMessageToQueue = async (event) => {
 };
 
 // Handler for fetching undelivered messages
-exports.fetchUndeliveredMessages = async (event) => {
+export const fetchUndeliveredMessages = async (event) => {
     const { receiverId } = event.pathParameters;
     const params = {
         TableName: 'MessageQueue',
