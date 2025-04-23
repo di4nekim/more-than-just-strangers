@@ -1,6 +1,8 @@
 import AWS from 'aws-sdk';
 import AWSMock from 'aws-sdk-mock';
 import dotenv from 'dotenv';
+import { handler } from '../onConnect.js';
+
 
 dotenv.config({ path: '.env.local' });
 
@@ -16,27 +18,28 @@ AWS.config.update({
     }
 });
 
+let mockStore = {}
 // Mock DynamoDB DocumentClient methods
 beforeEach(() => {
+  mockStore = {}
+
   const mockDocumentClient = {
     get: jest.fn().mockImplementation((params) => {
-      if (params.TableName === process.env.CONNECTIONS_TABLE && params.Key.ConnectionID === 'test-connection-id') {
-        return Promise.resolve({ Item: { ConnectionID: 'test-connection-id' } });
-      }
-      return Promise.resolve({ Item: null });
+      const item = mockStore[params.Key.ConnectionID];
+      return Promise.resolve({ Item: item || null });
     }),
-    put: jest.fn().mockResolvedValue({}),
+    put: jest.fn().mockImplementation((params) => {
+      mockStore[params.Item.ConnectionID] = params.Item;
+      return Promise.resolve({});
+    }),
     update: jest.fn().mockResolvedValue({}),
-    scan: jest.fn().mockImplementation((params) => {
-      if (params.TableName === process.env.CONNECTIONS_TABLE) {
-        return Promise.resolve({ Items: [{ ConnectionID: 'test-connection-id' }] });
-      }
-      return Promise.resolve({ Items: [] });
+    scan: jest.fn().mockImplementation(() => {
+      const items = Object.values(mockStore);
+      return Promise.resolve({ Items: items });
     }),
     query: jest.fn().mockResolvedValue({ Items: [] })
   };
 
-  // Mock ApiGatewayManagementApi
   const mockApiGatewayManagementApi = {
     postToConnection: jest.fn().mockResolvedValue({})
   };
@@ -47,19 +50,20 @@ beforeEach(() => {
       .then(result => callback(null, result))
       .catch(err => callback(err));
   });
-  
+
   AWSMock.mock('DynamoDB.DocumentClient', 'put', (params, callback) => {
     mockDocumentClient.put(params)
       .then(result => callback(null, result))
       .catch(err => callback(err));
   });
-  
+
+  // Keep the rest the same...
   AWSMock.mock('DynamoDB.DocumentClient', 'update', (params, callback) => {
     mockDocumentClient.update(params)
       .then(result => callback(null, result))
       .catch(err => callback(err));
   });
-  
+
   AWSMock.mock('DynamoDB.DocumentClient', 'scan', (params, callback) => {
     mockDocumentClient.scan(params)
       .then(result => callback(null, result))
@@ -82,7 +86,25 @@ beforeEach(() => {
 // Clean up mocks after each test
 afterEach(() => {
   AWSMock.restore();
+  jest.clearAllMocks(); 
 });
+
+// Helper function to get connection from DynamoDB
+async function getConnection(connectionId) {
+  const dynamoDB = new AWS.DynamoDB.DocumentClient({
+    region: process.env.AWS_REGION
+  });
+
+  const params = {
+    TableName: process.env.CONNECTIONS_TABLE,
+    Key: {
+      ConnectionID: connectionId
+    }
+  };
+
+  const result = await dynamoDB.get(params).promise();
+  return result.Item;
+}
 
 // Helper function to delete connection from DynamoDB
 async function deleteConnection(connectionId) {
@@ -97,15 +119,15 @@ async function deleteConnection(connectionId) {
 }
 
 // Integration test suite
-describe('onConnect Integration Tests', () => {
+describe('onConnect Mock Integration Tests', () => {
     const testEvent = {
         requestContext: {
             connectionId: 'test-connection-id'
         },
-        queryStringParameters: {
-            userId: 'integrationUser1',
-            otherUserId: 'integrationUser2'
-        }
+        // queryStringParameters: {
+        //     userId: 'integrationUser1',
+        //     otherUserId: 'integrationUser2'
+        // }
     };
 
     afterEach(async () => {
@@ -123,12 +145,13 @@ describe('onConnect Integration Tests', () => {
     });
 
     test('should not create a duplicate connection', async () => {
-        // First connection
-        await handler(testEvent);
-
-        // Attempt to create duplicate connection
-        const response = await handler(testEvent);
-        expect(response.statusCode).toBe(409);
-        expect(response.body).toBe('Connection already exists');
+      let response = await handler(testEvent);
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toBe('Connected successfully');
+  
+      // Attempt to create duplicate connection
+      response = await handler(testEvent);
+      expect(response.statusCode).toBe(409);
+      expect(response.body).toBe('Connection already exists');
     });
 });

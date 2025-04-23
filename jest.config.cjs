@@ -1,6 +1,6 @@
 module.exports = {
     testEnvironment: 'node',
-    setupFilesAfterEnv: ['<rootDir>/server/lambdas/__tests__/setup.js'],
+    // setupFilesAfterEnv: ['<rootDir>/server/lambdas/__tests__/setup.js'],
     testMatch: ['**/server/lambdas/__tests__/**/*.test.js'],
     collectCoverage: true,
     collectCoverageFrom: [
@@ -13,5 +13,12 @@ module.exports = {
         '/__tests__/'
     ],
     verbose: true,
-    testTimeout: 30000
+    testTimeout: 30000,
+    transform: {
+        '^.+\\.jsx?$': 'babel-jest',
+    },
+    testEnvironment: 'node',
+    moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1'
+  }
 }; 

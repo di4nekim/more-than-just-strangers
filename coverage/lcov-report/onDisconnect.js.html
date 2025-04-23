@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>15/15</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>0/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>15/15</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -109,34 +109,32 @@
 <a name='L44'></a><a href='#L44'>44</a>
 <a name='L45'></a><a href='#L45'>45</a>
 <a name='L46'></a><a href='#L46'>46</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">4x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -146,24 +144,26 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// removes disconnected user's connectionID from dynamoDB, cleans up stale connections
-const { createDynamoDB } = require('./config/aws');
+import { createDynamoDB } from './config/aws.js';
 &nbsp;
-exports.handler = async (event) =&gt; {
-    const dynamoDB = createDynamoDB();
+export const handler = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
+    const dynamoDB = <span class="cstat-no" title="statement not covered" >createDynamoDB();</span>
     
-    try {
-        const connectionId = event.requestContext.connectionId;
+<span class="cstat-no" title="statement not covered" >    try {</span>
+        const connectionId = <span class="cstat-no" title="statement not covered" >event.requestContext.connectionId;</span>
 &nbsp;
         // Find the connection in the database
-        const scanParams = {
+        const scanParams = <span class="cstat-no" title="statement not covered" >{</span>
             TableName: process.env.CONNECTIONS_TABLE,
             FilterExpression: 'connectionId = :connectionId',
             ExpressionAttributeValues: {
@@ -171,15 +171,15 @@ exports.handler = async (event) =&gt; {
             }
         };
 &nbsp;
-        const scanResult = await dynamoDB.scan(scanParams).promise();
-        if (!scanResult.Items || scanResult.Items.length === 0) {
-            return { statusCode: 404, body: 'Connection not found' };
+        const scanResult = <span class="cstat-no" title="statement not covered" >await dynamoDB.scan(scanParams).promise();</span>
+<span class="cstat-no" title="statement not covered" >        if (!scanResult.Items || scanResult.Items.length === 0) {</span>
+<span class="cstat-no" title="statement not covered" >            return { statusCode: 404, body: 'Connection not found' };</span>
         }
 &nbsp;
-        const connection = scanResult.Items[0];
+        const connection = <span class="cstat-no" title="statement not covered" >scanResult.Items[0];</span>
 &nbsp;
         // Update the connection status
-        const updateParams = {
+        const updateParams = <span class="cstat-no" title="statement not covered" >{</span>
             TableName: process.env.CONNECTIONS_TABLE,
             Key: {
                 userId: connection.userId,
@@ -191,11 +191,11 @@ exports.handler = async (event) =&gt; {
             }
         };
 &nbsp;
-        await dynamoDB.update(updateParams).promise();
-        return { statusCode: 200, body: 'Disconnected successfully' };
+<span class="cstat-no" title="statement not covered" >        await dynamoDB.update(updateParams).promise();</span>
+<span class="cstat-no" title="statement not covered" >        return { statusCode: 200, body: 'Disconnected successfully' };</span>
     } catch (error) {
-        console.error('Error in onDisconnect:', error);
-        return { statusCode: 500, body: "Error disconnecting: " + error.message };
+<span class="cstat-no" title="statement not covered" >        console.error('Error in onDisconnect:', error);</span>
+<span class="cstat-no" title="statement not covered" >        return { statusCode: 500, body: "Error disconnecting: " + error.message };</span>
     }
 };
 &nbsp;</pre></td></tr></table></pre>
@@ -205,7 +205,7 @@ exports.handler = async (event) =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-04-21T06:25:13.919Z
+                at 2025-04-23T17:37:31.842Z
             </div>
         <script src="prettify.js"></script>
         <script>

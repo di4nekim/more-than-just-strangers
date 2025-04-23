@@ -1,6 +1,6 @@
 import AWS from 'aws-sdk';
 import AWSMock from 'aws-sdk-mock';
-import { handler } from '../sendMessage';
+import { handler } from '../sendMessage.js';
 
 describe('sendMessage Lambda Function', () => {
     const validEvent = {

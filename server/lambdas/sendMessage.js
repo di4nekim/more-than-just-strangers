@@ -1,6 +1,6 @@
 // sends message to the user's active websocket connection
 // modified to either send msg immediately or put into messageQueue
-import { createDynamoDB, createApiGateway } from './config/aws';
+import { createDynamoDB } from './config/aws';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });

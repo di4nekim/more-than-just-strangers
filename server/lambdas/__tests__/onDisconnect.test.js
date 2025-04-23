@@ -1,6 +1,6 @@
+import { handler } from '../onDisconnect.js';
 import AWS from 'aws-sdk';
 import AWSMock from 'aws-sdk-mock';
-import { handler } from '../onDisconnect';
 
 describe('onDisconnect Lambda Function', () => {
     const validEvent = {

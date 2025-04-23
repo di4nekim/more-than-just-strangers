@@ -1,18 +1,10 @@
+// @jest-environment node
 import AWS from 'aws-sdk';
-import { handler } from '../onConnect';
+import { handler } from '../onConnect.js';
+console.log('handler:', handler);
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
-
-console.log('Environment Variables:', {
-    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
-    AWS_REGION: process.env.AWS_REGION,
-    CONNECTIONS_TABLE: process.env.CONNECTIONS_TABLE,
-    MESSAGES_TABLE: process.env.MESSAGES_TABLE,
-    MESSAGE_QUEUE_TABLE: process.env.MESSAGE_QUEUE_TABLE,
-    USER_METADATA_TABLE: process.env.USER_METADATA_TABLE,
-});
 
 // Initialize DynamoDB Document Client
 const dynamoDB = new AWS.DynamoDB.DocumentClient({
@@ -44,17 +36,17 @@ async function deleteConnection(connectionId) {
     await dynamoDB.delete(params).promise();
 }
 
-// Integration test suite
-describe('onConnect Integration Tests', () => {
+describe('onConnect Live Integration Tests', () => {
     const testEvent = {
         requestContext: {
             connectionId: 'test-connection-id'
         },
-        queryStringParameters: {
-            userId: 'integrationUser1',
-            otherUserId: 'integrationUser2'
-        }
+        // queryStringParameters: {
+        //     userId: 'integrationUser1',
+        //     otherUserId: 'integrationUser2'
+        // }
     };
+
 
     afterEach(async () => {
         // Clean up the test data
@@ -79,6 +71,4 @@ describe('onConnect Integration Tests', () => {
         expect(response.statusCode).toBe(409);
         expect(response.body).toBe('Connection already exists');
     });
-});
-
-module.exports = { handler }; 
+}); 
