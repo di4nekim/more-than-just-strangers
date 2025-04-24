@@ -1,19 +1,41 @@
 import AWS from 'aws-sdk';
+import dotenv from 'dotenv';
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+dotenv.config({ path: '.env.local' });
 
-// Handler for adding a message to the queue
-export const addMessageToQueue = async (event) => {
-    const { chatId, senderId, receiverId, message } = JSON.parse(event.body);
+
+export const handler = async (event) => {
+    const dynamodb = new AWS.DynamoDB.DocumentClient();
+    let payload;
+
+    try {
+        // If triggered via API Gateway or Lambda invocation
+        payload = typeof event.body === 'string' ? JSON.parse(event.body) : event;
+    } catch (error) {
+        console.error('Failed to parse payload:', error);
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Invalid payload' })
+        };
+    }
+
+    const { messageId, senderId, receiverId, message, timestamp = new Date().toISOString() } = payload;
+
+    if (!senderId || !receiverId || !message || !messageId) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Missing required fields' })
+        };
+    }
+
     const params = {
-        TableName: 'MessageQueue',
+        TableName: process.env.MESSAGE_QUEUE_TABLE,
         Item: {
-            messageId: AWS.util.uuid.v4(),
-            chatId: chatId,
-            senderId: senderId,
-            receiverId: receiverId,
-            message: message,
-            timestamp: new Date().toISOString(),
+            messageId,
+            senderId,
+            receiverId,
+            message,
+            timestamp,
             delivered: false
         }
     };
@@ -22,40 +44,13 @@ export const addMessageToQueue = async (event) => {
         await dynamodb.put(params).promise();
         return {
             statusCode: 200,
-            body: JSON.stringify({ message: 'Message added to queue successfully' })
+            body: JSON.stringify({ message: 'Message queued successfully' })
         };
     } catch (error) {
-        console.error(error);
+        console.error('Error writing to MessageQueue table:', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'Could not add message to queue' })
+            body: JSON.stringify({ error: 'Could not queue message' })
         };
     }
 };
-
-// Handler for fetching undelivered messages
-export const fetchUndeliveredMessages = async (event) => {
-    const { receiverId } = event.pathParameters;
-    const params = {
-        TableName: 'MessageQueue',
-        FilterExpression: 'receiverId = :receiverId AND delivered = :delivered',
-        ExpressionAttributeValues: {
-            ':receiverId': receiverId,
-            ':delivered': false
-        }
-    };
-
-    try {
-        const data = await dynamodb.scan(params).promise();
-        return {
-            statusCode: 200,
-            body: JSON.stringify(data.Items)
-        };
-    } catch (error) {
-        console.error(error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'Could not fetch undelivered messages' })
-        };
-    }
-}; 

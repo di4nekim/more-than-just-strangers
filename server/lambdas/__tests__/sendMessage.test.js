@@ -1,16 +1,21 @@
 import AWS from 'aws-sdk';
 import AWSMock from 'aws-sdk-mock';
+AWSMock.setSDKInstance(AWS);
+
 import { handler } from '../sendMessage.js';
 
-describe('sendMessage Lambda Function', () => {
+
+describe('sendMessage Unit Tests', () => {
     const validEvent = {
         requestContext: {
             connectionId: 'test-connection-id'
         },
         body: JSON.stringify({
+            action: 'sendMessage',
             senderId: 'user1',
             receiverId: 'user2',
-            message: 'Hello, world!'
+            message: 'Hello, world!',
+            messageId: 'msg-123',
         })
     };
 
@@ -32,28 +37,67 @@ describe('sendMessage Lambda Function', () => {
         process.env.MESSAGES_TABLE = 'test-messages-table';
     });
 
+    afterEach(() => {
+        AWSMock.restore(); // Clean slate after each test
+      });
+      
+
     test('should successfully send a message', async () => {
-        // Mock successful DynamoDB operations
         AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
-            callback(null, { Item: { connectionId: 'test-connection-id', userId: 'user1', otherUserId: 'user2' } });
+            callback(null, { Item: { connectionId: 'test-connection-id' } });
+        });
+    
+        AWSMock.mock('DynamoDB.DocumentClient', 'scan', (params, callback) => {
+            callback(null, {
+                Items: [{ connectionId: 'receiver-connection-id', userId: 'user2' }]
+            });
+        });
+    
+        AWSMock.mock('DynamoDB.DocumentClient', 'put', (params, callback) => {
+            callback(null, {});
+        });
+    
+        AWSMock.mock('DynamoDB.DocumentClient', 'update', (params, callback) => {
+            callback(null, {});
+        });
+    
+        AWSMock.mock('ApiGatewayManagementApi', 'postToConnection', (params, callback) => {
+            callback(null, {});
+        });
+    
+        const response = await handler(validEvent);
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toBe('Message processed successfully');
+    });
+
+
+    test('should queue the message if receiver is offline', async () => {
+        // Mock sender connection
+        AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
+            callback(null, { Item: { connectionId: 'test-connection-id' } });
         });
 
+        // Mock receiver lookup: return no active connection
+        AWSMock.mock('DynamoDB.DocumentClient', 'scan', (params, callback) => {
+            callback(null, { Items: [] }); // receiver is not connected
+        });
+
+        // Mock writing message to main MESSAGES_TABLE
         AWSMock.mock('DynamoDB.DocumentClient', 'put', (params, callback) => {
             callback(null, {});
         });
 
-        AWSMock.mock('DynamoDB.DocumentClient', 'update', (params, callback) => {
-            callback(null, {});
-        });
-
-        AWSMock.mock('ApiGatewayManagementApi', 'postToConnection', (params, callback) => {
-            callback(null, {});
+        // Mock invoking messageQueue Lambda
+        AWSMock.mock('Lambda', 'invoke', (params, callback) => {
+            expect(params.FunctionName).toBe('messageQueueHandler');
+            callback(null, {}); // Simulate success
         });
 
         const response = await handler(validEvent);
         expect(response.statusCode).toBe(200);
-        expect(response.body).toBe('Message sent successfully');
+        expect(response.body).toBe('Message processed successfully');
     });
+    
 
     test('should return 400 when senderId is missing', async () => {
         const event = {
@@ -120,7 +164,7 @@ describe('sendMessage Lambda Function', () => {
 
         const response = await handler(validEvent);
         expect(response.statusCode).toBe(500);
-        expect(response.body).toContain('Error sending message:');
+        expect(response.body).toBe('Error retrieving connection');
     });
 
     test('should handle message sending errors gracefully', async () => {
@@ -128,16 +172,29 @@ describe('sendMessage Lambda Function', () => {
             callback(null, { Item: { connectionId: 'test-connection-id', userId: 'user1', otherUserId: 'user2' } });
         });
 
+        AWSMock.mock('DynamoDB.DocumentClient', 'scan', (params, callback) => {
+            callback(null, {
+              Items: [{ connectionId: 'receiver-connection-id', userId: 'user2' }]
+            });
+          });
+
         AWSMock.mock('DynamoDB.DocumentClient', 'put', (params, callback) => {
             callback(null, {});
         });
 
-        AWSMock.mock('ApiGatewayManagementApi', 'postToConnection', (params, callback) => {
+        const postSpy = jest.fn((params, callback) => {
             callback(new Error('Failed to send message'));
+        });
+        AWSMock.mock('ApiGatewayManagementApi', 'postToConnection', postSpy);
+
+        AWSMock.mock('Lambda', 'invoke', (params, callback) => {
+            expect(params.FunctionName).toBe('messageQueueHandler');
+            callback(null, {}); // Simulate success
         });
 
         const response = await handler(validEvent);
-        expect(response.statusCode).toBe(500);
-        expect(response.body).toContain('Error sending message:');
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toBe('Message processed successfully');
+        expect(postSpy).toHaveBeenCalled(); 
     });
 }); 

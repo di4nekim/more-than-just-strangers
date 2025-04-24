@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">12.5% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/17</span>
+                <span class='fraction'>2/16</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/0</span>
+                <span class='fraction'>0/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/2</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">12.5% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/17</span>
+                <span class='fraction'>2/16</span>
             </div>
         
             
@@ -119,36 +119,19 @@
 <a name='L54'></a><a href='#L54'>54</a>
 <a name='L55'></a><a href='#L55'>55</a>
 <a name='L56'></a><a href='#L56'>56</a>
-<a name='L57'></a><a href='#L57'>57</a>
-<a name='L58'></a><a href='#L58'>58</a>
-<a name='L59'></a><a href='#L59'>59</a>
-<a name='L60'></a><a href='#L60'>60</a>
-<a name='L61'></a><a href='#L61'>61</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L57'></a><a href='#L57'>57</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -157,11 +140,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -179,26 +170,49 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import AWS from 'aws-sdk';
+import dotenv from 'dotenv';
 &nbsp;
-const dynamodb = <span class="cstat-no" title="statement not covered" >new AWS.DynamoDB.DocumentClient();</span>
+dotenv.config({ path: '.env.local' });
 &nbsp;
-// Handler for adding a message to the queue
-export const addMessageToQueue = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
-    const { chatId, senderId, receiverId, message } = <span class="cstat-no" title="statement not covered" >JSON.parse(event.body);</span>
+&nbsp;
+export const handler = <span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {
+    const dynamodb = <span class="cstat-no" title="statement not covered" >new AWS.DynamoDB.DocumentClient();</span>
+    let payload;
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    try {</span>
+        // If triggered via API Gateway or Lambda invocation
+<span class="cstat-no" title="statement not covered" >        payload = typeof event.body === 'string' ? JSON.parse(event.body) : event;</span>
+    } catch (error) {
+<span class="cstat-no" title="statement not covered" >        console.error('Failed to parse payload:', error);</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Invalid payload' })
+        };
+    }
+&nbsp;
+    const { messageId, senderId, receiverId, message, timestamp = <span class="branch-0 cbranch-no" title="branch not covered" >new Date().toISOString() </span>} = <span class="cstat-no" title="statement not covered" >payload;</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    if (!senderId || !receiverId || !message || !messageId) {</span>
+<span class="cstat-no" title="statement not covered" >        return {</span>
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Missing required fields' })
+        };
+    }
+&nbsp;
     const params = <span class="cstat-no" title="statement not covered" >{</span>
-        TableName: 'MessageQueue',
+        TableName: process.env.MESSAGE_QUEUE_TABLE,
         Item: {
-            messageId: AWS.util.uuid.v4(),
-            chatId: chatId,
-            senderId: senderId,
-            receiverId: receiverId,
-            message: message,
-            timestamp: new Date().toISOString(),
+            messageId,
+            senderId,
+            receiverId,
+            message,
+            timestamp,
             delivered: false
         }
     };
@@ -207,50 +221,24 @@ export const addMessageToQueue = <span class="cstat-no" title="statement not cov
 <span class="cstat-no" title="statement not covered" >        await dynamodb.put(params).promise();</span>
 <span class="cstat-no" title="statement not covered" >        return {</span>
             statusCode: 200,
-            body: JSON.stringify({ message: 'Message added to queue successfully' })
+            body: JSON.stringify({ message: 'Message queued successfully' })
         };
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >        console.error(error);</span>
+<span class="cstat-no" title="statement not covered" >        console.error('Error writing to MessageQueue table:', error);</span>
 <span class="cstat-no" title="statement not covered" >        return {</span>
             statusCode: 500,
-            body: JSON.stringify({ error: 'Could not add message to queue' })
+            body: JSON.stringify({ error: 'Could not queue message' })
         };
     }
 };
-&nbsp;
-// Handler for fetching undelivered messages
-export const fetchUndeliveredMessages = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
-    const { receiverId } = <span class="cstat-no" title="statement not covered" >event.pathParameters;</span>
-    const params = <span class="cstat-no" title="statement not covered" >{</span>
-        TableName: 'MessageQueue',
-        FilterExpression: 'receiverId = :receiverId AND delivered = :delivered',
-        ExpressionAttributeValues: {
-            ':receiverId': receiverId,
-            ':delivered': false
-        }
-    };
-&nbsp;
-<span class="cstat-no" title="statement not covered" >    try {</span>
-        const data = <span class="cstat-no" title="statement not covered" >await dynamodb.scan(params).promise();</span>
-<span class="cstat-no" title="statement not covered" >        return {</span>
-            statusCode: 200,
-            body: JSON.stringify(data.Items)
-        };
-    } catch (error) {
-<span class="cstat-no" title="statement not covered" >        console.error(error);</span>
-<span class="cstat-no" title="statement not covered" >        return {</span>
-            statusCode: 500,
-            body: JSON.stringify({ error: 'Could not fetch undelivered messages' })
-        };
-    }
-}; </pre></td></tr></table></pre>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-04-23T17:37:31.842Z
+                at 2025-04-24T22:14:46.477Z
             </div>
         <script src="prettify.js"></script>
         <script>

@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">85.71% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>12/14</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>0/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/1</span>
+                <span class='fraction'>0/1</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">85.71% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>12/14</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -108,41 +108,41 @@
 <a name='L43'></a><a href='#L43'>43</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -150,31 +150,31 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import dotenv from 'dotenv';
 import { createDynamoDB } from './config/aws';
 import { v4 as uuidv4 } from 'uuid';
-dotenv.config({ path: '.env.local' });
+<span class="cstat-no" title="statement not covered" >dotenv.config({ path: '.env.local' });</span>
 &nbsp;
 // stores connection ID in dynamoDB
 // modified to deliver msgs in messageQueue, if exists
 &nbsp;
-export const handler = async (event) =&gt; {
-    const dynamoDB = createDynamoDB();
-    const connectionId = event.requestContext.connectionId;
+export const handler = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >as</span>ync (event) =&gt; {</span>
+    const dynamoDB = <span class="cstat-no" title="statement not covered" >createDynamoDB();</span>
+    const connectionId = <span class="cstat-no" title="statement not covered" >event.requestContext.connectionId;</span>
 &nbsp;
-    try {
+<span class="cstat-no" title="statement not covered" >    try {</span>
         // Check if connection already exists
-        const getParams = {
+        const getParams = <span class="cstat-no" title="statement not covered" >{</span>
             TableName: process.env.CONNECTIONS_TABLE,
             Key: {
                 ConnectionID: connectionId
             }
         };
 &nbsp;
-        const existingConnection = await dynamoDB.get(getParams).promise();
-        if (existingConnection.Item) {
-            return { statusCode: 409, body: 'Connection already exists' };
+        const existingConnection = <span class="cstat-no" title="statement not covered" >await dynamoDB.get(getParams).promise();</span>
+<span class="cstat-no" title="statement not covered" >        if (existingConnection.Item) {</span>
+<span class="cstat-no" title="statement not covered" >            return { statusCode: 409, body: 'Connection already exists' };</span>
         }
 &nbsp;
         // Store the connection
-        const putParams = {
+        const putParams = <span class="cstat-no" title="statement not covered" >{</span>
             TableName: process.env.CONNECTIONS_TABLE,
             Item: {
                 ConnectionID: connectionId,
@@ -182,9 +182,9 @@ export const handler = async (event) =&gt; {
             }
         };
 &nbsp;
-        await dynamoDB.put(putParams).promise();
+<span class="cstat-no" title="statement not covered" >        await dynamoDB.put(putParams).promise();</span>
 &nbsp;
-        return { statusCode: 200, body: 'Connected successfully' };
+<span class="cstat-no" title="statement not covered" >        return { statusCode: 200, body: 'Connected successfully' };</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >        console.error('Error in onConnect:', error);</span>
 <span class="cstat-no" title="statement not covered" >        return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error" }) };</span>
@@ -196,7 +196,7 @@ export const handler = async (event) =&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-04-23T17:37:31.842Z
+                at 2025-04-24T22:14:46.477Z
             </div>
         <script src="prettify.js"></script>
         <script>
