@@ -1,7 +1,7 @@
-import AWS from 'aws-sdk';
-import AWSMock from 'aws-sdk-mock';
-import dotenv from 'dotenv';
-import { handler } from '../onConnect.js';
+const AWS = require('aws-sdk');
+const AWSMock = require('aws-sdk-mock');
+const dotenv = require('dotenv');
+const { handler } = require('../onConnect.js');
 
 
 dotenv.config({ path: '.env.local' });

@@ -1,6 +1,6 @@
-import { handler } from '../onConnect.js';
-import AWS from 'aws-sdk';
-import AWSMock from 'aws-sdk-mock';
+const { handler } = require('../onConnect.js');
+const AWS = require('aws-sdk');
+const AWSMock = require('aws-sdk-mock');
 
 describe('onConnect Unit Tests', () => {
     const validEvent = {

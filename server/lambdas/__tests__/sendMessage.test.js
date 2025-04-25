@@ -1,8 +1,8 @@
-import AWS from 'aws-sdk';
-import AWSMock from 'aws-sdk-mock';
+const AWS = require('aws-sdk');
+const AWSMock = require('aws-sdk-mock');
 AWSMock.setSDKInstance(AWS);
 
-import { handler } from '../sendMessage.js';
+const { handler } = require('../sendMessage.js');
 
 
 describe('sendMessage Unit Tests', () => {

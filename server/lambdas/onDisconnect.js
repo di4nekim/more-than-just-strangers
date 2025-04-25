@@ -1,5 +1,5 @@
 // removes disconnected user's connectionID from dynamoDB, cleans up stale connections
-import { createDynamoDB } from './config/aws.js';
+const { createDynamoDB } = require('./config/aws.js');
 
 export const handler = async (event) => {
     const dynamoDB = createDynamoDB();

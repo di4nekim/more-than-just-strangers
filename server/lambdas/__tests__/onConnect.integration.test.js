@@ -1,8 +1,8 @@
 // @jest-environment node
-import AWS from 'aws-sdk';
-import { handler } from '../onConnect.js';
+const AWS = require('aws-sdk');
+const { handler } = require('../onConnect.js');
 console.log('handler:', handler);
-import dotenv from 'dotenv';
+const dotenv = require('dotenv');
 
 dotenv.config({ path: '.env.local' });
 

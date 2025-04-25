@@ -1,5 +1,5 @@
-import AWS from 'aws-sdk';
-import dotenv from 'dotenv';
+const AWS = require('aws-sdk');
+const dotenv = require('dotenv');
 
 dotenv.config({ path: '.env.local' });
 

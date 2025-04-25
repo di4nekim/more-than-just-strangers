@@ -1,4 +1,4 @@
-import AWS from 'aws-sdk';
+const AWS = require('aws-sdk');
 
 // Configure AWS SDK
 AWS.config.update({

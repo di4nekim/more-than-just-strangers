@@ -1,6 +1,6 @@
-import dotenv from 'dotenv';
-import { createDynamoDB } from './config/aws';
-import { v4 as uuidv4 } from 'uuid';
+const dotenv = require('dotenv');
+const { createDynamoDB } = require('./config/aws');
+const { v4: uuidv4 } = require('uuid');
 dotenv.config({ path: '.env.local' });
 
 // stores connection ID in dynamoDB

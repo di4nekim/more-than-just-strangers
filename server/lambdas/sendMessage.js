@@ -1,6 +1,6 @@
-import AWS from 'aws-sdk';
-import { createDynamoDB, createApiGateway, createLambda } from './config/aws';
-import dotenv from 'dotenv';
+const AWS = require('aws-sdk');
+const { createDynamoDB, createApiGateway, createLambda } = require('./config/aws');
+const dotenv = require('dotenv');
 
 dotenv.config({ path: '.env.local' });
 
