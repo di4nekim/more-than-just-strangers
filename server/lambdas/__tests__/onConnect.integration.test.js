@@ -1,6 +1,6 @@
 // @jest-environment node
 const AWS = require('aws-sdk');
-const { handler } = require('../onConnect.js');
+const { handler } = require('../onConnect/index.js');
 console.log('handler:', handler);
 const dotenv = require('dotenv');
 
@@ -18,7 +18,7 @@ async function getConnection(connectionId) {
     const params = {
         TableName: CONNECTIONS_TABLE,
         Key: {
-            connectionId
+            ConnectionID: connectionId
         }
     };
     const result = await dynamoDB.get(params).promise();
@@ -26,11 +26,11 @@ async function getConnection(connectionId) {
 }
 
 // Helper function to delete connection from DynamoDB
-async function deleteConnection(connectionId) {
+    async function deleteConnection(connectionId) {
     const params = {
         TableName: CONNECTIONS_TABLE,
         Key: {
-            connectionId
+            ConnectionID: connectionId
         }
     };
     await dynamoDB.delete(params).promise();

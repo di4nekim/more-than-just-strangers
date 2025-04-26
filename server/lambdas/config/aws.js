@@ -20,9 +20,9 @@ const createLambda = (AWSInstance = AWS) => {
 return new AWSInstance.Lambda();
 };
 
-export {
+module.exports = {
     AWS,
     createDynamoDB,
     createApiGateway,
     createLambda,
-}; 
+};

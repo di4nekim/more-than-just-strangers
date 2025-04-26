@@ -1,4 +1,4 @@
-const { handler } = require('../onConnect.js');
+const { handler } = require('../onConnect/index.js');
 const AWS = require('aws-sdk');
 const AWSMock = require('aws-sdk-mock');
 

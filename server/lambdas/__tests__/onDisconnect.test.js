@@ -1,4 +1,4 @@
-const { handler } = require('../onDisconnect.js');
+const { handler } = require('../onDisconnect/index.js');
 const AWS = require('aws-sdk');
 const AWSMock = require('aws-sdk-mock');
 

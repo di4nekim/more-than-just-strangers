@@ -1,7 +1,7 @@
 const AWS = require('aws-sdk');
 const AWSMock = require('aws-sdk-mock');
 const dotenv = require('dotenv');
-const { handler } = require('../onConnect.js');
+const { handler } = require('../onConnect/index.js');
 
 
 dotenv.config({ path: '.env.local' });

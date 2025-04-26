@@ -2,7 +2,7 @@ const AWS = require('aws-sdk');
 const AWSMock = require('aws-sdk-mock');
 AWSMock.setSDKInstance(AWS);
 
-const { handler } = require('../sendMessage.js');
+const { handler } = require('../sendMessage/index.js/index.js');
 
 
 describe('sendMessage Unit Tests', () => {
