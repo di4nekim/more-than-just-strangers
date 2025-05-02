@@ -1,3 +1,5 @@
+// DEPRECATED
+
 const AWS = require('aws-sdk');
 
 // Configure AWS SDK

@@ -4,11 +4,11 @@
   "description": "Lambda function for handling user metadata.",
   "main": "index.js",
   "dependencies": {
-    "aws-sdk": "^2.1000.0"
+    "aws-sdk": "^2.1692.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC"
-} 
+}

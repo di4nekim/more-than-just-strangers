@@ -4,9 +4,12 @@ module.exports.handler = async (event) => {
     const dynamodb = new AWS.DynamoDB.DocumentClient();
     let payload;
 
+    console.log('Event received:', event);
+
     try {
         // If triggered via API Gateway or Lambda invocation
         payload = typeof event.body === 'string' ? JSON.parse(event.body) : event;
+        console.log('Parsed payload:', payload);
     } catch (error) {
         console.error('Failed to parse payload:', error);
         return {
@@ -36,8 +39,11 @@ module.exports.handler = async (event) => {
         }
     };
 
+    console.log('Payload details:', { messageId, senderId, receiverId, message, timestamp });
+
     try {
         await dynamodb.put(params).promise();
+        console.log('DynamoDB put params:', params);
         return {
             statusCode: 200,
             body: JSON.stringify({ message: 'Message queued successfully' })

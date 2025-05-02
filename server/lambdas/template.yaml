@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: WebSocket API Backend with 5 Lambdas
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+
+Parameters:
+  WebSocketApiId:
+    Type: String
+    Default: p4d5mngovh
+    Description: ID of the WebSocket API
+  WebSocketStage:
+    Type: String
+    Default: dev
+    Description: Stage name (default 'dev')
+
+Resources:
+  # Shared IAM Role for all Lambdas
+  SharedLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      Policies:
+        - PolicyName: AllowLambdaInvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - arn:aws:lambda:us-east-1:539247476190:function:mtjs-websocket-backend-*
+
+  # Lambda Permissions (with SourceArn)
+  AllowApiGatewayInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt OnConnectFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/@connect
+
+  AllowApiGatewayInvokeOnDisconnect:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt OnDisconnectFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/@disconnect
+
+  AllowApiGatewayInvokeSendMessage:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt SendMessageFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/sendMessage
+
+  AllowApiGatewayInvokeUserMetadataHandler:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt UserMetadataHandlerFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/userMetadata
+
+  AllowApiGatewayInvokeMessageQueueHandler:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt MessageQueueHandlerFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/messageQueue
+
+  # Lambda Functions
+  OnConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: onConnect/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: Connections
+
+  OnDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: onDisconnect/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: Connections
+
+  SendMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: sendMessage/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          MESSAGES_TABLE: Messages
+          CONNECTIONS_TABLE: Connections
+          MESSAGE_QUEUE_HANDLER_FUNCTION_NAME: !Ref MessageQueueHandlerFunction
+
+  UserMetadataHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: userMetadataHandler/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+
+  MessageQueueHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: messageQueueHandler/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          MESSAGE_QUEUE_TABLE: MessageQueue
