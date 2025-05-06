@@ -75,7 +75,7 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt UserMetadataHandlerFunction.Arn
+      FunctionName: !GetAtt batchCognitoUploadFunction.Arn
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/userMetadata
 
@@ -86,6 +86,14 @@ Resources:
       FunctionName: !GetAtt MessageQueueHandlerFunction.Arn
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/messageQueue
+
+  AllowApiGatewayInvokeUpdateQuestionIndex:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt UpdateQuestionIndexFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/updateQuestionIndex
 
   # Lambda Functions
   OnConnectFunction:
@@ -120,11 +128,11 @@ Resources:
           CONNECTIONS_TABLE: Connections
           MESSAGE_QUEUE_HANDLER_FUNCTION_NAME: !Ref MessageQueueHandlerFunction
 
-  UserMetadataHandlerFunction:
+  batchCognitoUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      CodeUri: userMetadataHandler/
+      CodeUri: batchCognitoUpload/
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
@@ -139,3 +147,13 @@ Resources:
       Environment:
         Variables:
           MESSAGE_QUEUE_TABLE: MessageQueue
+
+  UpdateQuestionIndexFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: updateQuestionIndex/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata

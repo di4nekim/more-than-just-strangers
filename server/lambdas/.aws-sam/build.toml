@@ -27,15 +27,6 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["SendMessageFunction"]
 
-[function_build_definitions.32d76dd4-977a-44e8-ba20-2c60ebddff34]
-codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/userMetadataHandler"
-runtime = "nodejs20.x"
-architecture = "x86_64"
-handler = "index.handler"
-manifest_hash = ""
-packagetype = "Zip"
-functions = ["UserMetadataHandlerFunction"]
-
 [function_build_definitions.e7e3b9c1-bd93-47fb-bd3a-6f6867ac681a]
 codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/messageQueueHandler"
 runtime = "nodejs20.x"
@@ -44,5 +35,23 @@ handler = "index.handler"
 manifest_hash = ""
 packagetype = "Zip"
 functions = ["MessageQueueHandlerFunction"]
+
+[function_build_definitions.0011d800-8875-485b-8e16-8f6953f9ef7b]
+codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/updateQuestionIndex"
+runtime = "nodejs20.x"
+architecture = "x86_64"
+handler = "index.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["UpdateQuestionIndexFunction"]
+
+[function_build_definitions.7af461d6-844f-473f-9221-a8a1aca86732]
+codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/batchCognitoUpload"
+runtime = "nodejs20.x"
+architecture = "x86_64"
+handler = "index.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["batchCognitoUploadFunction"]
 
 [layer_build_definitions]

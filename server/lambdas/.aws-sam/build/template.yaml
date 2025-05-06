@@ -80,7 +80,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName:
         Fn::GetAtt:
-        - UserMetadataHandlerFunction
+        - batchCognitoUploadFunction
         - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -96,6 +96,17 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/messageQueue
+  AllowApiGatewayInvokeUpdateQuestionIndex:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+        - UpdateQuestionIndexFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/updateQuestionIndex
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -141,11 +152,11 @@ Resources:
             Ref: MessageQueueHandlerFunction
     Metadata:
       SamResourceId: SendMessageFunction
-  UserMetadataHandlerFunction:
+  batchCognitoUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      CodeUri: UserMetadataHandlerFunction
+      CodeUri: batchCognitoUploadFunction
       Role:
         Fn::GetAtt:
         - SharedLambdaRole
@@ -154,7 +165,7 @@ Resources:
         Variables:
           USER_METADATA_TABLE: UserMetadata
     Metadata:
-      SamResourceId: UserMetadataHandlerFunction
+      SamResourceId: batchCognitoUploadFunction
   MessageQueueHandlerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -169,3 +180,17 @@ Resources:
           MESSAGE_QUEUE_TABLE: MessageQueue
     Metadata:
       SamResourceId: MessageQueueHandlerFunction
+  UpdateQuestionIndexFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: UpdateQuestionIndexFunction
+      Role:
+        Fn::GetAtt:
+        - SharedLambdaRole
+        - Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+    Metadata:
+      SamResourceId: UpdateQuestionIndexFunction

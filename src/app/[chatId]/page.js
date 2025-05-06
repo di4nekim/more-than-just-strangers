@@ -3,20 +3,63 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation'; 
 import { v4 as uuidv4 } from 'uuid';
+import questions from '../../questions.json';
+import { useRouter } from 'next/navigation';  
 
 export default function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+  const [questionIndex, setQuestionIndex] = useState(1);
+  const hasNavigatedRef = useRef(false);
   const messageEndRef = useRef(null);
   let socket = useRef(null);
   const { chatId: encodedChatId } = useParams();
   const chatId = decodeURIComponent(encodedChatId);
+  const userId = 'DUMMY_USER_ID';
+  const otherUserId = chatId.split('#').find(id => id !== userId);
+  const websocketUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT}?userId=${userId}`;
+  const router = useRouter();
+  // calculate the set number, current question text
+  const currentSet = questions.sets.find(set =>
+    set.questions.some(q => q.index === questionIndex)
+  );
+  
+  const currentQuestion = currentSet?.questions.find(q => q.index === questionIndex);
+  const setNumber = currentSet?.setNumber;
+  const questionText = currentQuestion?.text;
 
   const scrollToBottom = () => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const navigateToCongrats = () => {
+    if (!hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      router.push('/congrats');
+    }
+  };
+
+  const fetchQuestionIndex = async () => {
+    try { 
+      const response = await fetch('/api/questions/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Failed to fetch question index:', data.error);
+      }
+      else {
+        console.log('Current question index:', data);
+        setQuestionIndex(data.questionIndex);
+      }
+    } catch (error) {
+      console.error('Error fetching question index:', error);
+    }
+  }
 
   useEffect(() => {
     if (isHistoryLoaded) {
@@ -25,7 +68,8 @@ export default function ChatRoom() {
   }, [isHistoryLoaded]);
 
   useEffect(() => {
-    console.log('ChatID before fetch:', chatId);
+    fetchQuestionIndex();
+
     const loadHistory = async () => {
       try {
         const response = await fetch('/api/messages/load', {
@@ -43,7 +87,6 @@ export default function ChatRoom() {
           if (data.messages.length > 0) {
             const latestTimestamp = data.messages[0].Timestamp; // Newest first
             await markAllAsRead(chatId, latestTimestamp);
-            await loadHistory();
           }
         } else {
           console.error('Failed to load messages:', data.error);
@@ -56,7 +99,7 @@ export default function ChatRoom() {
 
     loadHistory();
     
-    socket.current = new WebSocket(process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT);
+    socket.current = new WebSocket(websocketUrl);
 
     socket.current.onopen = () => {
       setIsConnected(true);
@@ -70,15 +113,29 @@ export default function ChatRoom() {
 
     socket.current.onmessage = (event) => {
       try {
-        console.log('Received message:', event.data);
         const message = JSON.parse(event.data);
-        setMessages((prev) => [...prev, message]);
+        console.log('Received message:', message);
 
-        // If user is in chat and page is focused, mark messages as read
-        if (document.hasFocus()) {
-          console.log('Marking messages as read:', message.Timestamp, 'for chatId:', chatId );
-          markAllAsRead(chatId, message.Timestamp);
+        if (message.text || message.Message) {
+          setMessages((prev) => [...prev, message]);
         }
+
+        if (message.action === 'advanceQuestion') {
+          console.log('Advancing question:', message.questionIndex);
+          setQuestionIndex(message.questionIndex);
+        }
+
+        // if end of conversation, navigate to congrats page (fallback in case of desync)
+        if (message.action === 'endConversation') {
+          navigateToCongrats();
+        }
+      
+
+        // TODO/FIX: If user is in chat and page is focused, mark messages as read
+        // if (document.hasFocus()) {
+        //   console.log('Marking messages as read:', message.Timestamp, 'for chatId:', chatId );
+        //   markAllAsRead(chatId, message.Timestamp);
+        // }
       } catch (error) {
         console.error('Error parsing message:', error, 'Message data:', event.data);
       }
@@ -92,6 +149,8 @@ export default function ChatRoom() {
       socket.current.close();
     };
   }, []);
+
+  
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -124,6 +183,7 @@ export default function ChatRoom() {
     }
   };
 
+
   async function markAllAsRead(chatId, lastSeenTimestamp) {
     try {
       const response = await fetch('/api/messages/markRead', {
@@ -144,10 +204,55 @@ export default function ChatRoom() {
     const date = new Date(isoString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  async function handleReady() {
+    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket is not connected');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/questions/ready', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          chatId,
+          userId,
+          readyToAdvance: true,
+         })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Failed to set ready:', data.error);
+      }
+      else {
+        console.log('Ready response:', data);
+      }
+    } catch (error) {
+      console.error('Error setting ready:', error);
+    }
+  }
+
+  // if end of conversation, redirect to congrats page
+  useEffect(() => {
+    if (questionIndex === 36) {
+
+      // Delay slightly to allow any final UI updates before navigation
+      setTimeout(() => {
+        router.push('/congrats');
+      }, 500);
+    }
+  }, [questionIndex]);
   
 
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto p-4">
+      <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded-lg">
+        <div className="text-sm text-gray-600">Set {setNumber}</div>
+        <div className="text-lg font-semibold">{questionIndex} : {questionText || 'Loading question...'}</div>
+      </div>
+
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {messages.map((message, index) => (
           <div
@@ -173,7 +278,13 @@ export default function ChatRoom() {
         ))}
         <div ref={messageEndRef} />
       </div>
-
+      
+      <button 
+        onClick={handleReady}
+        className="mb-4 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+      >
+        Next Question
+      </button>
       <form onSubmit={handleSendMessage} className="flex gap-2">
         <input
           type="text"

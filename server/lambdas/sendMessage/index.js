@@ -37,7 +37,7 @@ module.exports.handler = async (event) => {
             TableName: process.env.CONNECTIONS_TABLE,
             Key: { ConnectionID: connectionId }
         };
-    
+
         
         let connection;
         try {

@@ -6,6 +6,8 @@ module.exports.handler = async (event) => {
     try {
         const dynamoDB = new AWS.DynamoDB.DocumentClient();
         const connectionId = event.requestContext.connectionId;
+        const userId = event.queryStringParameters?.userId;
+
         // Check if connection already exists
         const getParams = {
             TableName: process.env.CONNECTIONS_TABLE,
@@ -24,6 +26,7 @@ module.exports.handler = async (event) => {
             TableName: process.env.CONNECTIONS_TABLE,
             Item: {
                 ConnectionID: connectionId,
+                UserID: userId,
                 timestamp: new Date().toISOString()
             }
         };

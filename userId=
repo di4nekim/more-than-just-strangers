@@ -1,0 +1,22 @@
+f047dc427144e5d97e4d5455b0a3380a2935e805<|ENT|><|RY|>refactor: implement AWS SAM for seamless deployment; integrate chatroom frontend to backend<|COM|><|MIT|>
+d4c83b3ad64c2bdaad10462c30444ec0735fc59c<|ENT|><|RY|>refactor: fix websocket connection issue by refactoring lambdas, updating IAM policies, etc<|COM|><|MIT|>
+f83ed7192a64c79f0cd49d91b1e084f5807e4701<|ENT|><|RY|>refactor: put backend into cjs, left frontend in esm; fix babel config issue<|COM|><|MIT|>
+1112d4bc5f66146fa4cc862f91524392190eaeec<|ENT|><|RY|>test: all tests passed<|COM|><|MIT|>
+bdeb13ab00eeff28fbc96a74d764fff6bcf89f8e<|ENT|><|RY|>fix: onConnect mock integration tests/integration tests/unit tests<|COM|><|MIT|>
+ddc274e334268461a0c38ed6524a7bef1221f42d<|ENT|><|RY|>debug: refactor files to be ESM compliant<|COM|><|MIT|>
+fc967651d3e0c9d4f2df44260f55e6762e293211<|ENT|><|RY|>add integration test suite for onConnect lambda; refactor databases + reinitialize lambdas, tables in AWS<|COM|><|MIT|>
+c43f032c0a43065d5b6fc832527368d5af3a0cde<|ENT|><|RY|>refactor: user metadata logic to lambdas<|COM|><|MIT|>
+d25baaf31fd868077995769816cf06e0d149533a<|ENT|><|RY|>refactor: move logic from message_queue.py file to a lambda<|COM|><|MIT|>
+1f0236c70d22225233a37171628d769bfb713fb9<|ENT|><|RY|>Add connections table; tweak sendmessage lambda<|COM|><|MIT|>
+abbe39fd482859a0a6580133c0ce7dd043625efe<|ENT|><|RY|>feat: Establish basic chatroom structure<|COM|><|MIT|>
+b068df2b17d5f381631226addb123972b0111338<|ENT|><|RY|>refactor: Queue message if no active connection is detected<|COM|><|MIT|>
+dbf14755f44198a38f8d44c0db94360e366d81ad<|ENT|><|RY|>refactor: Send queued messages<|COM|><|MIT|>
+efece2594cd46b6edb7147dbf6f203f5aa93253f<|ENT|><|RY|>feat: Add a message queue table<|COM|><|MIT|>
+81880add81732999be6c9564a031ef9a138ded76<|ENT|><|RY|>Merge branch 'main' of https://github.com/di4nekim/more-than-just-strangers into main<|COM|><|MIT|>
+bdfb578d114108ffb30bba39fe250f1da87fa193<|ENT|><|RY|>feat: Update lambdas, database schemas<|COM|><|MIT|>
+48c2141e637f3a7b7307575a20e76e4ef7a16587<|ENT|><|RY|>Update README.md<|COM|><|MIT|>
+89a91846ebb86af2fddc5d62015d4881ecf041d5<|ENT|><|RY|>Remove .next from repository<|COM|><|MIT|>
+ef6f1cf39add33eac002e9414d278a8d7b501233<|ENT|><|RY|>git init<|COM|><|MIT|>
+ca208a8f1ca65bcfaf567823415c9698e456157a<|ENT|><|RY|>git init<|COM|><|MIT|>
+51efb8f9939cd648919cba7b82a03996397b784c<|ENT|><|RY|>Update README.md<|COM|><|MIT|>
+46843ea0a21c49d5d723cd02b5e5beca1803bf16<|ENT|><|RY|>Initial commit<|COM|><|MIT|>
