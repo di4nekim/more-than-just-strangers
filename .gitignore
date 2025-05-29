@@ -4,4 +4,4 @@ venv/
 .env.local
 .env
 myenv/
-
+dynamodb/data/*

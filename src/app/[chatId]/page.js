@@ -126,7 +126,7 @@ export default function ChatRoom() {
         }
 
         // if end of conversation, navigate to congrats page (fallback in case of desync)
-        if (message.action === 'endConversation') {
+        if (message.action === 'congrats') {
           navigateToCongrats();
         }
       
@@ -237,11 +237,7 @@ export default function ChatRoom() {
   // if end of conversation, redirect to congrats page
   useEffect(() => {
     if (questionIndex === 36) {
-
-      // Delay slightly to allow any final UI updates before navigation
-      setTimeout(() => {
-        router.push('/congrats');
-      }, 500);
+      navigateToCongrats();
     }
   }, [questionIndex]);
   

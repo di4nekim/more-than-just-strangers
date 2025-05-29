@@ -123,10 +123,10 @@ export async function POST(request) {
       // if end of conversation, send websocket broadcast to both users
       if (updatedQuestionIndex === 36) {
         await postToConnection(userConnectionId, JSON.stringify({
-          action: 'endConversation',
+          action: 'congrats',
         }));
         await postToConnection(otherUserConnectionId, JSON.stringify({
-          action: 'endConversation',
+          action: 'congrats',
         }));
       }
 

@@ -7,3 +7,6 @@ region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
+
+[default.local_invoke.parameters]
+parameter_overrides = "DynamoDBEndpoint=http://host.docker.internal:8000"

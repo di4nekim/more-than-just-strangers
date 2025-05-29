@@ -16,8 +16,36 @@ Parameters:
     Type: String
     Default: dev
     Description: Stage name (default 'dev')
+  DynamoDBEndpoint:
+    Type: String
+    Default: ""
+    Description: (optional) DynamoDB Local endpoint for local development
 
 Resources:
+  # Table Definitions
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Messages
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+  # ConversationsTable:
+  #   Type: AWS::DynamoDB::Table
+  #   Properties:
+  #     TableName: Conversations
+  #     AttributeDefinitions:
+  #       - AttributeName: PK
+  #         AttributeType: S
+
   # Shared IAM Role for all Lambdas
   SharedLambdaRole:
     Type: AWS::IAM::Role
@@ -105,6 +133,7 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: Connections
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   OnDisconnectFunction:
     Type: AWS::Serverless::Function
@@ -115,6 +144,7 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: Connections
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   SendMessageFunction:
     Type: AWS::Serverless::Function
@@ -127,6 +157,7 @@ Resources:
           MESSAGES_TABLE: Messages
           CONNECTIONS_TABLE: Connections
           MESSAGE_QUEUE_HANDLER_FUNCTION_NAME: !Ref MessageQueueHandlerFunction
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   batchCognitoUploadFunction:
     Type: AWS::Serverless::Function

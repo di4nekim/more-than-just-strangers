@@ -4,7 +4,14 @@ module.exports.handler = async (event) => {
     try{
         console.log('Received event:', JSON.stringify(event));
 
-        const dynamoDB = new AWS.DynamoDB.DocumentClient();
+         // config document client for local dev via DynamoDB Local + Docker
+        const isLocal = !!process.env.DYNAMODB_ENDPOINT;
+        const dynamodb = new AWS.DynamoDB.DocumentClient({
+            region: process.env.AWS_REGION || 'us-east-1',
+            endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
+            accessKeyId: isLocal ? "fake" : undefined,
+            secretAccessKey: isLocal ? "fake" : undefined,
+        });
         const apiGateway = new AWS.ApiGatewayManagementApi({
             endpoint: process.env.WEBSOCKET_API_URL 
               ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
