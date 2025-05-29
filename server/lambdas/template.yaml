@@ -25,6 +25,7 @@ Resources:
   # Table Definitions
   MessagesTable:
     Type: AWS::DynamoDB::Table
+    BillingMode: PAY_PER_REQUEST
     Properties:
       TableName: Messages
       AttributeDefinitions:
@@ -38,13 +39,40 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
 
-  # ConversationsTable:
-  #   Type: AWS::DynamoDB::Table
-  #   Properties:
-  #     TableName: Conversations
-  #     AttributeDefinitions:
-  #       - AttributeName: PK
-  #         AttributeType: S
+  ConversationsTable:
+    Type: AWS::DynamoDB::Table
+    BillingMode: PAY_PER_REQUEST
+    Properties:
+      TableName: Conversations
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: GSI1_PK # GSI Partition Key
+          AttributeType: S
+        - AttributeName: GSI1_SK # GSI Sort Key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1_PK
+              KeyType: HASH
+            - AttributeName: GSI1_SK
+              KeyType: RANGE
+
+  UserMetadataTable:
+    Type: AWS::DynamoDB::Table
+    BillingMode: PAY_PER_REQUEST
+    Properties:
+      TableName: UserMetadata
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
 
   # Shared IAM Role for all Lambdas
   SharedLambdaRole:
