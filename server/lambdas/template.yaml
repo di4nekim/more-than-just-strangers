@@ -25,9 +25,9 @@ Resources:
   # Table Definitions
   MessagesTable:
     Type: AWS::DynamoDB::Table
-    BillingMode: PAY_PER_REQUEST
     Properties:
       TableName: Messages
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
@@ -41,15 +41,15 @@ Resources:
 
   ConversationsTable:
     Type: AWS::DynamoDB::Table
-    BillingMode: PAY_PER_REQUEST
     Properties:
       TableName: Conversations
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
-        - AttributeName: GSI1_PK # GSI Partition Key
+        - AttributeName: GSI1_PK
           AttributeType: S
-        - AttributeName: GSI1_SK # GSI Sort Key
+        - AttributeName: GSI1_SK
           AttributeType: S
       KeySchema:
         - AttributeName: PK
@@ -64,15 +64,31 @@ Resources:
 
   UserMetadataTable:
     Type: AWS::DynamoDB::Table
-    BillingMode: PAY_PER_REQUEST
     Properties:
       TableName: UserMetadata
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
+
+  MessageQueueTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: MessageQueue
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
 
   # Shared IAM Role for all Lambdas
   SharedLambdaRole:
@@ -131,7 +147,7 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt batchCognitoUploadFunction.Arn
+      FunctionName: !GetAtt UserMetadataHandlerFunction.Arn
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/userMetadata
 
@@ -212,6 +228,16 @@ Resources:
     Properties:
       Handler: index.handler
       CodeUri: updateQuestionIndex/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+
+  UserMetadataHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: batchCognitoUpload/
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:

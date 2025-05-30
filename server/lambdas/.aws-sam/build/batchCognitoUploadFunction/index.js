@@ -2,10 +2,16 @@ const AWS = require('aws-sdk');
 const questions = require('../questions.json');
 
 const cognito = new AWS.CognitoIdentityServiceProvider();
-const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-// const USER_POOL_ID = process.env.AWS_REGION;
-// const USER_METADATA_TABLE = process.env.USER_METADATA_TABLE;
+// config document client for local dev via DynamoDB Local + Docker
+const isLocal = !!process.env.DYNAMODB_ENDPOINT;
+const dynamodb = new AWS.DynamoDB.DocumentClient({
+    region: process.env.AWS_REGION || 'us-east-1',
+    endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
+    accessKeyId: isLocal ? "fake" : undefined,
+    secretAccessKey: isLocal ? "fake" : undefined,
+});
+
 
 async function getAllUsers() {
     const users = [];
@@ -37,6 +43,9 @@ async function storeUsersInDynamoDB(users) {
                 OnlineStatus: 'Offline',
                 CurrChatPartnerID: '',
                 QuestionIndex: 0,
+                readyToAdvance: false,
+                // connectionId: '',
+                state: 'AWAITING_CONFIRMATION',
                 TTL: Math.floor(Date.now() / 1000) + 3600
             }
         }).promise();

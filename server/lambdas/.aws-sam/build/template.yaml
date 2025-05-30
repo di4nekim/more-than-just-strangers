@@ -14,7 +14,59 @@ Parameters:
     Type: String
     Default: dev
     Description: Stage name (default 'dev')
+  DynamoDBEndpoint:
+    Type: String
+    Default: ''
+    Description: (optional) DynamoDB Local endpoint for local development
 Resources:
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Messages
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: SK
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      - AttributeName: SK
+        KeyType: RANGE
+  ConversationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Conversations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: GSI1_PK
+        AttributeType: S
+      - AttributeName: GSI1_SK
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: GSI1
+        KeySchema:
+        - AttributeName: GSI1_PK
+          KeyType: HASH
+        - AttributeName: GSI1_SK
+          KeyType: RANGE
+  UserMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UserMetadata
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
   SharedLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -119,6 +171,8 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: Connections
+          DYNAMODB_ENDPOINT:
+            Ref: DynamoDBEndpoint
     Metadata:
       SamResourceId: OnConnectFunction
   OnDisconnectFunction:
@@ -133,6 +187,8 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: Connections
+          DYNAMODB_ENDPOINT:
+            Ref: DynamoDBEndpoint
     Metadata:
       SamResourceId: OnDisconnectFunction
   SendMessageFunction:
@@ -150,6 +206,8 @@ Resources:
           CONNECTIONS_TABLE: Connections
           MESSAGE_QUEUE_HANDLER_FUNCTION_NAME:
             Ref: MessageQueueHandlerFunction
+          DYNAMODB_ENDPOINT:
+            Ref: DynamoDBEndpoint
     Metadata:
       SamResourceId: SendMessageFunction
   batchCognitoUploadFunction:

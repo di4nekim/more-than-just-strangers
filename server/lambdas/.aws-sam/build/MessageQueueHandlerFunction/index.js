@@ -1,7 +1,14 @@
 const AWS = require('aws-sdk');
 
 module.exports.handler = async (event) => {
-    const dynamodb = new AWS.DynamoDB.DocumentClient();
+    // config document client for local dev via DynamoDB Local + Docker
+    const isLocal = !!process.env.DYNAMODB_ENDPOINT;
+    const dynamodb = new AWS.DynamoDB.DocumentClient({
+        region: process.env.AWS_REGION || 'us-east-1',
+        endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
+        accessKeyId: isLocal ? "fake" : undefined,
+        secretAccessKey: isLocal ? "fake" : undefined,
+    });
     let payload;
 
     console.log('Event received:', event);
