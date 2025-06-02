@@ -3,7 +3,7 @@ const AWS = require('aws-sdk');
 module.exports.handler = async (event) => {
    // config document client for local dev via DynamoDB Local + Docker
    const isLocal = !!process.env.DYNAMODB_ENDPOINT;
-   const dynamodb = new AWS.DynamoDB.DocumentClient({
+   const dynamoDB = new AWS.DynamoDB.DocumentClient({
        region: process.env.AWS_REGION || 'us-east-1',
        endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
        accessKeyId: isLocal ? "fake" : undefined,
@@ -12,22 +12,17 @@ module.exports.handler = async (event) => {
     
     try {
         const connectionId = event.requestContext.connectionId;
+        const userId = event.queryStringParameters?.userId; // userID from query string is temp; validate via Cognito later
 
-        // Find the connection in the database
-        const scanParams = {
-            TableName: process.env.CONNECTIONS_TABLE,
-            FilterExpression: 'connectionId = :connectionId',
-            ExpressionAttributeValues: {
-                ':connectionId': connectionId
-            }
+
+        // get user metadata
+        const getUserParams = {
+            TableName: process.env.USER_METADATA_TABLE,
+            Key: { connectionId }
         };
 
-        const scanResult = await dynamoDB.scan(scanParams).promise();
-        if (!scanResult.Items || scanResult.Items.length === 0) {
-            return { statusCode: 404, body: 'Connection not found' };
-        }
+        const userResult = await dynamoDB.get(getUserParams).promise();
 
-        const connection = scanResult.Items[0];
 
         // Update the connection status
         const updateParams = {

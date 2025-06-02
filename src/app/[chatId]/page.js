@@ -101,7 +101,14 @@ export default function ChatRoom() {
     
     socket.current = new WebSocket(websocketUrl);
 
-    socket.current.onopen = () => {
+    socket.current.onopen = async (event) => {
+        const response = await event.target.response;
+        const { chatId } = JSON.parse(response.body);
+        // Validate URL chatId matches backend chatId
+        if (chatId !== currentChatId) {
+                // TODO: Handle mismatch (e.g., redirect to correct chat)
+            }
+        
       setIsConnected(true);
       console.log('WebSocket connected');
     };

@@ -1,15 +1,18 @@
 {
-  "name": "onconnect",
+  "name": "onconnect-lambda",
   "version": "1.0.0",
+  "description": "WebSocket onConnect Lambda handler",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "aws-sdk": "^2.1692.0"
+    "aws-sdk": "^2.1001.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
   }
 }
