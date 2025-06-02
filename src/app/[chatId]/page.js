@@ -19,7 +19,7 @@ export default function ChatRoom() {
   const chatId = decodeURIComponent(encodedChatId);
   const userId = 'DUMMY_USER_ID';
   const otherUserId = chatId.split('#').find(id => id !== userId);
-  const websocketUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT}?userId=${userId}`;
+  const websocketUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT}`;
   const router = useRouter();
   // calculate the set number, current question text
   const currentSet = questions.sets.find(set =>
@@ -102,13 +102,21 @@ export default function ChatRoom() {
     socket.current = new WebSocket(websocketUrl);
 
     socket.current.onopen = async (event) => {
-        const response = await event.target.response;
-        const { chatId } = JSON.parse(response.body);
-        // Validate URL chatId matches backend chatId
-        if (chatId !== currentChatId) {
-                // TODO: Handle mismatch (e.g., redirect to correct chat)
-            }
-        
+      const response = await event.target.response;
+      const { chatId } = JSON.parse(response.body);
+      // Validate URL chatId matches backend chatId
+      if (chatId !== currentChatId) {
+              // TODO: Handle mismatch (e.g., redirect to correct chat)
+          }
+      
+
+      // send initial connection message with userId
+      socket.current.send(JSON.stringify({
+        action: 'connect',
+        data: {
+          userId: userId
+        }
+      }));
       setIsConnected(true);
       console.log('WebSocket connected');
     };

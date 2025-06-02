@@ -13,7 +13,7 @@ module.exports.handler = async (event) => {
             secretAccessKey: isLocal ? "fake" : undefined,
         });
         const connectionId = event.requestContext.connectionId;
-        const userId = event.queryStringParameters?.userId; // userID from query string is temp; validate via Cognito later
+        const userId = event.body.userId; // userID from body is temp; validate via Cognito later
 
         // TODO: authenticate user via Cognito
 

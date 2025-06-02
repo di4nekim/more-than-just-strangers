@@ -34,6 +34,32 @@ module.exports.handler = async (event) => {
         if (!action || !data) {
             return { statusCode: 400, body: 'Missing action or data' };
         }
+
+        // Handle initial connection message
+        if (action === 'connect') {
+            const { userId } = data;
+            if (!userId) {
+                return { statusCode: 400, body: 'Missing userId in connect message' };
+            }
+
+            // Update connection with userId
+            const updateParams = {
+                TableName: process.env.CONNECTIONS_TABLE,
+                Key: { ConnectionID: connectionId },
+                UpdateExpression: 'SET userId = :userId',
+                ExpressionAttributeValues: {
+                    ':userId': userId
+                }
+            };
+
+            try {
+                await dynamodb.update(updateParams).promise();
+                return { statusCode: 200, body: 'Connection updated with userId' };
+            } catch (error) {
+                console.error('Error updating connection:', error);
+                return { statusCode: 500, body: 'Error updating connection' };
+            }
+        }
         
         const { senderId, receiverId, message, messageId } = data;
     
@@ -48,7 +74,7 @@ module.exports.handler = async (event) => {
         
         let connection;
         try {
-            connection = await dynamoDB.get(getParams).promise();
+            connection = await dynamodb.get(getParams).promise();
             console.log('Connection found:', connection);
         } catch (error) {
             console.error('DynamoDB get error:', error);
@@ -80,7 +106,7 @@ module.exports.handler = async (event) => {
             }
         };
         try {
-            await dynamoDB.put(putParams).promise();
+            await dynamodb.put(putParams).promise();
             console.log('Message saved to MESSAGES_TABLE:', putParams.Item);
         } catch (error) {
             console.error('DynamoDB put error:', error);
@@ -90,7 +116,7 @@ module.exports.handler = async (event) => {
         // Attempt to send message to receiver
         let receiverConnection;
         try {
-            receiverConnection = await findConnectionByUserId(receiverId, dynamoDB);
+            receiverConnection = await findConnectionByUserId(receiverId, dynamodb);
             console.log('Receiver connection:', receiverConnection);
         } catch (error) {
             console.error('DynamoDB scan error in findConnectionByUserId:', error);
@@ -110,7 +136,7 @@ module.exports.handler = async (event) => {
                     ExpressionAttributeValues: { ':delivered': true }
                 };
                 try {
-                    await dynamoDB.update(updateParams).promise();
+                    await dynamodb.update(updateParams).promise();
                 } catch (error) {
                     console.error('DynamoDB update error:', error);
                     return { statusCode: 500, body: 'Error updating message status' };
@@ -156,13 +182,13 @@ module.exports.handler = async (event) => {
         
 };
 
-async function findConnectionByUserId(userId, dynamoDB) {
+async function findConnectionByUserId(userId, dynamodb) {
     const params = {
         TableName: process.env.CONNECTIONS_TABLE,
         FilterExpression: 'userId = :userId',
         ExpressionAttributeValues: { ':userId': userId }
     };
-    const result = await dynamoDB.scan(params).promise();
+    const result = await dynamodb.scan(params).promise();
     return result.Items && result.Items[0];
 }
 

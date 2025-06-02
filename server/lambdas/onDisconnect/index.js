@@ -11,33 +11,26 @@ module.exports.handler = async (event) => {
    });
     
     try {
-        const connectionId = event.requestContext.connectionId;
-        const userId = event.queryStringParameters?.userId; // userID from query string is temp; validate via Cognito later
+        const userId = event.body.userId; // userID from query string is temp; validate via Cognito later
 
-
-        // get user metadata
-        const getUserParams = {
+        // update user metadata to remove connectionId, log lastSeen timestamp
+        const updateUserParams = {
             TableName: process.env.USER_METADATA_TABLE,
-            Key: { connectionId }
-        };
-
-        const userResult = await dynamoDB.get(getUserParams).promise();
-
-
-        // Update the connection status
-        const updateParams = {
-            TableName: process.env.CONNECTIONS_TABLE,
-            Key: {
-                userId: connection.userId,
-                otherUserId: connection.otherUserId
-            },
-            UpdateExpression: 'SET connectionId = :nullValue',
+            Key: { userId },
+            UpdateExpression: 'SET connectionId = :nullValue, lastSeen = :timestamp',
             ExpressionAttributeValues: {
-                ':nullValue': null
+                ':nullValue': null,
+                ':timestamp': new Date().toISOString()
             }
         };
 
-        await dynamoDB.update(updateParams).promise();
+        try{
+            await dynamoDB.update(updateUserParams).promise();
+        } catch (error) {
+            console.error('Error updating user metadata:', error);
+            return { statusCode: 500, body: "Error updating user metadata" };
+        }
+
         return { statusCode: 200, body: 'Disconnected successfully' };
     } catch (error) {
         console.error('Error in onDisconnect:', error);
