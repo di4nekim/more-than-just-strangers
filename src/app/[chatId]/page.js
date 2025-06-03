@@ -101,16 +101,8 @@ export default function ChatRoom() {
     
     socket.current = new WebSocket(websocketUrl);
 
-    socket.current.onopen = async (event) => {
-      const response = await event.target.response;
-      const { chatId } = JSON.parse(response.body);
-      // Validate URL chatId matches backend chatId
-      if (chatId !== currentChatId) {
-              // TODO: Handle mismatch (e.g., redirect to correct chat)
-          }
-      
-
-      // send initial connection message with userId
+    socket.current.onopen = () => {
+      // Send initial connection message with userId
       socket.current.send(JSON.stringify({
         action: 'connect',
         data: {
@@ -182,11 +174,12 @@ export default function ChatRoom() {
       socket.current.send(JSON.stringify({
         action: 'sendMessage',
         data: {
-          senderId: 'DUMMY_USER_ID',
-          receiverId: 'DUMMY_RECEIVER_ID',
-          message: newMessage,
+          chatId: chatId,
+          sentAt: new Date().toISOString(),
+          content: newMessage,
           messageId: messageObject.id,
-          timestamp: new Date().toISOString()
+          senderId: userId,
+          sent: false
         }
       }));
 

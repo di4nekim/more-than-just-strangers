@@ -1,15 +1,15 @@
 {
   "name": "sendmessage",
   "version": "1.0.0",
-  "description": "Lambda function for sending messages.",
+  "description": "SendMessage Lambda Function",
   "main": "index.js",
-  "dependencies": {
-    "aws-sdk": "^2.1692.0"
-  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
-  "author": "",
-  "license": "ISC",
-  "keywords": []
+  "dependencies": {
+    "aws-sdk": "^2.1499.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
 }

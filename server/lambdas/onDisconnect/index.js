@@ -11,8 +11,9 @@ module.exports.handler = async (event) => {
    });
     
     try {
-        const userId = event.body.userId; // userID from query string is temp; validate via Cognito later
-
+        const body = JSON.parse(event.body)
+        const userId = body.data.userId; // userID from body is temp; validate via Cognito later
+        
         // update user metadata to remove connectionId, log lastSeen timestamp
         const updateUserParams = {
             TableName: process.env.USER_METADATA_TABLE,
