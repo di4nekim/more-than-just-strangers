@@ -9,9 +9,11 @@
 - AWS API Gateway (WebSockets)
 - AWS Lambda
 - AWS Cognito
+- AWS SAM
+- DynamoDB Local + Docker
 
 ## scope of functions and features
-- real-time chatrooms (via AWS API Gateway)
+- real-time chatrooms (via Websocketse)
 - message queueing
 - persistent chat history
 - federated login (via AWS Cognito)
