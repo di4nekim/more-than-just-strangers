@@ -4,7 +4,7 @@ module.exports.handler = async (event) => {
     // console.log('Lambda triggered with event:', JSON.stringify(event));
     
     try {
-        // Validate that we have a connectionId
+        // validate that we have a connectionId
         if (!event.requestContext || !event.requestContext.connectionId) {
             console.error('No connectionId found in event');
             return { 
@@ -27,24 +27,51 @@ module.exports.handler = async (event) => {
             secretAccessKey: isLocal ? "fake" : undefined,
         });
 
-        // Return success - the actual userId mapping will be handled by the sendMessage lambda
-        // when it receives the 'connect' action message
-        return { 
-            statusCode: 200, 
-            body: JSON.stringify({ 
-                message: 'Connection established',
-                connectionId: connectionId
-            })
-        };
+        // Check if connection already exists
+        try {
+            const existingConnection = await dynamoDB.get({
+                TableName: process.env.CONNECTIONS_TABLE || 'connections',
+                Key: { connectionId }
+            }).promise();
+
+            if (existingConnection.Item) {
+                return {
+                    statusCode: 409,
+                    body: JSON.stringify({ error: 'Connection already exists' })
+                };
+            }
+        } catch (error) {
+            console.error('Error checking existing connection:', error);
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ error: 'Internal Server Error' })
+            };
+        }
+
+        // Store the new connection
+        try {
+            await dynamoDB.put({
+                TableName: process.env.CONNECTIONS_TABLE || 'connections',
+                Item: { connectionId }
+            }).promise();
+
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: 'Connection established', connectionId })
+            };
+        } catch (error) {
+            console.error('Error storing connection:', error);
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ error: 'Internal Server Error' })
+            };
+        }
 
     } catch (error) {
         console.error('Error in onConnect:', error);
         return { 
             statusCode: 500, 
-            body: JSON.stringify({ 
-                error: "Internal Server Error",
-                details: error.message
-            })
+            body: 'Internal server error'
         };
     }
 };

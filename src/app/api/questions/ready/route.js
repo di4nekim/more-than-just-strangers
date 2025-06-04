@@ -2,7 +2,9 @@ import AWS from "aws-sdk";
 
 const dynamoDb = new AWS.DynamoDB.DocumentClient();
 const apiGateway = new AWS.ApiGatewayManagementApi({
-  endpoint: process.env.WEBSOCKET_ENDPOINT,
+  endpoint: process.env.WEBSOCKET_API_URL 
+    ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
+    : "localhost:3001"
 });
 const USER_METADATA_TABLE = process.env.USER_METADATA_TABLE;
 

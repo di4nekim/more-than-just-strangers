@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest server/lambdas/__tests__",
+    "test": "jest",
+    "test:lambda": "jest server/lambdas",
+    "test:lambda:watch": "jest server/lambdas --watch",
+    "test:lambda:coverage": "jest server/lambdas --coverage",
     "bootstrap:db": "node scripts/bootstrap-local-dynamodb.js"
   },
   "dependencies": {

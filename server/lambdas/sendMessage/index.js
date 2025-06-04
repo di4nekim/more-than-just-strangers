@@ -1,64 +1,95 @@
 const AWS = require('aws-sdk');
 
 module.exports.handler = async (event) => {
-    try{
-        console.log('Received event:', JSON.stringify(event));
-
-         // config document client for local dev via DynamoDB Local + Docker
+    // Instantiate apiGateway inside the handler for testability
+    const apiGateway = new AWS.ApiGatewayManagementApi({
+        endpoint: process.env.WEBSOCKET_API_URL 
+          ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
+          : "localhost:3001"
+    });
+    console.log('Handler called with event:', JSON.stringify(event, null, 2));
+    
+    try {
+        // config document client for local dev via DynamoDB Local + Docker
         const isLocal = !!process.env.DYNAMODB_ENDPOINT;
-        const dynamodb = new AWS.DynamoDB.DocumentClient({
+        console.log('DynamoDB configuration:', {
+            isLocal,
+            region: process.env.AWS_REGION || 'us-east-1',
+            endpoint: process.env.DYNAMODB_ENDPOINT || 'undefined'
+        });
+
+        const dynamoDB = new AWS.DynamoDB.DocumentClient({
             region: process.env.AWS_REGION || 'us-east-1',
             endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
             accessKeyId: isLocal ? "fake" : undefined,
             secretAccessKey: isLocal ? "fake" : undefined,
         });
-        const apiGateway = new AWS.ApiGatewayManagementApi({
-            endpoint: process.env.WEBSOCKET_API_URL 
-              ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
-              : "localhost:3001"
-          });
 
-        const connectionId = event.requestContext.connectionId;
-          
-        // parse event body
+        // Handle both production and test environments
+        const connectionId = event.requestContext?.connectionId || event.connectionId;
+        console.log('Connection ID:', connectionId);
+        
+        if (!event.body) {
+            console.log('Missing request body');
+            return { 
+                statusCode: 400, 
+                body: JSON.stringify({ error: 'Missing request body' }) 
+            };
+        }
+
         let body;
         try {
             body = JSON.parse(event.body);
-            console.log('Parsed body:', body);
-        } catch {
-            return { statusCode: 400, body: 'Invalid request body' };
-        }
-        
-        const { action, data } = body;
-        if (!action || !data) {
-            return { statusCode: 400, body: 'Missing action or data' };
-        }
-
-        // handle initial connection message
-        if (action === 'connect') {
-            const { userId } = data;
-            if (!userId) {
-                return { statusCode: 400, body: 'Missing userId in connect message' };
-            }
-
-            // first check if user exists in metadata table
-            const getUserParams = {
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${userId}` }
+            console.log('Parsed request body:', JSON.stringify(body, null, 2));
+        } catch (error) {
+            console.log('Error parsing request body:', error);
+            return { 
+                statusCode: 400, 
+                body: JSON.stringify({ error: 'Invalid request body' }) 
             };
+        }
+
+        if (!body || !body.action || !body.data) {
+            console.log('Missing action or data in request body');
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Missing action or data' })
+            };
+        }
+
+        // Handle connect action
+        if (body.action === 'connect') {
+            console.log('Processing connect action');
+            const { userId } = body.data;
+            if (!userId) {
+                console.log('Missing userId in connect action');
+                return { 
+                    statusCode: 400, 
+                    body: JSON.stringify({ error: 'Missing userId' }) 
+                };
+            }
 
             let isNewUser = false;
             try {
-                const userResult = await dynamodb.get(getUserParams).promise();
+                console.log('Checking user existence for:', userId);
+                const userResult = await dynamoDB.get({
+                    TableName: process.env.USER_METADATA_TABLE,
+                    Key: { PK: `USER#${userId}` }
+                }).promise();
+                console.log('User check result:', JSON.stringify(userResult, null, 2));
                 isNewUser = !userResult.Item;
             } catch (error) {
                 console.error('Error checking user existence:', error);
-                return { statusCode: 500, body: 'Error checking user status' };
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error checking user status' }) 
+                };
             }
             
             // if user exists, get their active chat using GSI1
             let activeChatId = null;
             if (!isNewUser) {
+                console.log('User exists, checking for active chat');
                 const conversationsParams = {
                     TableName: process.env.CONVERSATIONS_TABLE,
                     IndexName: 'GSI1',
@@ -71,19 +102,24 @@ module.exports.handler = async (event) => {
                 };
 
                 try {
-                    const conversationsResult = await dynamodb.query(conversationsParams).promise();
+                    console.log('Querying conversations with params:', JSON.stringify(conversationsParams, null, 2));
+                    const conversationsResult = await dynamoDB.query(conversationsParams).promise();
+                    console.log('Conversations query result:', JSON.stringify(conversationsResult, null, 2));
                     if (conversationsResult.Items && conversationsResult.Items.length > 0) {
-                        // Extract chatId from PK (CHAT#{chatId})
                         activeChatId = conversationsResult.Items[0].PK.replace('CHAT#', '');
+                        console.log('Found active chat:', activeChatId);
                     }
                 } catch (error) {
                     console.error('Error finding active chat:', error);
-                    return { statusCode: 500, body: 'Error finding active chat session' };
+                    return { 
+                        statusCode: 500, 
+                        body: JSON.stringify({ error: 'Error finding active chat session' }) 
+                    };
                 }
             }
 
-            // update user metadata
-            const updateUserParams = {
+            // Store user connection mapping
+            const params = {
                 TableName: process.env.USER_METADATA_TABLE,
                 Key: { PK: `USER#${userId}` },
                 UpdateExpression: 'SET connectionId = :connectionId, chatId = :chatId, lastSeen = :lastSeen, ready = :ready',
@@ -96,7 +132,7 @@ module.exports.handler = async (event) => {
             };
 
             try {
-                await dynamodb.update(updateUserParams).promise();
+                await dynamoDB.update(params).promise();
 
                 // if user has an active chat, check for queued messages
                 if (activeChatId) {
@@ -111,7 +147,7 @@ module.exports.handler = async (event) => {
                     };
 
                     try {
-                        const queuedMessages = await dynamodb.query(queuedMessagesParams).promise();
+                        const queuedMessages = await dynamoDB.query(queuedMessagesParams).promise();
                         
                         // send queued messages to the user
                         if (queuedMessages.Items && queuedMessages.Items.length > 0) {
@@ -142,19 +178,20 @@ module.exports.handler = async (event) => {
 
                 return { 
                     statusCode: 200, 
-                    body: JSON.stringify({ 
-                        message: 'Connection stored',
-                        chatId: activeChatId,
-                        isNewUser: isNewUser
-                    })
+                    body: JSON.stringify({ message: 'Connection stored' })
                 };
             } catch (error) {
-                console.error('Error updating user metadata:', error);
-                return { statusCode: 500, body: 'Error updating user metadata' };
+                console.error('Error storing connection:', error);
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error storing connection' }) 
+                };
             }
         }
-        else if (action === 'sendMessage') {
-            const { chatId, sentAt, content, messageId, senderId } = data;
+
+        // Handle sendMessage action
+        if (body.action === 'sendMessage') {
+            const { chatId, sentAt, content, messageId, senderId } = body.data;
 
             // validate required fields and their formats
             const validations = {
@@ -164,71 +201,91 @@ module.exports.handler = async (event) => {
                 senderId: (val) => val && typeof val === 'string' && val.trim().length > 0,
                 sentAt: (val) => !isNaN(new Date(val).getTime())
             };
-
             const errors = Object.entries(validations)
-                .filter(([key, validator]) => !validator(data[key]))
+                .filter(([key, validator]) => !validator(body.data[key]))
                 .map(([key]) => key);
-
             if (errors.length > 0) {
                 return {
                     statusCode: 400,
-                    body: JSON.stringify({
-                        error: 'Invalid or missing fields',
-                        invalidFields: errors
-                    })
+                    body: JSON.stringify({ error: 'Invalid or missing fields' })
                 };
             }
 
-            console.log('Sender ID:', senderId, 'Message ID:', messageId, 'Chat ID:', chatId, 'Sent At:', sentAt, 'Content:', content);
-    
-            // validate sender connection
-            const getParams = {
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${senderId}` }
-            };
-
+            // verify sender's connection
             let senderMetadata;
             try {
-                senderMetadata = await dynamodb.get(getParams).promise();
+                senderMetadata = await dynamoDB.get({
+                    TableName: process.env.USER_METADATA_TABLE,
+                    Key: { PK: `USER#${senderId}` }
+                }).promise();
                 console.log('Sender metadata found:', senderMetadata);
             } catch (error) {
                 console.error('DynamoDB get error:', error);
-                return { statusCode: 500, body: 'Error retrieving sender metadata' };
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error retrieving sender metadata' }) 
+                };
             }
-        
+
             if (!senderMetadata.Item) {
-                return { statusCode: 403, body: 'Sender not found' };
+                return { 
+                    statusCode: 403, 
+                    body: JSON.stringify({ error: 'Sender not found' }) 
+                };
             }
 
-            // Verify sender's connection matches
             if (senderMetadata.Item.connectionId !== connectionId) {
-                return { statusCode: 403, body: 'Sender connection does not match' };
+                return { 
+                    statusCode: 403, 
+                    body: JSON.stringify({ error: 'Sender connection does not match' }) 
+                };
             }
 
-            // Get conversation to verify participants
-            const conversationParams = {
-                TableName: process.env.CONVERSATIONS_TABLE,
-                Key: { PK: `CHAT#${chatId}` }
-            };
-
+            // get conversation to find receiver
             let conversation;
             try {
-                conversation = await dynamodb.get(conversationParams).promise();
-                if (!conversation.Item) {
-                    return { statusCode: 404, body: 'Conversation not found' };
+                const conversationResult = await dynamoDB.query({
+                    TableName: process.env.CONVERSATIONS_TABLE,
+                    KeyConditionExpression: 'PK = :pk',
+                    ExpressionAttributeValues: {
+                        ':pk': `CHAT#${chatId}`
+                    }
+                }).promise();
+                console.log('Conversation query result:', conversationResult);
+                
+                if (!conversationResult.Items || conversationResult.Items.length === 0) {
+                    return { 
+                        statusCode: 404, 
+                        body: JSON.stringify({ error: 'Conversation not found' }) 
+                    };
                 }
+                conversation = { Item: conversationResult.Items[0] };
             } catch (error) {
                 console.error('Error getting conversation:', error);
-                return { statusCode: 500, body: 'Error verifying conversation' };
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error retrieving conversation' }) 
+                };
             }
 
-            // determine receiver ID from conversation
-            const receiverId = conversation.Item.userAId === senderId ? conversation.Item.userBId : conversation.Item.userAId;
-            if (!receiverId) {
-                return { statusCode: 400, body: 'Invalid conversation participants' };
+            // get receiver's metadata
+            let receiverMetadata;
+            try {
+                const receiverId = conversation.Item.userAId === senderId ? conversation.Item.userBId : conversation.Item.userAId;
+                receiverMetadata = await dynamoDB.get({
+                    TableName: process.env.USER_METADATA_TABLE,
+                    Key: { PK: `USER#${receiverId}` }
+                }).promise();
+                console.log('Receiver metadata found:', receiverMetadata);
+            } catch (error) {
+                console.error('Error getting receiver metadata:', error);
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error retrieving receiver metadata' }) 
+                };
             }
-        
-            // Store message in DynamoDB
+
+            // store message
             const messageParams = {
                 TableName: process.env.MESSAGES_TABLE,
                 Item: {
@@ -244,96 +301,94 @@ module.exports.handler = async (event) => {
             };
 
             try {
-                await dynamodb.put(messageParams).promise();
-
-                // update conversation's lastMessage and lastUpdated
-                const updateConversationParams = {
-                    TableName: process.env.CONVERSATIONS_TABLE,
-                    Key: { PK: `CHAT#${chatId}` },
-                    UpdateExpression: 'SET lastMessage = :lastMessage, lastUpdated = :lastUpdated',
-                    ExpressionAttributeValues: {
-                        ':lastMessage': content,
-                        ':lastUpdated': sentAt
-                    }
-                };
-                await dynamodb.update(updateConversationParams).promise();
+                await dynamoDB.put(messageParams).promise();
             } catch (error) {
                 console.error('Error storing message:', error);
-                return { statusCode: 500, body: 'Error storing message' };
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error storing message' }) 
+                };
             }
 
-            // get receiver's metadata
-            const receiverParams = {
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${receiverId}` }
-            };
-
-            let receiverMetadata;
-            try {
-                receiverMetadata = await dynamodb.get(receiverParams).promise();
-            } catch (error) {
-                console.error('Error getting receiver metadata:', error);
-                return { statusCode: 500, body: 'Error getting receiver metadata' };
-            }
-
-            // verify both users have matching chatId (i.e. are currently in the same chat)
-            if (!receiverMetadata.Item || !receiverMetadata.Item.chatId || !senderMetadata.Item.chatId) {
-                return { statusCode: 403, body: 'Both users must be in the same chat to send messages' };
-            }
-
-            if (receiverMetadata.Item.chatId !== chatId || senderMetadata.Item.chatId !== chatId) {
-                return { statusCode: 403, body: 'Users must be in the same chat to send messages' };
-            }
-
-            if (!receiverMetadata.Item.connectionId) {
-                // receiver is offline, message will be delivered when they connect
-                return { statusCode: 200, body: 'Message stored, receiver offline' };
-            }
-
-            // send message to receiver
-            const messagePayload = {
-                action: 'message',
-                data: {
-                    chatId: chatId,
-                    messageId: messageId,
-                    senderId: senderId,
-                    content: content,
-                    timestamp: sentAt
+            // update conversation's lastMessage + lastUpdated
+            const updateConversationParams = {
+                TableName: process.env.CONVERSATIONS_TABLE,
+                Key: { PK: `CHAT#${chatId}` },
+                UpdateExpression: 'SET lastMessage = :message, lastUpdated = :lastUpdated',
+                ExpressionAttributeValues: {
+                    ':message': {
+                        content,
+                        sentAt,
+                        senderId,
+                        messageId
+                    },
+                    ':lastUpdated': new Date().toISOString()
                 }
             };
 
             try {
-                await apiGateway.postToConnection({
-                    ConnectionId: receiverMetadata.Item.connectionId,
-                    Data: JSON.stringify(messagePayload)
-                }).promise();
-
-                // update message status to delivered (i.e. queued = false)
-                const updateMessageParams = {
-                    TableName: process.env.MESSAGES_TABLE,
-                    Key: { 
-                        PK: `CHAT#${chatId}`,
-                        SK: `TS#${sentAt}`
-                    },
-                    UpdateExpression: 'SET queued = :queued',
-                    ExpressionAttributeValues: {
-                        ':queued': false
-                    }
-                };
-                await dynamodb.update(updateMessageParams).promise();
-
+                await dynamoDB.update(updateConversationParams).promise();
             } catch (error) {
-                console.error('Error sending message to receiver:', error);
-                return { statusCode: 500, body: 'Error sending message to receiver' };
+                console.error('Error updating conversation:', error);
+                return { 
+                    statusCode: 500, 
+                    body: JSON.stringify({ error: 'Error updating conversation' }) 
+                };
             }
 
-            return { statusCode: 200, body: 'Message sent successfully' };
+            // if receiver is online, send message via WebSocket
+            if (receiverMetadata.Item && receiverMetadata.Item.connectionId) {
+                const messagePayload = {
+                    action: 'newMessage',
+                    data: {
+                        chatId,
+                        message: {
+                            content,
+                            sentAt,
+                            senderId,
+                            messageId
+                        }
+                    }
+                };
+
+                try {
+                    await apiGateway.postToConnection({
+                        ConnectionId: receiverMetadata.Item.connectionId,
+                        Data: JSON.stringify(messagePayload)
+                    }).promise();
+                    return { 
+                        statusCode: 200, 
+                        body: JSON.stringify({ message: 'Message sent successfully' }) 
+                    };
+                } catch (error) {
+                    console.error('Error sending message to receiver:', error);
+                    return { 
+                        statusCode: 500, 
+                        body: JSON.stringify({ error: 'Error sending message to receiver' }) 
+                    };
+                }
+            }
+
+            return { 
+                statusCode: 200, 
+                body: JSON.stringify({ message: 'Message stored, receiver offline' }) 
+            };
         }
+
+        return { 
+            statusCode: 400, 
+            body: JSON.stringify({ error: 'Invalid action' }) 
+        };
     } catch (error) {
         console.error('Error in sendMessage:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error" }) };
+        return { 
+            statusCode: 500, 
+            body: JSON.stringify({ error: 'Internal Server Error' }) 
+        };
     }
 };
 
 console.log('Message processed successfully');
+
+
 

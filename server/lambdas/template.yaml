@@ -81,22 +81,6 @@ Resources:
         - AttributeName: PK
           KeyType: HASH
 
-  # MessageQueueTable:
-  #   Type: AWS::DynamoDB::Table
-  #   Properties:
-  #     TableName: MessageQueue
-  #     BillingMode: PAY_PER_REQUEST
-  #     AttributeDefinitions:
-  #       - AttributeName: PK
-  #         AttributeType: S
-  #       - AttributeName: SK
-  #         AttributeType: S
-  #     KeySchema:
-  #       - AttributeName: PK
-  #         KeyType: HASH
-  #       - AttributeName: SK
-  #         KeyType: RANGE
-
   # Shared IAM Role for all Lambdas
   SharedLambdaRole:
     Type: AWS::IAM::Role
@@ -208,6 +192,17 @@ Resources:
           MESSAGES_TABLE: Messages
           CONNECTIONS_TABLE: Connections
           MESSAGE_QUEUE_HANDLER_FUNCTION_NAME: !Ref MessageQueueHandlerFunction
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  SetReadyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: setReady/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   batchCognitoUploadFunction:
