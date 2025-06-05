@@ -1,3 +1,10 @@
+/**
+ * Lambda function to handle WebSocket disconnections.
+ * Removes the connection ID from DynamoDB and updates user metadata.
+ * 
+ * @param {Object} event - The event object containing the WebSocket connection details and request body
+ * @returns {Object} Response object with status code and body
+ */
 const AWS = require('aws-sdk');
 
 module.exports.handler = async (event) => {

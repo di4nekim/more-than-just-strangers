@@ -34,7 +34,7 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
 });
 
 // Helper functions for test data management
-async function createUser(userId, connectionId, chatId = null, ready = false) {
+async function createUser(userId, connectionId = null, chatId = null, ready = false) {
     const params = {
         TableName: process.env.USER_METADATA_TABLE,
         Item: {
@@ -53,6 +53,8 @@ async function createConversation(chatId, userAId, userBId) {
         TableName: process.env.CONVERSATIONS_TABLE,
         Item: {
             PK: `CHAT#${chatId}`,
+            GSI1_PK: `USER#${userAId}`,
+            GSI1_SK: `CHAT#${chatId}`,
             userAId,
             userBId,
             lastMessage: {
@@ -100,7 +102,7 @@ async function cleanupTestData(userId, chatId) {
     }
 }
 
-describe('sendMessage Integration Tests', () => {
+describe('WebSocket Lambda Integration Tests', () => {
     const mockUserId = 'user1';
     const mockReceiverId = 'user2';
     const mockConnectionId = 'test-connection-id';
@@ -125,174 +127,295 @@ describe('sendMessage Integration Tests', () => {
         await cleanupTestData(mockReceiverId, mockChatId);
     });
 
-    test('should successfully send message when receiver is online', async () => {
-        const event = {
-            requestContext: {
-                connectionId: mockConnectionId,
-                domainName: 'test.execute-api.region.amazonaws.com',
-                stage: 'test'
-            },
-            body: JSON.stringify({
-                action: 'sendMessage',
-                data: {
-                    chatId: mockChatId,
-                    sentAt: mockTimestamp,
-                    content: 'Hello, world!',
+    describe('Connect Action', () => {
+        test('should successfully connect a new user', async () => {
+            const newUserId = 'newUser';
+            const event = {
+                requestContext: {
+                    connectionId: 'new-connection-id',
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'connect',
+                    data: {
+                        userId: newUserId
+                    }
+                })
+            };
+
+            const response = await handler(event);
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body).message).toBe('Connection stored');
+
+            // Verify user was created
+            const user = await dynamoDB.get({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${newUserId}` }
+            }).promise();
+
+            expect(user.Item).toMatchObject({
+                connectionId: 'new-connection-id',
+                ready: false
+            });
+        });
+
+        test('should connect existing user and send queued messages', async () => {
+            // Create a queued message
+            await dynamoDB.put({
+                TableName: process.env.MESSAGES_TABLE,
+                Item: {
+                    PK: `CHAT#${mockChatId}`,
+                    SK: `MSG#${mockMessageId}`,
                     messageId: mockMessageId,
-                    senderId: mockUserId
+                    chatId: mockChatId,
+                    senderId: mockReceiverId,
+                    content: 'Queued message',
+                    sentAt: mockTimestamp,
+                    queued: true
                 }
-            })
-        };
+            }).promise();
 
-        const response = await handler(event);
-        expect(response.statusCode).toBe(200);
-        expect(JSON.parse(response.body).message).toBe('Message sent successfully');
+            const event = {
+                requestContext: {
+                    connectionId: mockConnectionId,
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'connect',
+                    data: {
+                        userId: mockUserId
+                    }
+                })
+            };
 
-        // Verify WebSocket message was attempted
-        expect(mockPostToConnection).toHaveBeenCalledWith({
-            ConnectionId: mockReceiverConnectionId,
-            Data: expect.stringContaining('"action":"newMessage"')
-        });
+            const response = await handler(event);
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body).message).toBe('Connection stored');
 
-        // Verify message was stored
-        const messages = await dynamoDB.query({
-            TableName: process.env.MESSAGES_TABLE,
-            KeyConditionExpression: 'PK = :chatKey',
-            ExpressionAttributeValues: {
-                ':chatKey': `CHAT#${mockChatId}`
-            }
-        }).promise();
-
-        expect(messages.Items).toHaveLength(1);
-        expect(messages.Items[0]).toMatchObject({
-            chatId: mockChatId,
-            messageId: mockMessageId,
-            senderId: mockUserId,
-            content: 'Hello, world!',
-            sentAt: mockTimestamp
-        });
-
-        // Verify conversation was updated
-        const conversation = await dynamoDB.get({
-            TableName: process.env.CONVERSATIONS_TABLE,
-            Key: { PK: `CHAT#${mockChatId}` }
-        }).promise();
-
-        expect(conversation.Item.lastMessage).toMatchObject({
-            content: 'Hello, world!',
-            sentAt: mockTimestamp,
-            senderId: mockUserId,
-            messageId: mockMessageId
+            // Verify WebSocket message was sent
+            expect(mockPostToConnection).toHaveBeenCalledWith({
+                ConnectionId: mockConnectionId,
+                Data: expect.stringContaining('"action":"message"')
+            });
         });
     });
 
-    test('should store message when receiver is offline', async () => {
-        // Set receiver offline by removing their connection
-        await dynamoDB.update({
-            TableName: process.env.USER_METADATA_TABLE,
-            Key: { PK: `USER#${mockReceiverId}` },
-            UpdateExpression: 'SET connectionId = :connectionId',
-            ExpressionAttributeValues: {
-                ':connectionId': null
-            }
-        }).promise();
+    describe('SendMessage Action', () => {
+        test('should successfully send message when receiver is online', async () => {
+            const event = {
+                requestContext: {
+                    connectionId: mockConnectionId,
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'sendMessage',
+                    data: {
+                        chatId: mockChatId,
+                        sentAt: mockTimestamp,
+                        content: 'Hello, world!',
+                        messageId: mockMessageId,
+                        senderId: mockUserId
+                    }
+                })
+            };
 
-        const event = {
-            requestContext: {
-                connectionId: mockConnectionId,
-                domainName: 'test.execute-api.region.amazonaws.com',
-                stage: 'test'
-            },
-            body: JSON.stringify({
-                action: 'sendMessage',
-                data: {
-                    chatId: mockChatId,
-                    sentAt: mockTimestamp,
-                    content: 'Hello, world!',
-                    messageId: mockMessageId,
-                    senderId: mockUserId
+            const response = await handler(event);
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body).message).toBe('Message sent successfully');
+
+            // Verify WebSocket message was attempted
+            expect(mockPostToConnection).toHaveBeenCalledWith({
+                ConnectionId: mockReceiverConnectionId,
+                Data: expect.stringContaining('"action":"message"')
+            });
+
+            // Verify message was stored
+            const messages = await dynamoDB.query({
+                TableName: process.env.MESSAGES_TABLE,
+                KeyConditionExpression: 'PK = :chatKey',
+                ExpressionAttributeValues: {
+                    ':chatKey': `CHAT#${mockChatId}`
                 }
-            })
-        };
+            }).promise();
 
-        const response = await handler(event);
-        expect(response.statusCode).toBe(200);
-        expect(JSON.parse(response.body).message).toBe('Message stored, receiver offline');
+            expect(messages.Items).toHaveLength(1);
+            expect(messages.Items[0]).toMatchObject({
+                chatId: mockChatId,
+                messageId: mockMessageId,
+                senderId: mockUserId,
+                content: 'Hello, world!',
+                sentAt: mockTimestamp,
+                queued: false
+            });
 
-        // Verify no WebSocket message was attempted
-        expect(mockPostToConnection).not.toHaveBeenCalled();
+            // Verify conversation was updated with last message
+            const conversation = await dynamoDB.get({
+                TableName: process.env.CONVERSATIONS_TABLE,
+                Key: { PK: `CHAT#${mockChatId}` }
+            }).promise();
 
-        // Verify message was stored
-        const messages = await dynamoDB.query({
-            TableName: process.env.MESSAGES_TABLE,
-            KeyConditionExpression: 'PK = :chatKey',
-            ExpressionAttributeValues: {
-                ':chatKey': `CHAT#${mockChatId}`
-            }
-        }).promise();
-
-        expect(messages.Items).toHaveLength(1);
-        expect(messages.Items[0]).toMatchObject({
-            chatId: mockChatId,
-            messageId: mockMessageId,
-            senderId: mockUserId,
-            content: 'Hello, world!',
-            sentAt: mockTimestamp,
-            queued: true
+            expect(conversation.Item).toMatchObject({
+                lastUpdated: mockTimestamp,
+                lastMessage: {
+                    content: 'Hello, world!',
+                    sentAt: mockTimestamp
+                }
+            });
         });
-    });
 
-    test('should return 403 when sender connection does not match', async () => {
-        const event = {
-            requestContext: {
-                connectionId: 'different-connection-id',
-                domainName: 'test.execute-api.region.amazonaws.com',
-                stage: 'test'
-            },
-            body: JSON.stringify({
-                action: 'sendMessage',
-                data: {
-                    chatId: mockChatId,
-                    sentAt: mockTimestamp,
-                    content: 'Hello, world!',
-                    messageId: mockMessageId,
-                    senderId: mockUserId
+        test('should store message when receiver is offline', async () => {
+            // Set receiver offline by removing their connection
+            await dynamoDB.update({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${mockReceiverId}` },
+                UpdateExpression: 'SET connectionId = :connectionId',
+                ExpressionAttributeValues: {
+                    ':connectionId': null
                 }
-            })
-        };
+            }).promise();
 
-        const response = await handler(event);
-        expect(response.statusCode).toBe(403);
-        expect(JSON.parse(response.body).error).toBe('Sender connection does not match');
+            const event = {
+                requestContext: {
+                    connectionId: mockConnectionId,
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'sendMessage',
+                    data: {
+                        chatId: mockChatId,
+                        sentAt: mockTimestamp,
+                        content: 'Hello, world!',
+                        messageId: mockMessageId,
+                        senderId: mockUserId
+                    }
+                })
+            };
 
-        // Verify no WebSocket message was attempted
-        expect(mockPostToConnection).not.toHaveBeenCalled();
-    });
+            const response = await handler(event);
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body).message).toBe('Message sent successfully');
 
-    test('should return 404 when conversation not found', async () => {
-        const event = {
-            requestContext: {
-                connectionId: mockConnectionId,
-                domainName: 'test.execute-api.region.amazonaws.com',
-                stage: 'test'
-            },
-            body: JSON.stringify({
-                action: 'sendMessage',
-                data: {
-                    chatId: 'non-existent-chat',
-                    sentAt: mockTimestamp,
-                    content: 'Hello, world!',
-                    messageId: mockMessageId,
-                    senderId: mockUserId
+            // Verify no WebSocket message was attempted
+            expect(mockPostToConnection).not.toHaveBeenCalled();
+
+            // Verify message was stored as queued
+            const messages = await dynamoDB.query({
+                TableName: process.env.MESSAGES_TABLE,
+                KeyConditionExpression: 'PK = :chatKey',
+                ExpressionAttributeValues: {
+                    ':chatKey': `CHAT#${mockChatId}`
                 }
-            })
-        };
+            }).promise();
 
-        const response = await handler(event);
-        expect(response.statusCode).toBe(404);
-        expect(JSON.parse(response.body).error).toBe('Conversation not found');
+            expect(messages.Items).toHaveLength(1);
+            expect(messages.Items[0]).toMatchObject({
+                chatId: mockChatId,
+                messageId: mockMessageId,
+                senderId: mockUserId,
+                content: 'Hello, world!',
+                sentAt: mockTimestamp,
+                queued: true
+            });
 
-        // Verify no WebSocket message was attempted
-        expect(mockPostToConnection).not.toHaveBeenCalled();
+            // Verify conversation was updated with last message even when receiver is offline
+            const conversation = await dynamoDB.get({
+                TableName: process.env.CONVERSATIONS_TABLE,
+                Key: { PK: `CHAT#${mockChatId}` }
+            }).promise();
+
+            expect(conversation.Item).toMatchObject({
+                lastUpdated: mockTimestamp,
+                lastMessage: {
+                    content: 'Hello, world!',
+                    sentAt: mockTimestamp
+                }
+            });
+        });
+
+        test('should return 403 when sender connection does not match', async () => {
+            const event = {
+                requestContext: {
+                    connectionId: 'different-connection-id',
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'sendMessage',
+                    data: {
+                        chatId: mockChatId,
+                        sentAt: mockTimestamp,
+                        content: 'Hello, world!',
+                        messageId: mockMessageId,
+                        senderId: mockUserId
+                    }
+                })
+            };
+
+            const response = await handler(event);
+            expect(response.statusCode).toBe(403);
+            expect(JSON.parse(response.body).error).toBe('Sender connection does not match');
+
+            // Verify no WebSocket message was attempted
+            expect(mockPostToConnection).not.toHaveBeenCalled();
+        });
+
+        test('should return 404 when conversation not found', async () => {
+            const event = {
+                requestContext: {
+                    connectionId: mockConnectionId,
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'sendMessage',
+                    data: {
+                        chatId: 'non-existent-chat',
+                        sentAt: mockTimestamp,
+                        content: 'Hello, world!',
+                        messageId: mockMessageId,
+                        senderId: mockUserId
+                    }
+                })
+            };
+
+            const response = await handler(event);
+            expect(response.statusCode).toBe(404);
+            expect(JSON.parse(response.body).error).toBe('Conversation not found');
+
+            // Verify no WebSocket message was attempted
+            expect(mockPostToConnection).not.toHaveBeenCalled();
+        });
+
+        test('should return 400 for invalid message data', async () => {
+            const event = {
+                requestContext: {
+                    connectionId: mockConnectionId,
+                    domainName: 'test.execute-api.region.amazonaws.com',
+                    stage: 'test'
+                },
+                body: JSON.stringify({
+                    action: 'sendMessage',
+                    data: {
+                        chatId: mockChatId,
+                        // Missing required fields
+                        content: '',
+                        messageId: '',
+                        senderId: '',
+                        sentAt: 'invalid-date'
+                    }
+                })
+            };
+
+            const response = await handler(event);
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.body).error).toBe('Invalid or missing fields');
+
+            // Verify no WebSocket message was attempted
+            expect(mockPostToConnection).not.toHaveBeenCalled();
+        });
     });
 }); 

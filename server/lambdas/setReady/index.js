@@ -1,3 +1,10 @@
+/**
+ * Lambda function to handle setting a user's ready status and advancing the conversation
+ * when both users are ready.
+ * 
+ * @param {Object} event - The event object containing the WebSocket connection details and request body
+ * @returns {Object} Response object with status code and body
+ */
 const AWS = require('aws-sdk');
 const apiGateway = new AWS.ApiGatewayManagementApi({
     endpoint: process.env.WEBSOCKET_API_URL 
@@ -186,7 +193,6 @@ module.exports.handler = async (event) => {
                 console.error('Error broadcasting question index:', error);
                 return { statusCode: 500, body: 'Error broadcasting question index' };
             }
-            console.log('Both users are ready in chat:', chatId);
         }
 
         return { statusCode: 200, body: 'Ready status, question index updated successfully' };

@@ -1,3 +1,10 @@
+/**
+ * Lambda function to handle new WebSocket connections.
+ * Stores the connection ID in DynamoDB and validates that it doesn't already exist.
+ * 
+ * @param {Object} event - The event object containing the WebSocket connection details
+ * @returns {Object} Response object with status code and body
+ */
 const AWS = require('aws-sdk');
 
 module.exports.handler = async (event) => {
