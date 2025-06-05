@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: WebSocket API Backend with 5 Lambdas
+Description: WebSocket API Backend with Lambda Functions
 
 Globals:
   Function:
@@ -33,6 +33,10 @@ Resources:
           AttributeType: S
         - AttributeName: SK
           AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
@@ -45,6 +49,8 @@ Resources:
               KeyType: HASH
             - AttributeName: timestamp
               KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   ConversationsTable:
     Type: AWS::DynamoDB::Table
@@ -68,6 +74,8 @@ Resources:
               KeyType: HASH
             - AttributeName: GSI1_SK
               KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   UserMetadataTable:
     Type: AWS::DynamoDB::Table
@@ -107,9 +115,18 @@ Resources:
                 Action:
                   - lambda:InvokeFunction
                 Resource:
-                  - arn:aws:lambda:us-east-1:539247476190:function:mtjs-websocket-backend-*
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:mtjs-websocket-backend-*
+        - PolicyName: AllowCognitoAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminGetUser
+                Resource: "*"
 
-  # Lambda Permissions (with SourceArn)
+  # Lambda Permissions
   AllowApiGatewayInvokeLambda:
     Type: AWS::Lambda::Permission
     Properties:
@@ -134,29 +151,45 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/sendMessage
 
-  AllowApiGatewayInvokeUserMetadataHandler:
+  AllowApiGatewayInvokeSetReady:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt UserMetadataHandlerFunction.Arn
+      FunctionName: !GetAtt SetReadyFunction.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/userMetadata
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/setReady
 
-  AllowApiGatewayInvokeMessageQueueHandler:
+  AllowApiGatewayInvokeStartConversation:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt MessageQueueHandlerFunction.Arn
+      FunctionName: !GetAtt StartConversationFunction.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/messageQueue
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/startConversation
 
-  AllowApiGatewayInvokeUpdateQuestionIndex:
+  AllowApiGatewayInvokeEndConversation:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt UpdateQuestionIndexFunction.Arn
+      FunctionName: !GetAtt EndConversationFunction.Arn
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/updateQuestionIndex
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/endConversation
+
+  AllowApiGatewayInvokeFetchChatHistory:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt FetchChatHistoryFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/fetchChatHistory
+
+  AllowApiGatewayInvokeGetCurrentState:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GetCurrentStateFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/getCurrentState
 
   # Lambda Functions
   OnConnectFunction:
@@ -191,7 +224,6 @@ Resources:
         Variables:
           MESSAGES_TABLE: Messages
           CONNECTIONS_TABLE: Connections
-          MESSAGE_QUEUE_HANDLER_FUNCTION_NAME: !Ref MessageQueueHandlerFunction
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   SetReadyFunction:
@@ -205,7 +237,53 @@ Resources:
           USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
-  batchCognitoUploadFunction:
+  StartConversationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: startConversation/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          CONVERSATIONS_TABLE: Conversations
+          USER_METADATA_TABLE: UserMetadata
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  EndConversationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: endConversation/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          CONVERSATIONS_TABLE: Conversations
+          USER_METADATA_TABLE: UserMetadata
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  FetchChatHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: fetchChatHistory/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          MESSAGES_TABLE: Messages
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  GetCurrentStateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: getCurrentState/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  BatchCognitoUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
@@ -214,33 +292,4 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadata
-
-  MessageQueueHandlerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: index.handler
-      CodeUri: messageQueueHandler/
-      Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          MESSAGE_QUEUE_TABLE: MessageQueue
-
-  UpdateQuestionIndexFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: index.handler
-      CodeUri: updateQuestionIndex/
-      Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          USER_METADATA_TABLE: UserMetadata
-
-  UserMetadataHandlerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: index.handler
-      CodeUri: batchCognitoUpload/
-      Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          USER_METADATA_TABLE: UserMetadata
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
