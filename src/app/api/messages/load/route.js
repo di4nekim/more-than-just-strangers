@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import AWS from 'aws-sdk';
 
-const dynamoDb = new AWS.DynamoDB.DocumentClient({
-  region: process.env.AWS_REGION, 
+const lambda = new AWS.Lambda({
+  region: process.env.AWS_REGION,
 });
 
 export async function POST(request) {
   try {
-    console.log('Loading message historyfrom DynamoDB');
+    console.log('Loading message history via Lambda');
 
     const body = await request.json();
     console.log('Body received:', body);
@@ -19,17 +19,21 @@ export async function POST(request) {
     }
 
     const params = {
-      TableName: process.env.MESSAGES_TABLE,
-      KeyConditionExpression: "ChatID = :chatId",
-      ExpressionAttributeValues: {
-        ":chatId": chatId,
-      },
-      ScanIndexForward: false, // true = oldest first, false = newest first
-      Limit: 50
+      FunctionName: process.env.LOAD_MESSAGES_LAMBDA,
+      Payload: JSON.stringify({
+        chatId: chatId,
+        limit: 50
+      })
     };
 
-    const data = await dynamoDb.query(params).promise();
-    return NextResponse.json({ messages: data.Items });
+    const { Payload } = await lambda.invoke(params).promise();
+    const response = JSON.parse(Payload);
+    
+    if (response.errorMessage) {
+      throw new Error(response.errorMessage);
+    }
+
+    return NextResponse.json({ messages: response.body.Items });
   } catch (error) {
     console.error('Error loading messages:', error);
     return NextResponse.json({ error: 'Failed to load messages' }, { status: 500 });

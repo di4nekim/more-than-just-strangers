@@ -5,16 +5,19 @@ const lambda = new AWS.Lambda({
   region: process.env.AWS_REGION,
 });
 
-export async function POST(request) {
+export async function GET(request) {
   try {
-    const { userId, chatId, readyToAdvance } = await request.json();
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing userId parameter' }, { status: 400 });
+    }
 
     const params = {
-      FunctionName: process.env.UPDATE_READY_STATUS_LAMBDA,
+      FunctionName: process.env.GET_CURRENT_STATE_LAMBDA,
       Payload: JSON.stringify({
-        userId,
-        chatId,
-        readyToAdvance
+        userId
       })
     };
 
@@ -27,7 +30,7 @@ export async function POST(request) {
 
     return NextResponse.json(response.body);
   } catch (error) {
-    console.error('Error updating ready status:', error);
-    return NextResponse.json({ error: 'Failed to update ready status' }, { status: 500 });
+    console.error('Error getting current state:', error);
+    return NextResponse.json({ error: 'Failed to get current state' }, { status: 500 });
   }
-}
+} 

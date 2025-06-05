@@ -7,14 +7,16 @@ const lambda = new AWS.Lambda({
 
 export async function POST(request) {
   try {
-    const { userId, chatId, readyToAdvance } = await request.json();
+    const { users } = await request.json();
+
+    if (!users || !Array.isArray(users)) {
+      return NextResponse.json({ error: 'Invalid users data' }, { status: 400 });
+    }
 
     const params = {
-      FunctionName: process.env.UPDATE_READY_STATUS_LAMBDA,
+      FunctionName: process.env.BATCH_COGNITO_UPLOAD_LAMBDA,
       Payload: JSON.stringify({
-        userId,
-        chatId,
-        readyToAdvance
+        users
       })
     };
 
@@ -27,7 +29,7 @@ export async function POST(request) {
 
     return NextResponse.json(response.body);
   } catch (error) {
-    console.error('Error updating ready status:', error);
-    return NextResponse.json({ error: 'Failed to update ready status' }, { status: 500 });
+    console.error('Error in batch Cognito upload:', error);
+    return NextResponse.json({ error: 'Failed to process batch upload' }, { status: 500 });
   }
-}
+} 

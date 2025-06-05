@@ -7,14 +7,13 @@ const lambda = new AWS.Lambda({
 
 export async function POST(request) {
   try {
-    const { userId, chatId, readyToAdvance } = await request.json();
+    const { userId, chatId } = await request.json();
 
     const params = {
-      FunctionName: process.env.UPDATE_READY_STATUS_LAMBDA,
+      FunctionName: process.env.END_CONVERSATION_LAMBDA,
       Payload: JSON.stringify({
         userId,
-        chatId,
-        readyToAdvance
+        chatId
       })
     };
 
@@ -27,7 +26,7 @@ export async function POST(request) {
 
     return NextResponse.json(response.body);
   } catch (error) {
-    console.error('Error updating ready status:', error);
-    return NextResponse.json({ error: 'Failed to update ready status' }, { status: 500 });
+    console.error('Error ending conversation:', error);
+    return NextResponse.json({ error: 'Failed to end conversation' }, { status: 500 });
   }
-}
+} 
