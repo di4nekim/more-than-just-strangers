@@ -5,22 +5,26 @@ import { useParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import questions from '../../questions.json';
 import { useRouter } from 'next/navigation';  
+import { useWebSocket } from '../../utils/WebSocketContext';
 
 export default function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(1);
   const hasNavigatedRef = useRef(false);
   const messageEndRef = useRef(null);
-  let socket = useRef(null);
   const { chatId: encodedChatId } = useParams();
-  const chatId = decodeURIComponent(encodedChatId);
+  const chatId = typeof encodedChatId === 'string' 
+    ? decodeURIComponent(encodedChatId)
+    : Array.isArray(encodedChatId) 
+      ? decodeURIComponent(encodedChatId[0])
+      : '';
   const userId = 'DUMMY_USER_ID';
-  const otherUserId = chatId.split('#').find(id => id !== userId);
-  const websocketUrl = `${process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT}`;
+  const otherUserId = chatId.split('#').find(id => id !== userId) || '';
   const router = useRouter();
+  const { wsClient, wsActions, isConnected } = useWebSocket();
+
   // calculate the set number, current question text
   const currentSet = questions.sets.find(set =>
     set.questions.some(q => q.index === questionIndex)
@@ -95,102 +99,69 @@ export default function ChatRoom() {
         console.error('Error loading messages:', error);
       }
     };
-    
 
     loadHistory();
-    
-    socket.current = new WebSocket(websocketUrl);
 
-    socket.current.onopen = () => {
-      // Send initial connection message with userId
-      socket.current.send(JSON.stringify({
-        action: 'connect',
-        data: {
-          userId: userId
+    // Set up message handlers
+    if (wsClient) {
+      wsClient.onMessage('message', (payload) => {
+        if (payload.text || payload.Message) {
+          setMessages((prev) => [...prev, payload]);
         }
-      }));
-      setIsConnected(true);
-      console.log('WebSocket connected');
-    };
+      });
 
-    socket.current.onclose = () => {
-      setIsConnected(false);
-      console.log('WebSocket disconnected');
-    };
+      wsClient.onMessage('advanceQuestion', (payload) => {
+        console.log('Advancing question:', payload.questionIndex);
+        setQuestionIndex(payload.questionIndex);
+      });
 
-    socket.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log('Received message:', message);
+      wsClient.onMessage('PARTNER_DISCONNECTED', () => {
+        console.log('Partner disconnected');
+        navigateToCongrats();
+      });
 
-        if (message.text || message.Message) {
-          setMessages((prev) => [...prev, message]);
-        }
+      wsClient.onMessage('conversationEnded', () => {
+        console.log('Conversation ended');
+        navigateToCongrats();
+      });
 
-        if (message.action === 'advanceQuestion') {
-          console.log('Advancing question:', message.questionIndex);
-          setQuestionIndex(message.questionIndex);
-        }
+      wsClient.onMessage('congrats', () => {
+        navigateToCongrats();
+      });
 
-        // if end of conversation, navigate to congrats page (fallback in case of desync)
-        if (message.action === 'congrats') {
-          navigateToCongrats();
-        }
-      
-
-        // TODO/FIX: If user is in chat and page is focused, mark messages as read
-        // if (document.hasFocus()) {
-        //   console.log('Marking messages as read:', message.Timestamp, 'for chatId:', chatId );
-        //   markAllAsRead(chatId, message.Timestamp);
-        // }
-      } catch (error) {
-        console.error('Error parsing message:', error, 'Message data:', event.data);
+      // Send initial connection message
+      if (wsActions) {
+        wsActions.connect({ userId });
       }
-    };
-
-    socket.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    return () => {
-      socket.current.close();
-    };
-  }, []);
-
-  
+    }
+  }, [wsClient, wsActions]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    if (isConnected && socket.current) {
-      const messageObject = { // local message object
+    if (isConnected && wsActions) {
+      const messageObject = {
         id: uuidv4(),
         sender: 'user',
         text: newMessage,
         timestamp: new Date().toISOString()
       };
 
-      socket.current.send(JSON.stringify({
-        action: 'sendMessage',
-        data: {
-          chatId: chatId,
-          sentAt: new Date().toISOString(),
-          content: newMessage,
-          messageId: messageObject.id,
-          senderId: userId,
-          sent: false
-        }
-      }));
+      wsActions.sendMessage({
+        chatId: chatId,
+        messageId: messageObject.id,
+        senderId: userId,
+        content: newMessage,
+        sentAt: messageObject.timestamp
+      });
 
       setMessages((prev) => [...prev, messageObject]);
-
       setNewMessage('');
     } else {
-      console.error('WebSocket is not connected or socket is undefined');
+      console.error('WebSocket is not connected or actions are not available');
     }
   };
-
 
   async function markAllAsRead(chatId, lastSeenTimestamp) {
     try {
@@ -214,32 +185,16 @@ export default function ChatRoom() {
   };
 
   async function handleReady() {
-    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket is not connected');
+    if (!wsActions) {
+      console.error('WebSocket actions are not available');
       return;
     }
 
-    try {
-      const response = await fetch('/api/questions/ready', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          chatId,
-          userId,
-          readyToAdvance: true,
-         })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        console.error('Failed to set ready:', data.error);
-      }
-      else {
-        console.log('Ready response:', data);
-      }
-    } catch (error) {
-      console.error('Error setting ready:', error);
-    }
+    wsActions.sendReadyToAdvance({
+      chatId,
+      userId,
+      readyToAdvance: true
+    });
   }
 
   // if end of conversation, redirect to congrats page
@@ -248,7 +203,6 @@ export default function ChatRoom() {
       navigateToCongrats();
     }
   }, [questionIndex]);
-  
 
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto p-4">
