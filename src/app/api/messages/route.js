@@ -17,7 +17,7 @@ export async function GET(request) {
     }
 
     const params = {
-      FunctionName: process.env.LOAD_MESSAGES_LAMBDA,
+      FunctionName: process.env.FETCH_CHAT_HISTORY_LAMBDA,
       Payload: JSON.stringify({
         chatId: chatId,
         limit: 50
@@ -56,11 +56,14 @@ export async function POST(request) {
     const params = {
       FunctionName: process.env.SEND_MESSAGE_LAMBDA,
       Payload: JSON.stringify({
-        chatId,
-        content,
-        senderId,
-        messageId,
-        timestamp: new Date().toISOString()
+        action: 'sendMessage',
+        body: {
+          chatId,
+          messageId,
+          senderId,
+          content,
+          sentAt: new Date().toISOString()
+        }
       })
     };
 
