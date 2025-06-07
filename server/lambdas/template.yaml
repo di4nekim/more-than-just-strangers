@@ -191,6 +191,14 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/getCurrentState
 
+  AllowApiGatewayInvokeUpdatePresence:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt UpdatePresenceFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/updatePresence
+
   # Lambda Functions
   OnConnectFunction:
     Type: AWS::Serverless::Function
@@ -281,6 +289,20 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadata
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  UpdatePresenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: updatePresence/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONNECTIONS_TABLE: Connections
+          CONVERSATIONS_TABLE: Conversations
+          WEBSOCKET_ENDPOINT: !Sub https://${WebSocketApiId}.execute-api.${AWS::Region}.amazonaws.com/${WebSocketStage}
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   BatchCognitoUploadFunction:

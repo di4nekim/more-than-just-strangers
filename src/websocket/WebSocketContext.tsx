@@ -10,6 +10,8 @@ interface WebSocketContextType {
   userMetadata: UserMetadata;
   conversationMetadata: ConversationMetadata;
   syncConversation: () => void;
+  otherUserPresence: { status: 'online' | 'offline' | 'away', lastSeen?: string } | null;
+  typingStatus: Record<string, boolean>;
 }
 
 const initialUserMetadata: UserMetadata = {
@@ -38,7 +40,9 @@ const WebSocketContext = createContext<WebSocketContextType>({
   isConnected: false,
   userMetadata: initialUserMetadata,
   conversationMetadata: initialConversationMetadata,
-  syncConversation: () => {}
+  syncConversation: () => {},
+  otherUserPresence: null,
+  typingStatus: {}
 });
 
 export const useWebSocket = () => useContext(WebSocketContext);
@@ -49,6 +53,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isConnected, setIsConnected] = useState(false);
   const [userMetadata, setUserMetadata] = useState<UserMetadata>(initialUserMetadata);
   const [conversationMetadata, setConversationMetadata] = useState<ConversationMetadata>(initialConversationMetadata);
+  const [otherUserPresence, setOtherUserPresence] = useState<{ status: 'online' | 'offline' | 'away', lastSeen?: string } | null>(null);
+  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
 
   // Function to sync conversation metadata
   const syncConversation = () => {
@@ -68,6 +74,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Set up message handlers
     client.onMessage('currentState', (payload) => {
       setUserMetadata(payload);
+      // Set the user ID in the WebSocket client
+      if (payload.userId) {
+        client.setUserId(payload.userId);
+      }
       // If we have a chatId, sync the conversation metadata
       if (payload.chatId) {
         syncConversation();
@@ -110,6 +120,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setConversationMetadata(payload);
     });
 
+    client.onMessage('typingStatus', (payload) => {
+      setTypingStatus(prev => ({
+        ...prev,
+        [payload.userId]: payload.isTyping
+      }));
+    });
+
+    client.onMessage('presenceStatus', (payload) => {
+      // The server now sends the other user's ID directly
+      setOtherUserPresence({
+        status: payload.status,
+        lastSeen: payload.lastSeen
+      });
+    });
+
     client.connect()
       .then(() => {
         setIsConnected(true);
@@ -130,7 +155,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       isConnected, 
       userMetadata, 
       conversationMetadata,
-      syncConversation
+      syncConversation,
+      otherUserPresence,
+      typingStatus
     }}>
       {children}
     </WebSocketContext.Provider>

@@ -87,7 +87,7 @@ export interface ConversationMetadata {
 export interface WebSocketActions {
   connect: (payload: ConnectPayload) => void;
   sendReadyToAdvance: (payload: ReadyToAdvancePayload) => void;
-  endChat: (payload: EndConversationPayload) => void;
+  endConversation: (payload: EndConversationPayload) => void;
   sendMessage: (payload: SendMessagePayload) => void;
   startConversation: (payload: StartConversationPayload) => void;
   fetchChatHistory: (payload: FetchChatHistoryPayload) => void;
@@ -96,4 +96,5 @@ export interface WebSocketActions {
   syncConversation: (payload: SyncConversationPayload) => void;
   sendTypingStatus: (payload: TypingStatusPayload) => void;
   updatePresence: (payload: PresenceStatusPayload) => void;
+  disconnect: () => void;
 } 

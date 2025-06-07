@@ -54,9 +54,15 @@ module.exports.handler = async (event) => {
             };
         }
 
+        const { action, data } = body;
+        
+        if (!action || !data) {
+            return { statusCode: 400, body: 'Missing action or data' };
+        }
+
         // Handle connect action
-        if (body.action === 'connect') {
-            const { userId } = body.data;
+        if (action === 'connect') {
+            const { userId } = data;
             if (!userId) {
                 return { 
                     statusCode: 400, 
@@ -179,8 +185,8 @@ module.exports.handler = async (event) => {
         }
 
         // Handle sendMessage action
-        if (body.action === 'sendMessage') {
-            const { chatId, sentAt, content, messageId, senderId } = body.data;
+        if (action === 'sendMessage') {
+            const { chatId, sentAt, content, messageId, senderId } = data;
 
             // validate required fields and their formats
             const validations = {
@@ -191,7 +197,7 @@ module.exports.handler = async (event) => {
                 sentAt: (val) => !isNaN(new Date(val).getTime())
             };
             const errors = Object.entries(validations)
-                .filter(([key, validator]) => !validator(body.data[key]))
+                .filter(([key, validator]) => !validator(data[key]))
                 .map(([key]) => key);
             if (errors.length > 0) {
                 return {
@@ -359,6 +365,96 @@ module.exports.handler = async (event) => {
             return {
                 statusCode: 200,
                 body: JSON.stringify({ message: 'Message sent successfully' })
+            };
+        }
+
+        // Handle typingStatus action
+        if (action === 'typingStatus') {
+            const { userId, chatId, isTyping } = data;
+
+            // Validate required fields
+            if (!userId || !chatId || typeof isTyping !== 'boolean') {
+                return {
+                    statusCode: 400,
+                    body: JSON.stringify({ error: 'Invalid typing status data' })
+                };
+            }
+
+            // Get conversation to find other participant
+            let conversation;
+            try {
+                const conversationResult = await dynamoDB.query({
+                    TableName: process.env.CONVERSATIONS_TABLE,
+                    KeyConditionExpression: 'PK = :pk',
+                    ExpressionAttributeValues: {
+                        ':pk': `CHAT#${chatId}`
+                    }
+                }).promise();
+                conversation = conversationResult.Items[0];
+            } catch (error) {
+                console.error('Error getting conversation:', error);
+                return {
+                    statusCode: 500,
+                    body: JSON.stringify({ error: 'Error retrieving conversation' })
+                };
+            }
+
+            if (!conversation) {
+                return {
+                    statusCode: 404,
+                    body: JSON.stringify({ error: 'Conversation not found' })
+                };
+            }
+
+            // Find the other participant
+            const otherUserId = conversation.participants.find(id => id !== userId);
+            if (!otherUserId) {
+                return {
+                    statusCode: 400,
+                    body: JSON.stringify({ error: 'Other participant not found' })
+                };
+            }
+
+            // Get other user's connection status
+            let otherUserMetadata;
+            try {
+                otherUserMetadata = await dynamoDB.get({
+                    TableName: process.env.USER_METADATA_TABLE,
+                    Key: { PK: `USER#${otherUserId}` }
+                }).promise();
+            } catch (error) {
+                console.error('Error getting other user metadata:', error);
+                return {
+                    statusCode: 500,
+                    body: JSON.stringify({ error: 'Error retrieving other user metadata' })
+                };
+            }
+
+            // If other user is connected, send typing status
+            if (otherUserMetadata.Item?.connectionId) {
+                try {
+                    await apiGateway.postToConnection({
+                        ConnectionId: otherUserMetadata.Item.connectionId,
+                        Data: JSON.stringify({
+                            action: 'typingStatus',
+                            data: {
+                                userId,
+                                isTyping
+                            }
+                        })
+                    }).promise();
+                } catch (error) {
+                    console.error('Error sending typing status:', error);
+                    // Continue execution even if notification fails
+                }
+            }
+
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                    action: 'typingStatus',
+                    data: { message: 'Typing status sent' }
+                })
             };
         }
 

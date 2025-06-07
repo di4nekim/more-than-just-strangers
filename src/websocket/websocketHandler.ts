@@ -9,6 +9,7 @@ export class WebSocketClient {
   private isConnecting = false;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private messageHandlers: Map<string, (payload: any) => void> = new Map();
+  private userId: string | null = null;
 
   constructor(private wsUrl: string) {}
 
@@ -88,5 +89,16 @@ export class WebSocketClient {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  setUserId(userId: string) {
+    this.userId = userId;
+  }
+
+  getUserId(): string {
+    if (!this.userId) {
+      throw new Error('User ID not set');
+    }
+    return this.userId;
   }
 }

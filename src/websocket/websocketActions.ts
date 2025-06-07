@@ -38,8 +38,8 @@ export const createWebSocketActions = (wsClient: WebSocketClient): WebSocketActi
     });
   },
 
-  // End chat/conversation
-  endChat: (payload: EndConversationPayload) => {
+  // End conversation
+  endConversation: (payload: EndConversationPayload) => {
     wsClient.send({
       action: 'endConversation',
       data: {
@@ -85,7 +85,7 @@ export const createWebSocketActions = (wsClient: WebSocketClient): WebSocketActi
   // Fetch user metadata
   fetchUserMetadata: (payload: FetchUserMetadataPayload) => {
     wsClient.send({
-      action: 'getUserMetadata',
+      action: 'getCurrentState',
       data: {
         userId: payload.userId
       }
@@ -125,6 +125,16 @@ export const createWebSocketActions = (wsClient: WebSocketClient): WebSocketActi
     wsClient.send({
       action: 'updatePresence',
       data: payload
+    });
+  },
+
+  // Disconnect
+  disconnect: () => {
+    wsClient.send({
+      action: 'disconnect',
+      data: {
+        userId: wsClient.getUserId()
+      }
     });
   }
 }); 
