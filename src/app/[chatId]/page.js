@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import questions from '../../questions.json';
 import { useRouter } from 'next/navigation';  
-import { useWebSocket } from '../../utils/WebSocketContext';
+import { useWebSocket } from '../../websocket/WebSocketContext';
 
 export default function ChatRoom() {
   const [messages, setMessages] = useState([]);

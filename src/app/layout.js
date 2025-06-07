@@ -1,7 +1,7 @@
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import "./globals.css";
-import { WebSocketProvider } from '../utils/WebSocketContext';
+import { WebSocketProvider } from '../websocket/WebSocketContext';
 
 const geistSans = GeistSans;
 const geistMono = GeistMono;
