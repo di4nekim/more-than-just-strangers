@@ -2,8 +2,13 @@ import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyResultV2 } from 'aws-la
 import { DynamoDB } from 'aws-sdk';
 import { ApiGatewayManagementApi } from 'aws-sdk';
 
+// Configure DynamoDB client for local development
+const isLocal = !!process.env.DYNAMODB_ENDPOINT;
 const dynamoDB = new DynamoDB.DocumentClient({
-  endpoint: process.env.DYNAMODB_ENDPOINT
+  region: process.env.AWS_REGION || 'us-east-1',
+  endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
+  accessKeyId: isLocal ? "fake" : undefined,
+  secretAccessKey: isLocal ? "fake" : undefined
 });
 
 const api = new ApiGatewayManagementApi({
@@ -83,10 +88,6 @@ export const handler = async (
     }).promise();
 
     // Get the other participant's connection
-    const otherUserId = conversation.Item.userAId === senderId 
-      ? conversation.Item.userBId 
-      : conversation.Item.userAId;
-
     const otherUserMetadata = conversation.Item.userAId === senderId 
       ? userBMetadata 
       : userAMetadata;

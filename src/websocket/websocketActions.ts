@@ -8,7 +8,6 @@ import {
   SendMessagePayload,
   FetchChatHistoryPayload,
   FetchUserMetadataPayload,
-  FetchConversationMetadataPayload,
   SyncConversationPayload,
   TypingStatusPayload,
   PresenceStatusPayload
@@ -88,16 +87,6 @@ export const createWebSocketActions = (wsClient: WebSocketClient): WebSocketActi
       action: 'getCurrentState',
       data: {
         userId: payload.userId
-      }
-    });
-  },
-
-  // Fetch conversation metadata
-  fetchConversationMetadata: (payload: FetchConversationMetadataPayload) => {
-    wsClient.send({
-      action: 'getConversationMetadata',
-      data: {
-        chatId: payload.chatId
       }
     });
   },

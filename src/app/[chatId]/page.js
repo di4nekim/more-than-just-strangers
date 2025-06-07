@@ -9,6 +9,7 @@ import { useWebSocket } from '../../websocket/WebSocketContext';
 import { usePresenceSystem } from '../../websocket/presenceSystem';
 import { useTypingIndicator } from '../../websocket/typingIndicator';
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
+import { useDebounce } from '../../hooks/useDebounce';
 
 export default function ChatRoom() {
   // State for initialization phase
@@ -108,6 +109,9 @@ export default function ChatRoom() {
       loadMoreMessages();
     }
   }, []);
+
+  // Add debounced scroll handler
+  const debouncedScrollHandler = useDebounce(handleScroll, 200); // 200ms debounce
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -246,6 +250,16 @@ export default function ChatRoom() {
     }
   }, [conversationMetadata.endedBy, navigateToCongrats]);
 
+  useEffect(() => {
+    const chatContainer = chatContainerRef.current;
+    if (chatContainer) {
+      chatContainer.addEventListener('scroll', debouncedScrollHandler);
+      return () => {
+        chatContainer.removeEventListener('scroll', debouncedScrollHandler);
+      };
+    }
+  }, [debouncedScrollHandler]);
+
   if (isFindingMatch) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
@@ -271,7 +285,6 @@ export default function ChatRoom() {
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto mb-4 space-y-4"
-        onScroll={handleScroll}
       >
         {isLoadingMore && (
           <div className="text-center text-gray-500">Loading more messages...</div>

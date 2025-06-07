@@ -92,7 +92,6 @@ export interface WebSocketActions {
   startConversation: (payload: StartConversationPayload) => void;
   fetchChatHistory: (payload: FetchChatHistoryPayload) => void;
   fetchUserMetadata: (payload: FetchUserMetadataPayload) => void;
-  fetchConversationMetadata: (payload: FetchConversationMetadataPayload) => void;
   syncConversation: (payload: SyncConversationPayload) => void;
   sendTypingStatus: (payload: TypingStatusPayload) => void;
   updatePresence: (payload: PresenceStatusPayload) => void;
