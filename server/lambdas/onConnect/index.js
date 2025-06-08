@@ -1,84 +1,38 @@
-/**
- * Lambda function to handle new WebSocket connections.
- * Stores the connection ID in DynamoDB and validates that it doesn't already exist.
- * 
- * @param {Object} event - The event object containing the WebSocket connection details
- * @returns {Object} Response object with status code and body
- */
 const AWS = require('aws-sdk');
 
 module.exports.handler = async (event) => {
-    // console.log('Lambda triggered with event:', JSON.stringify(event));
+    console.log('Lambda triggered with event:', JSON.stringify(event));
     
     try {
-        // validate that we have a connectionId
-        if (!event.requestContext || !event.requestContext.connectionId) {
-            console.error('No connectionId found in event');
-            return { 
-                statusCode: 400, 
-                body: JSON.stringify({ 
-                    error: 'Missing connectionId in request'
-                })
-            };
-        }
-
+        const dynamoDB = new AWS.DynamoDB.DocumentClient();
         const connectionId = event.requestContext.connectionId;
-        console.log(`New WebSocket connection established: ${connectionId}`);
-
-        // config document client for local dev via DynamoDB Local + Docker
-        const isLocal = !!process.env.DYNAMODB_ENDPOINT;
-        const dynamoDB = new AWS.DynamoDB.DocumentClient({
-            region: process.env.AWS_REGION || 'us-east-1',
-            endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
-            accessKeyId: isLocal ? "fake" : undefined,
-            secretAccessKey: isLocal ? "fake" : undefined,
-        });
-
         // Check if connection already exists
-        try {
-            const existingConnection = await dynamoDB.get({
-                TableName: process.env.CONNECTIONS_TABLE || 'connections',
-                Key: { connectionId }
-            }).promise();
-
-            if (existingConnection.Item) {
-                return {
-                    statusCode: 409,
-                    body: JSON.stringify({ error: 'Connection already exists' })
-                };
+        const getParams = {
+            TableName: process.env.CONNECTIONS_TABLE,
+            Key: {
+                ConnectionID: connectionId
             }
-        } catch (error) {
-            console.error('Error checking existing connection:', error);
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ error: 'Internal Server Error' })
-            };
+        };
+
+        const existingConnection = await dynamoDB.get(getParams).promise();
+        if (existingConnection.Item) {
+            return { statusCode: 409, body: 'Connection already exists' };
         }
 
-        // Store the new connection
-        try {
-            await dynamoDB.put({
-                TableName: process.env.CONNECTIONS_TABLE || 'connections',
-                Item: { connectionId }
-            }).promise();
+        // Store the connection
+        const putParams = {
+            TableName: process.env.CONNECTIONS_TABLE,
+            Item: {
+                ConnectionID: connectionId,
+                timestamp: new Date().toISOString()
+            }
+        };
 
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ message: 'Connection established', connectionId })
-            };
-        } catch (error) {
-            console.error('Error storing connection:', error);
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ error: 'Internal Server Error' })
-            };
-        }
+        await dynamoDB.put(putParams).promise();
 
+        return { statusCode: 200, body: 'Connected successfully' };
     } catch (error) {
         console.error('Error in onConnect:', error);
-        return { 
-            statusCode: 500, 
-            body: 'Internal server error'
-        };
+        return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error" }) };
     }
 };

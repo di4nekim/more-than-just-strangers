@@ -7,14 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest",
-    "test:lambda": "jest server/lambdas",
-    "test:lambda:watch": "jest server/lambdas --watch",
-    "test:lambda:coverage": "jest server/lambdas --coverage",
-    "bootstrap:db": "node scripts/bootstrap-local-dynamodb.js"
+    "test": "jest server/lambdas/__tests__"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.817.0",
     "boto3": "^0.0.1",
     "dotenv": "^16.5.0",
     "next": "15.1.5",
