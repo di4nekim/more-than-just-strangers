@@ -11,29 +11,72 @@ import { useTypingIndicator } from '../../websocket/typingIndicator';
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
 
+interface Message {
+  id?: string;
+  MessageId?: string;
+  sender: string;
+  text?: string;
+  Message?: string;
+  timestamp?: string;
+  Timestamp?: string;
+  ReadTimestamp?: string;
+}
+
+interface Question {
+  index: number;
+  text: string;
+}
+
+interface QuestionSet {
+  setNumber: number;
+  questions: Question[];
+}
+
+interface UserMetadata {
+  userId?: string;
+  questionIndex?: number;
+}
+
+interface ConversationMetadata {
+  chatId?: string;
+  endedBy?: string;
+}
+
+interface PresenceStatus {
+  status: 'online' | 'away' | 'offline';
+  lastSeen?: string;
+}
+
+interface ChatHistoryPayload {
+  messages: Message[];
+  lastEvaluatedKey?: string;
+  hasMore: boolean;
+}
+
 export default function ChatRoom() {
-  const [error, setError] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const messageIdsRef = useRef<Set<string>>(new Set());
 
-  // /websocket states
+  // WebSocket states
   const { wsClient, wsActions, isConnected, conversationMetadata, syncConversation, userMetadata } = useWebSocket();
   const { updatePresence, otherUserPresence } = usePresenceSystem();
   const { sendTypingStatus, isTyping } = useTypingIndicator();
 
-  // derived states from context
+  // Derived states from context
   const [isFindingMatch, setIsFindingMatch] = useState(!conversationMetadata.chatId);
   const [isEndingChat, setIsEndingChat] = useState(!!conversationMetadata.endedBy);
   const [questionIndex, setQuestionIndex] = useState(userMetadata.questionIndex);
 
   // Refs
   const hasNavigatedRef = useRef(false);
-  const messageEndRef = useRef(null);
-  const chatContainerRef = useRef(null);
-  const lastEvaluatedKeyRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastEvaluatedKeyRef = useRef<string | undefined>(undefined);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { chatId: encodedChatId } = useParams();
   const chatId = typeof encodedChatId === 'string' 
@@ -42,8 +85,12 @@ export default function ChatRoom() {
       ? decodeURIComponent(encodedChatId[0])
       : '';
   
+  const isValidChatId = (id: string | undefined): id is string => {
+    return typeof id === 'string' && id.length > 0;
+  };
+
   const userId = 'DUMMY_USER_ID'; // TODO: Get from auth context
-  const otherUserId = chatId.split('#').find(id => id !== userId) || '';
+  const otherUserId = isValidChatId(chatId) ? chatId.split('#').find(id => id !== userId) || '' : '';
   const router = useRouter();
 
   // Add reconnection handler
@@ -51,9 +98,7 @@ export default function ChatRoom() {
     maxRetries: 5,
     retryInterval: 1000,
     onReconnect: () => {
-      // Re-sync conversation after reconnection
       syncConversation();
-      // Update presence status
       updatePresence('online');
     },
     onMaxRetriesExceeded: () => {
@@ -61,7 +106,14 @@ export default function ChatRoom() {
     }
   });
 
-  // calculate the set number, current question text
+  // Sync question index from user metadata
+  useEffect(() => {
+    if (userMetadata.questionIndex !== undefined) {
+      setQuestionIndex(userMetadata.questionIndex);
+    }
+  }, [userMetadata.questionIndex]);
+
+  // Calculate the set number, current question text
   const currentSet = questions.sets.find(set =>
     set.questions.some(q => q.index === questionIndex)
   );
@@ -69,7 +121,9 @@ export default function ChatRoom() {
   const questionText = currentSet?.questions.find(q => q.index === questionIndex)?.text;
 
   const scrollToBottom = useCallback(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messageEndRef.current) {
+      messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, []);
 
   const navigateToCongrats = useCallback(() => {
@@ -80,7 +134,7 @@ export default function ChatRoom() {
   }, [router]);
 
   const loadMoreMessages = async () => {
-    if (!hasMoreMessages || isLoadingMore) return;
+    if (!hasMoreMessages || isLoadingMore || !isValidChatId(chatId)) return;
 
     setIsLoadingMore(true);
     try {
@@ -109,26 +163,29 @@ export default function ChatRoom() {
   }, []);
 
   // Add debounced scroll handler
-  const debouncedScrollHandler = useDebounce(handleScroll, 200); // 200ms debounce
+  const debouncedScrollHandler = useDebounce(handleScroll, 200);
 
-  const handleSendMessage = async (e) => {
+  const handleSendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newMessage.trim() || !isConnected || !wsActions) return;
+    if (!newMessage.trim() || !isConnected || !wsActions || !isValidChatId(chatId)) return;
 
-    const messageObject = {
-      id: uuidv4(),
+    const messageId = uuidv4();
+    const timestamp = new Date().toISOString();
+
+    const messageObject: Message = {
+      id: messageId,
       sender: 'user',
       text: newMessage,
-      timestamp: new Date().toISOString()
+      timestamp
     };
 
     try {
       wsActions.sendMessage({
         chatId,
-        messageId: messageObject.id,
+        messageId,
         senderId: userId,
         content: newMessage,
-        sentAt: messageObject.timestamp
+        sentAt: timestamp
       });
 
       setMessages(prev => [...prev, messageObject]);
@@ -140,7 +197,7 @@ export default function ChatRoom() {
     }
   };
 
-  const handleTyping = (e) => {
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
     sendTypingStatus(true);
 
@@ -154,7 +211,7 @@ export default function ChatRoom() {
   };
 
   const handleReady = () => {
-    if (!wsActions) return;
+    if (!wsActions || !isValidChatId(chatId)) return;
     
     wsActions.sendReadyToAdvance({
       chatId,
@@ -163,7 +220,8 @@ export default function ChatRoom() {
     });
   };
 
-  const formatTime = (isoString) => {
+  const formatTime = (isoString?: string): string => {
+    if (!isoString) return '';
     const date = new Date(isoString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -171,7 +229,7 @@ export default function ChatRoom() {
   const endConversation = async () => {
     try {
       setIsEndingChat(true);
-      if (wsActions) {
+      if (wsActions && isValidChatId(chatId)) {
         wsActions.endConversation({ chatId, userId });
       }
       navigateToCongrats();
@@ -190,16 +248,13 @@ export default function ChatRoom() {
 
   // Initialize WebSocket connection and fetch chat history
   useEffect(() => {
-    if (wsActions) {
-      // Connect and fetch initial data
+    if (wsActions && isValidChatId(chatId)) {
       wsActions.connect({ userId });
       
-      // Only fetch user metadata if we don't already have it
       if (!userMetadata.userId) {
         wsActions.fetchUserMetadata({ userId });
       }
       
-      // Fetch chat history and sync conversation
       wsActions.fetchChatHistory({ chatId, limit: 20 });
       syncConversation();
       updatePresence('online');
@@ -208,25 +263,38 @@ export default function ChatRoom() {
       cleanup();
       updatePresence('offline');
     };
-  }, []);
+  }, [wsActions, userId, chatId]);
 
   // Update WebSocket message handlers
   useEffect(() => {
     if (wsClient) {
-      wsClient.onMessage('message', (payload) => {
+      wsClient.onMessage('message', (payload: Message) => {
         if (payload.text || payload.Message) {
-          setMessages(prev => [...prev, payload]);
-          scrollToBottom();
+          const messageId = payload.id || payload.MessageId;
+          if (messageId && !messageIdsRef.current.has(messageId)) {
+            messageIdsRef.current.add(messageId);
+            setMessages(prev => [...prev, payload]);
+            scrollToBottom();
+          }
         }
       });
 
-      wsClient.onMessage('chatHistory', (payload) => {
-        setMessages(prev => [...payload.messages, ...prev]);
+      wsClient.onMessage('chatHistory', (payload: ChatHistoryPayload) => {
+        const newMessages = payload.messages.filter(msg => {
+          const messageId = msg.id || msg.MessageId;
+          if (messageId && !messageIdsRef.current.has(messageId)) {
+            messageIdsRef.current.add(messageId);
+            return true;
+          }
+          return false;
+        });
+        
+        setMessages(prev => [...newMessages, ...prev]);
         lastEvaluatedKeyRef.current = payload.lastEvaluatedKey;
         setHasMoreMessages(payload.hasMore);
       });
 
-      wsClient.onMessage('advanceQuestion', (payload) => {
+      wsClient.onMessage('advanceQuestion', (payload: { questionIndex: number }) => {
         setQuestionIndex(payload.questionIndex);
       });
     }
@@ -290,6 +358,7 @@ export default function ChatRoom() {
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto mb-4 space-y-4"
+        role="list"
       >
         {isLoadingMore && (
           <div className="text-center text-gray-500">Loading more messages...</div>
@@ -297,7 +366,7 @@ export default function ChatRoom() {
         
         {messages.map((message, index) => (
           <div
-            key={message.id || index} 
+            key={message.id || message.MessageId || index} 
             className={`flex ${
               message.sender === 'user' ? 'justify-end' : 'justify-start'
             }`}
@@ -311,7 +380,7 @@ export default function ChatRoom() {
             >
               <div>{message.Message || message.text}</div>
               <div className="flex justify-end gap-1 text-xs mt-1">
-                <span>{formatTime(message.Timestamp)}</span>
+                <span>{formatTime(message.Timestamp || message.timestamp)}</span>
                 {message.ReadTimestamp && <span>✓✓</span>}
               </div>
             </div>
@@ -334,7 +403,7 @@ export default function ChatRoom() {
             <span className="text-yellow-500">● Away</span>
           ) : (
             <span className="text-gray-500">
-              Last seen {new Date(otherUserPresence.lastSeen).toLocaleTimeString()}
+              Last seen {otherUserPresence.lastSeen ? new Date(otherUserPresence.lastSeen).toLocaleTimeString() : ''}
             </span>
           )}
         </div>
@@ -379,4 +448,4 @@ export default function ChatRoom() {
       </form>
     </div>
   );
-}
+} 

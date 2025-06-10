@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const { handler } = require('../index');
+const AWSMock = require('aws-sdk-mock');
 
 // Mock AWS SDK
 jest.mock('aws-sdk', () => {
@@ -32,6 +33,7 @@ describe('setReady Lambda', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        AWSMock.restore();
         dynamoDB = new AWS.DynamoDB.DocumentClient();
         apiGateway = new AWS.ApiGatewayManagementApi();
         mockEvent = {
@@ -67,22 +69,34 @@ describe('setReady Lambda', () => {
 
     test('should return 400 for missing required fields', async () => {
         const event = {
-            ...mockEvent,
-            body: JSON.stringify({
-                action: 'setReady',
-                data: {}
-            })
+            body: JSON.stringify({})
         };
+
         const response = await handler(event);
         expect(response.statusCode).toBe(400);
-        expect(JSON.parse(response.body).error).toBe('Missing required fields');
+        expect(JSON.parse(response.body)).toEqual({
+            error: 'Missing required fields'
+        });
     });
 
     test('should return 404 when user not found', async () => {
-        dynamoDB.promise.mockResolvedValueOnce({ Item: null });
-        const response = await handler(mockEvent);
+        AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
+            callback(null, { Item: null });
+        });
+
+        const event = {
+            body: JSON.stringify({
+                chatId: 'test-chat-id',
+                userId: 'test-user-id',
+                readyToAdvance: true
+            })
+        };
+
+        const response = await handler(event);
         expect(response.statusCode).toBe(404);
-        expect(response.body).toBe('User not found');
+        expect(JSON.parse(response.body)).toEqual({
+            error: 'User not found'
+        });
     });
 
     test('should return 403 when connection ID does not match', async () => {
@@ -198,10 +212,22 @@ describe('setReady Lambda', () => {
     });
 
     test('should handle errors gracefully', async () => {
-        // 1. get user metadata throws error
-        dynamoDB.promise.mockRejectedValueOnce(new Error('Database error'));
-        const response = await handler(mockEvent);
+        AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
+            callback(new Error('Database error'));
+        });
+
+        const event = {
+            body: JSON.stringify({
+                chatId: 'test-chat-id',
+                userId: 'test-user-id',
+                readyToAdvance: true
+            })
+        };
+
+        const response = await handler(event);
         expect(response.statusCode).toBe(500);
-        expect(JSON.parse(response.body).error).toBe('Internal Server Error');
+        expect(JSON.parse(response.body)).toEqual({
+            error: 'Internal Server Error'
+        });
     });
 }); 

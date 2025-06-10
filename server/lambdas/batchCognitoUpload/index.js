@@ -14,25 +14,32 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 
 
 async function getAllUsers() {
+    /** @type {{sub: string, name: string, email: string}[]} */
     const users = [];
-    const response = await cognito.listUsers({ UserPoolId: process.env.AWS_REGION }).promise();
+    const response = await cognito.listUsers({ UserPoolId: process.env.COGNITO_USER_POOL_ID || '' }).promise();
 
-    response.Users.forEach(user => {
-        const userData = {
-            sub: user.Attributes.find(attr => attr.Name === 'sub').Value,
-            name: user.Attributes.find(attr => attr.Name === 'name')?.Value || 'Unknown',
-            email: user.Attributes.find(attr => attr.Name === 'email')?.Value || 'No Email'
-        };
-        users.push(userData);
-    });
+    if (response.Users) {
+        response.Users.forEach(user => {
+            if (!user.Attributes) return;
+            const subAttr = user.Attributes.find(attr => attr.Name === 'sub');
+            const sub = subAttr ? subAttr.Value : '';
+            if (!sub) return; // skip if no sub
+            const name = user.Attributes.find(attr => attr.Name === 'name')?.Value || 'Unknown';
+            const email = user.Attributes.find(attr => attr.Name === 'email')?.Value || 'No Email';
+            users.push({ sub, name, email });
+        });
+    }
 
     return users;
 }
 
+/**
+ * @param {{sub: string, name: string, email: string}[]} users
+ */
 async function storeUsersInDynamoDB(users) {
     const promises = users.map(user => {
         return dynamodb.put({
-            TableName: process.env.USER_METADATA_TABLE,
+            TableName: process.env.USER_METADATA_TABLE || '',
             Item: {
                 PK: user.sub,
                 Name: user.name,
@@ -54,6 +61,10 @@ async function storeUsersInDynamoDB(users) {
     await Promise.all(promises);
 }
 
+/**
+ * @param {*} event
+ * @param {*} context
+ */
 module.exports.handler = async (event, context) => {
     const cognitoUsers = await getAllUsers();
     await storeUsersInDynamoDB(cognitoUsers);

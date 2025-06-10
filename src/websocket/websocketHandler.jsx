@@ -1,19 +1,27 @@
-interface WebSocketMessage {
-  action: string;
-  payload?: any;
-  data?: any;
-}
+/**
+ * @typedef {Object} WebSocketMessage
+ * @property {string} action
+ * @property {any} [payload]
+ * @property {any} [data]
+ */
 
 export class WebSocketClient {
-  private ws: WebSocket | null = null;
-  private isConnecting = false;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
-  private messageHandlers: Map<string, (payload: any) => void> = new Map();
-  private userId: string | null = null;
+  /**
+   * @param {string} wsUrl
+   */
+  constructor(wsUrl) {
+    this.wsUrl = wsUrl;
+    this.ws = null;
+    this.isConnecting = false;
+    this.reconnectTimeout = null;
+    this.messageHandlers = new Map();
+    this.userId = null;
+  }
 
-  constructor(private wsUrl: string) {}
-
-  connect(): Promise<void> {
+  /**
+   * @returns {Promise<void>}
+   */
+  connect() {
     if (this.isConnecting) {
       return Promise.reject(new Error('Connection already in progress'));
     }
@@ -40,7 +48,7 @@ export class WebSocketClient {
 
         this.ws.onmessage = (event) => {
           try {
-            const message: WebSocketMessage = JSON.parse(event.data);
+            const message = JSON.parse(event.data);
             this.handleMessage(message);
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -53,7 +61,7 @@ export class WebSocketClient {
     });
   }
 
-  private handleDisconnect() {
+  handleDisconnect() {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
@@ -63,18 +71,28 @@ export class WebSocketClient {
     }, 1000);
   }
 
-  send(message: WebSocketMessage) {
+  /**
+   * @param {WebSocketMessage} message
+   */
+  send(message) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
     }
     this.ws.send(JSON.stringify(message));
   }
 
-  onMessage(action: string, handler: (payload: any) => void) {
+  /**
+   * @param {string} action
+   * @param {function(any): void} handler
+   */
+  onMessage(action, handler) {
     this.messageHandlers.set(action, handler);
   }
 
-  private handleMessage(message: WebSocketMessage) {
+  /**
+   * @param {WebSocketMessage} message
+   */
+  handleMessage(message) {
     const handler = this.messageHandlers.get(message.action);
     if (handler) {
       handler(message.payload);
@@ -91,11 +109,17 @@ export class WebSocketClient {
     }
   }
 
-  setUserId(userId: string) {
+  /**
+   * @param {string} userId
+   */
+  setUserId(userId) {
     this.userId = userId;
   }
 
-  getUserId(): string {
+  /**
+   * @returns {string}
+   */
+  getUserId() {
     if (!this.userId) {
       throw new Error('User ID not set');
     }

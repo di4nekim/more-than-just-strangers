@@ -1,20 +1,23 @@
+'use client';
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { WebSocketClient } from './websocketHandler';
 import { WebSocketActions, createWebSocketActions } from './websocketActions';
-import { UserMetadata, ConversationMetadata } from './websocketTypes';
+import { UserMetadata, ConversationMetadata, PresenceStatusPayload } from './websocketTypes';
 
-interface WebSocketContextType {
-  wsClient: WebSocketClient | null;
-  wsActions: WebSocketActions | null;
-  isConnected: boolean;
-  userMetadata: UserMetadata;
-  conversationMetadata: ConversationMetadata;
-  syncConversation: () => void;
-  otherUserPresence: { status: 'online' | 'offline' | 'away', lastSeen?: string } | null;
-  typingStatus: Record<string, boolean>;
-}
+/**
+ * @typedef {Object} WebSocketContextType
+ * @property {WebSocketClient|null} wsClient
+ * @property {WebSocketActions|null} wsActions
+ * @property {boolean} isConnected
+ * @property {UserMetadata} userMetadata
+ * @property {ConversationMetadata} conversationMetadata
+ * @property {function(): void} syncConversation
+ * @property {{status: 'online'|'offline'|'away', lastSeen?: string}|null} otherUserPresence
+ * @property {Record<string, boolean>} typingStatus
+ */
 
-const initialUserMetadata: UserMetadata = {
+const initialUserMetadata = {
   userId: null,
   connectionId: null,
   chatId: null,
@@ -24,7 +27,7 @@ const initialUserMetadata: UserMetadata = {
   createdAt: null
 };
 
-const initialConversationMetadata: ConversationMetadata = {
+const initialConversationMetadata = {
   chatId: null,
   participants: [],
   lastMessage: null,
@@ -34,7 +37,7 @@ const initialConversationMetadata: ConversationMetadata = {
   createdAt: null
 };
 
-const WebSocketContext = createContext<WebSocketContextType>({
+const WebSocketContext = createContext({
   wsClient: null,
   wsActions: null,
   isConnected: false,
@@ -47,14 +50,22 @@ const WebSocketContext = createContext<WebSocketContextType>({
 
 export const useWebSocket = () => useContext(WebSocketContext);
 
-export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [wsClient, setWsClient] = useState<WebSocketClient | null>(null);
-  const [wsActions, setWsActions] = useState<WebSocketActions | null>(null);
+/**
+ * @typedef {Object} WebSocketProviderProps
+ * @property {React.ReactNode} children
+ */
+
+/**
+ * @param {WebSocketProviderProps} props
+ */
+export const WebSocketProvider = ({ children }) => {
+  const [wsClient, setWsClient] = useState(null);
+  const [wsActions, setWsActions] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [userMetadata, setUserMetadata] = useState<UserMetadata>(initialUserMetadata);
-  const [conversationMetadata, setConversationMetadata] = useState<ConversationMetadata>(initialConversationMetadata);
-  const [otherUserPresence, setOtherUserPresence] = useState<{ status: 'online' | 'offline' | 'away', lastSeen?: string } | null>(null);
-  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
+  const [userMetadata, setUserMetadata] = useState(initialUserMetadata);
+  const [conversationMetadata, setConversationMetadata] = useState(initialConversationMetadata);
+  const [otherUserPresence, setOtherUserPresence] = useState(null);
+  const [typingStatus, setTypingStatus] = useState({});
 
   // Function to sync conversation metadata
   const syncConversation = () => {
@@ -128,7 +139,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     client.onMessage('presenceStatus', (payload) => {
-      // The server now sends the other user's ID directly
       setOtherUserPresence({
         status: payload.status,
         lastSeen: payload.lastSeen
@@ -142,7 +152,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const actions = createWebSocketActions(client);
         setWsActions(actions);
         // Request initial state using the action creator
-        actions.fetchUserMetadata({ userId: null });
+        actions.fetchUserMetadata({ userId: '' });
       })
       .catch(console.error);
 

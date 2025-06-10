@@ -19,80 +19,46 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
 });
 
 describe('setReady Lambda Integration Tests', () => {
-    const testUserId = 'test-user-' + Date.now();
-    const testOtherUserId = 'test-other-user-' + Date.now();
-    const testChatId = 'test-chat-' + Date.now();
-    const testConnectionId = 'test-connection-' + Date.now();
-    const otherConnectionId = 'other-connection-' + Date.now();
+    let dynamoDB;
+    const testTableName = process.env.TABLE_NAME || 'test-table';
 
-    // Setup test data before all tests
-    beforeAll(async () => {
-        // Create test user metadata
-        await dynamoDB.put({
-            TableName: process.env.USER_METADATA_TABLE,
-            Item: {
-                PK: `USER#${testUserId}`,
-                connectionId: testConnectionId,
-                isReady: false,
-                questionIndex: 0
-            }
-        }).promise();
-
-        // Create test other user metadata
-        await dynamoDB.put({
-            TableName: process.env.USER_METADATA_TABLE,
-            Item: {
-                PK: `USER#${testOtherUserId}`,
-                connectionId: otherConnectionId,
-                isReady: false,
-                questionIndex: 0
-            }
-        }).promise();
-
-        // Create test conversation
-        await dynamoDB.put({
-            TableName: process.env.CONVERSATIONS_TABLE,
-            Item: {
-                PK: `CHAT#${testChatId}`,
-                userAId: testUserId,
-                userBId: testOtherUserId
-            }
-        }).promise();
+    beforeAll(() => {
+        dynamoDB = new AWS.DynamoDB.DocumentClient();
     });
 
-    // Cleanup test data after all tests
-    afterAll(async () => {
-        try {
-            await dynamoDB.delete({
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${testUserId}` }
-            }).promise();
-
-            await dynamoDB.delete({
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${testOtherUserId}` }
-            }).promise();
-
-            await dynamoDB.delete({
-                TableName: process.env.CONVERSATIONS_TABLE,
-                Key: { PK: `CHAT#${testChatId}` }
-            }).promise();
-        } catch (error) {
-            console.error('Error cleaning up test data:', error);
-        }
+    beforeEach(async () => {
+        // Clear the test table
+        const items = await dynamoDB.scan({ TableName: testTableName }).promise();
+        await Promise.all(
+            items.Items.map(item =>
+                dynamoDB.delete({
+                    TableName: testTableName,
+                    Key: { PK: item.PK, SK: item.SK }
+                }).promise()
+            )
+        );
     });
 
     test('should set ready status for first user', async () => {
+        // Insert test user
+        await dynamoDB.put({
+            TableName: testTableName,
+            Item: {
+                PK: 'USER#test-user-1',
+                SK: 'METADATA',
+                userId: 'test-user-1',
+                chatId: 'test-chat-1',
+                questionIndex: 0,
+                ready: false,
+                createdAt: new Date().toISOString()
+            }
+        }).promise();
+
         const event = {
-            requestContext: {
-                connectionId: testConnectionId
-            },
             body: JSON.stringify({
-                action: 'setReady',
-                data: {
-                    userId: testUserId,
-                    chatId: testChatId
-                }
+                chatId: 'test-chat-1',
+                userId: 'test-user-1',
+                readyToAdvance: true
             })
         };
 
@@ -101,25 +67,50 @@ describe('setReady Lambda Integration Tests', () => {
 
         // Verify user is marked as ready
         const userMetadata = await dynamoDB.get({
-            TableName: process.env.USER_METADATA_TABLE,
-            Key: { PK: `USER#${testUserId}` }
+            TableName: testTableName,
+            Key: {
+                PK: 'USER#test-user-1',
+                SK: 'METADATA'
+            }
         }).promise();
 
-        expect(userMetadata.Item.isReady).toBe(true);
+        expect(userMetadata.Item.ready).toBe(true);
     });
 
     test('should advance question index when both users are ready', async () => {
-        // First, set the other user as ready
-        const otherUserEvent = {
-            requestContext: {
-                connectionId: otherConnectionId
-            },
-            body: JSON.stringify({
-                action: 'setReady',
-                data: {
-                    userId: testOtherUserId,
-                    chatId: testChatId
+        // Insert both users
+        await Promise.all([
+            dynamoDB.put({
+                TableName: testTableName,
+                Item: {
+                    PK: 'USER#test-user-1',
+                    SK: 'METADATA',
+                    userId: 'test-user-1',
+                    chatId: 'test-chat-1',
+                    questionIndex: 0,
+                    ready: true,
+                    createdAt: new Date().toISOString()
                 }
+            }).promise(),
+            dynamoDB.put({
+                TableName: testTableName,
+                Item: {
+                    PK: 'USER#test-user-2',
+                    SK: 'METADATA',
+                    userId: 'test-user-2',
+                    chatId: 'test-chat-1',
+                    questionIndex: 0,
+                    ready: false,
+                    createdAt: new Date().toISOString()
+                }
+            }).promise()
+        ]);
+
+        const otherUserEvent = {
+            body: JSON.stringify({
+                chatId: 'test-chat-1',
+                userId: 'test-user-2',
+                readyToAdvance: true
             })
         };
 
@@ -129,17 +120,25 @@ describe('setReady Lambda Integration Tests', () => {
         // Verify both users' question indices were incremented
         const [userAMetadata, userBMetadata] = await Promise.all([
             dynamoDB.get({
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${testUserId}` }
+                TableName: testTableName,
+                Key: {
+                    PK: 'USER#test-user-1',
+                    SK: 'METADATA'
+                }
             }).promise(),
             dynamoDB.get({
-                TableName: process.env.USER_METADATA_TABLE,
-                Key: { PK: `USER#${testOtherUserId}` }
+                TableName: testTableName,
+                Key: {
+                    PK: 'USER#test-user-2',
+                    SK: 'METADATA'
+                }
             }).promise()
         ]);
 
         expect(userAMetadata.Item.questionIndex).toBe(1);
         expect(userBMetadata.Item.questionIndex).toBe(1);
+        expect(userAMetadata.Item.ready).toBe(false);
+        expect(userBMetadata.Item.ready).toBe(false);
     });
 
     test('should handle invalid user ID', async () => {
@@ -151,7 +150,7 @@ describe('setReady Lambda Integration Tests', () => {
                 action: 'setReady',
                 data: {
                     userId: 'invalid-user',
-                    chatId: testChatId
+                    chatId: 'test-chat-1'
                 }
             })
         };
