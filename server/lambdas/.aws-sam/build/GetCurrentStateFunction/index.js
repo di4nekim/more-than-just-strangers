@@ -1,12 +1,8 @@
 const AWS = require('aws-sdk');
 
-// config document client for local dev via DynamoDB Local + Docker
-const isLocal = !!process.env.DYNAMODB_ENDPOINT;
+// Configure DynamoDB DocumentClient for AWS
 const dynamoDB = new AWS.DynamoDB.DocumentClient({
     region: process.env.AWS_REGION || 'us-east-1',
-    endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
-    accessKeyId: isLocal ? "fake" : undefined,
-    secretAccessKey: isLocal ? "fake" : undefined,
     maxRetries: 3,
     retryDelayOptions: { base: 300 }
 });

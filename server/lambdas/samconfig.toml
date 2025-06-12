@@ -9,4 +9,4 @@ capabilities = "CAPABILITY_IAM"
 image_repositories = []
 
 [default.local_invoke.parameters]
-parameter_overrides = "DynamoDBEndpoint=http://host.docker.internal:8000"
+# parameter_overrides removed for AWS deployment

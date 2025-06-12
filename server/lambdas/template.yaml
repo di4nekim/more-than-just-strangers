@@ -7,13 +7,74 @@ Globals:
     Runtime: nodejs20.x
     Timeout: 10
 
-Parameters:
-  DynamoDBEndpoint:
-    Type: String
-    Default: ""
-    Description: (optional) DynamoDB Local endpoint for local development
-
 Resources:
+  # DynamoDB Tables
+  UserMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UserMetadata
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+
+  MessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Messages
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: userIdTimestampIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  ConversationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Conversations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: GSI1_PK
+          AttributeType: S
+        - AttributeName: GSI1_SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1_PK
+              KeyType: HASH
+            - AttributeName: GSI1_SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -53,6 +114,11 @@ Resources:
       Handler: index.handler
       CodeUri: onConnect/
       Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   OnConnectIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -87,6 +153,11 @@ Resources:
       Handler: index.handler
       CodeUri: onDisconnect/
       Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   OnDisconnectIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -121,6 +192,11 @@ Resources:
       Handler: index.handler
       CodeUri: sendMessage/
       Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   SendMessageIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -157,7 +233,9 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   SetReadyIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -194,7 +272,9 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   StartConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -231,7 +311,9 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   EndConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -268,8 +350,9 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
           MESSAGES_TABLE: Messages
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   FetchChatHistoryIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -307,7 +390,8 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadata
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   GetCurrentStateIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -346,8 +430,8 @@ Resources:
         Variables:
           USER_METADATA_TABLE: UserMetadata
           CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
           WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   UpdatePresenceIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -385,7 +469,8 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadata
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
 
   BatchCognitoUploadIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -422,9 +507,10 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
+          USER_METADATA_TABLE: UserMetadata
           CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
           WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
   SyncConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration

@@ -1,24 +1,16 @@
 const AWS = require('aws-sdk');
 
+// Configure DynamoDB client for AWS
+const dynamoDB = new AWS.DynamoDB.DocumentClient({
+    region: process.env.AWS_REGION || 'us-east-1'
+});
+
 exports.handler = async (event, context) => {
     try {
         console.log('Event:', JSON.stringify(event, null, 2));
         
-        // Initialize DynamoDB client
-        const isLocal = !!process.env.DYNAMODB_ENDPOINT;
-        const dynamoDB = new AWS.DynamoDB.DocumentClient({
-            region: process.env.AWS_REGION || 'us-east-1',
-            endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
-            accessKeyId: isLocal ? "fake" : undefined,
-            secretAccessKey: isLocal ? "fake" : undefined,
-        });
-
         // Extract parameters from the event
-        const chatId = event.queryStringParameters?.chatId;
-        const limit = parseInt(event.queryStringParameters?.limit || '50', 10); // Default to 50 items per page
-        const lastEvaluatedKey = event.queryStringParameters?.lastEvaluatedKey 
-            ? JSON.parse(decodeURIComponent(event.queryStringParameters.lastEvaluatedKey))
-            : undefined;
+        const {chatId, limit, lastEvaluatedKey} = JSON.parse(event.body);
 
         if (!chatId) {
             return {

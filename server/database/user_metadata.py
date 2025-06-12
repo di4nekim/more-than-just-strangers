@@ -15,10 +15,10 @@ try:
     table = dynamodb.create_table(
         TableName=TABLE_NAME,
         KeySchema=[
-            {'AttributeName': 'UserID', 'KeyType': 'HASH'},  # Partition key
+            {'AttributeName': 'userId', 'KeyType': 'HASH'},  # Partition key
         ],
         AttributeDefinitions=[
-            {'AttributeName': 'UserID', 'AttributeType': 'S'},
+            {'AttributeName': 'userId', 'AttributeType': 'S'},
         ],
         ProvisionedThroughput={
             'ReadCapacityUnits': 5,

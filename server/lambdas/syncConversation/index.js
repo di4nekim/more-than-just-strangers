@@ -1,12 +1,8 @@
 const AWS = require('aws-sdk');
 
-// Configure DynamoDB client for local development
-const isLocal = !!process.env.DYNAMODB_ENDPOINT;
+// Configure DynamoDB client for AWS
 const dynamoDB = new AWS.DynamoDB.DocumentClient({
-    region: process.env.AWS_REGION || 'us-east-1',
-    endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
-    accessKeyId: isLocal ? "fake" : undefined,
-    secretAccessKey: isLocal ? "fake" : undefined
+    region: process.env.AWS_REGION || 'us-east-1'
 });
 
 const apiGateway = new AWS.ApiGatewayManagementApi({

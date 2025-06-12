@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: WebSocket API Backend with Lambda Functions
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+
+Resources:
+  OnConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: onConnect/
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadata
+          CONVERSATIONS_TABLE: Conversations
+          MESSAGES_TABLE: Messages
