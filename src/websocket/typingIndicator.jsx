@@ -1,10 +1,13 @@
 import { useWebSocket } from './WebSocketContext';
-import { TypingStatusPayload } from './websocketTypes';
+import { useCallback } from 'react';
 
 export const useTypingIndicator = () => {
   const { wsActions, userMetadata, typingStatus } = useWebSocket();
 
-  const sendTypingStatus = (isTyping: boolean) => {
+  /**
+   * @param {boolean} isTyping
+   */
+  const sendTypingStatus = (isTyping) => {
     if (!wsActions || !userMetadata.userId || !userMetadata.chatId) return;
 
     wsActions.sendTypingStatus({
@@ -15,7 +18,7 @@ export const useTypingIndicator = () => {
   };
 
   return {
-    sendTypingStatus,
-    isTyping: typingStatus
+    typingStatus,
+    sendTypingStatus
   };
 }; 

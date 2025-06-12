@@ -45,26 +45,16 @@ module.exports.handler = async (event) => {
             };
         }
 
-        // get user metadata for this connection
-        const userMetadata = await dynamoDB.scan({
-            TableName: process.env.USER_METADATA_TABLE,
-            FilterExpression: 'connectionId = :connectionId',
-            ExpressionAttributeValues: {
-                ':connectionId': connectionId
-            }
-        }).promise();
-
         if (userMetadata.Items && userMetadata.Items.length > 0) {
             // update user metadata to remove connection
             try {
                 await dynamoDB.update({
                     TableName: process.env.USER_METADATA_TABLE,
-                    Key: { PK: userMetadata.Items[0].PK },
-                    UpdateExpression: 'REMOVE connectionId'
-                }).promise();
-                await dynamoDB.delete({
-                    TableName: process.env.CONNECTIONS_TABLE,
-                    Key: { connectionId }
+                    Key: { PK: `USER#${userId}` },
+                    UpdateExpression: 'REMOVE connectionId SET lastSeen = :timestamp',
+                    ExpressionAttributeValues: {
+                        ':timestamp': new Date().toISOString()
+                    }
                 }).promise();
             } catch (error) {
                 console.error('Error updating user metadata:', error);

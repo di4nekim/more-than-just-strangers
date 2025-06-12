@@ -136,6 +136,24 @@ async function bootstrap() {
     ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
   });
 
+  // Seed Conversations table with mock data
+  await client.send(new PutItemCommand({
+    TableName: "Conversations",
+    Item: {
+      PK: { S: "CHAT#userA_userB" },
+      chatId: { S: "userA_userB" },
+      participants: { L: [ { S: "userA" }, { S: "userB" } ] },
+      lastMessage: { M: {
+        content: { S: "I'll call u later" },
+        timestamp: { S: "2025-06-04T18:30:03" }
+      } },
+      lastUpdated: { S: "2025-06-04T18:30:03" },
+      endedBY: { NULL: true },
+      endReason: { NULL: true },
+      createdAt: { S: "2025-06-03T18:30:03" }
+    }
+  }));
+
   console.log("Bootstrap complete.");
 }
 

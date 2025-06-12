@@ -1,72 +1,56 @@
 import { useWebSocket } from './WebSocketContext';
 import { useEffect, useCallback } from 'react';
 
-interface ReconnectionOptions {
-  maxRetries?: number;
-  retryInterval?: number;
-  onReconnect?: () => void;
-  onMaxRetriesExceeded?: () => void;
-}
+/**
+ * @typedef {Object} ReconnectionOptions
+ * @property {number} [maxRetries]
+ * @property {number} [retryInterval]
+ * @property {function(): void} [onReconnect]
+ */
 
-export const useReconnectionHandler = (options: ReconnectionOptions = {}) => {
+/**
+ * @param {ReconnectionOptions} options
+ */
+export const useReconnectionHandler = (options = {}) => {
+  const { wsClient, isConnected } = useWebSocket();
   const {
     maxRetries = 5,
     retryInterval = 1000,
-    onReconnect,
-    onMaxRetriesExceeded
+    onReconnect
   } = options;
 
-  const { wsClient, isConnected, userMetadata, wsActions } = useWebSocket();
-
-  const handleReconnect = useCallback(async () => {
-    if (!wsClient || !wsActions || !userMetadata.userId) return;
-
-    try {
-      await wsClient.connect();
-      
-      // Re-sync user state after reconnection
-      wsActions.connect({ userId: userMetadata.userId });
-      
-      // If in a chat, re-sync conversation
-      if (userMetadata.chatId) {
-        wsActions.syncConversation({ chatId: userMetadata.chatId });
-      }
-
-      onReconnect?.();
-    } catch (error) {
-      console.error('Reconnection failed:', error);
-    }
-  }, [wsClient, wsActions, userMetadata, onReconnect]);
-
-  useEffect(() => {
+  const handleReconnect = useCallback(() => {
     if (!wsClient) return;
 
     let retryCount = 0;
-    let retryTimeout: NodeJS.Timeout;
-
-    const handleDisconnect = () => {
+    const attemptReconnect = () => {
       if (retryCount >= maxRetries) {
-        onMaxRetriesExceeded?.();
+        console.error('Max reconnection attempts reached');
         return;
       }
 
-      retryTimeout = setTimeout(() => {
-        retryCount++;
-        handleReconnect();
-      }, retryInterval);
+      wsClient.connect()
+        .then(() => {
+          console.log('Reconnected successfully');
+          if (onReconnect) onReconnect();
+        })
+        .catch((error) => {
+          console.error('Reconnection attempt failed:', error);
+          retryCount++;
+          setTimeout(attemptReconnect, retryInterval);
+        });
     };
 
-    wsClient.onDisconnect(handleDisconnect);
+    attemptReconnect();
+  }, [wsClient, maxRetries, retryInterval, onReconnect]);
 
-    return () => {
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-      }
-    };
-  }, [wsClient, maxRetries, retryInterval, handleReconnect, onMaxRetriesExceeded]);
+  useEffect(() => {
+    if (!isConnected && wsClient) {
+      handleReconnect();
+    }
+  }, [isConnected, wsClient, handleReconnect]);
 
   return {
-    isConnected,
     handleReconnect
   };
 }; 

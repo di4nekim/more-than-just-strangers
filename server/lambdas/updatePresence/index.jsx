@@ -1,4 +1,3 @@
-import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 import { ApiGatewayManagementApi } from 'aws-sdk';
 
@@ -12,22 +11,14 @@ const dynamoDB = new DynamoDB.DocumentClient({
 });
 
 const api = new ApiGatewayManagementApi({
-  endpoint: process.env.WEBSOCKET_ENDPOINT
+  endpoint: process.env.WEBSOCKET_API_URL
 });
 
-interface PresenceStatusPayload {
-  chatId: string;
-  status: 'online' | 'offline' | 'away';
-  lastSeen?: string;
-}
-
-export const handler = async (
-  event: APIGatewayProxyWebsocketEventV2
-): Promise<APIGatewayProxyResultV2> => {
+export const handler = async (event) => {
   try {
     const connectionId = event.requestContext.connectionId;
     const body = JSON.parse(event.body || '{}');
-    const payload = body.data as PresenceStatusPayload;
+    const payload = body.data;
 
     if (!payload.chatId || !payload.status) {
       return {
@@ -38,7 +29,7 @@ export const handler = async (
 
     // Get the conversation to find both participants
     const conversation = await dynamoDB.get({
-      TableName: process.env.CONVERSATIONS_TABLE!,
+      TableName: process.env.CONVERSATIONS_TABLE,
       Key: { PK: `CHAT#${payload.chatId}` }
     }).promise();
 
@@ -52,17 +43,16 @@ export const handler = async (
     // Get both participants' metadata to validate the connection
     const [userAMetadata, userBMetadata] = await Promise.all([
       dynamoDB.get({
-        TableName: process.env.USER_METADATA_TABLE!,
+        TableName: process.env.USER_METADATA_TABLE,
         Key: { PK: `USER#${conversation.Item.userAId}` }
       }).promise(),
       dynamoDB.get({
-        TableName: process.env.USER_METADATA_TABLE!,
+        TableName: process.env.USER_METADATA_TABLE,
         Key: { PK: `USER#${conversation.Item.userBId}` }
       }).promise()
     ]);
 
-    // Validate that the sender is a participant and their connection matches
-    let senderId: string | undefined;
+    let senderId;
     if (userAMetadata.Item?.connectionId === connectionId) {
       senderId = conversation.Item.userAId;
     } else if (userBMetadata.Item?.connectionId === connectionId) {
@@ -78,7 +68,7 @@ export const handler = async (
 
     // Update sender's presence in UserMetadata table
     await dynamoDB.update({
-      TableName: process.env.USER_METADATA_TABLE!,
+      TableName: process.env.USER_METADATA_TABLE,
       Key: { PK: `USER#${senderId}` },
       UpdateExpression: 'SET presenceStatus = :status, lastSeen = :lastSeen',
       ExpressionAttributeValues: {
@@ -87,12 +77,9 @@ export const handler = async (
       }
     }).promise();
 
-    // Get the other participant's connection
-    const otherUserMetadata = conversation.Item.userAId === senderId 
-      ? userBMetadata 
-      : userAMetadata;
+    const otherUserMetadata =
+      conversation.Item.userAId === senderId ? userBMetadata : userAMetadata;
 
-    // Send presence update to the other user if they're connected
     if (otherUserMetadata.Item?.connectionId) {
       try {
         await api.postToConnection({
@@ -106,8 +93,7 @@ export const handler = async (
           })
         }).promise();
       } catch (error) {
-        // If the connection is stale, we can ignore the error
-        if ((error as any).statusCode === 410) {
+        if (error.statusCode === 410) {
           return {
             statusCode: 200,
             body: JSON.stringify({ message: 'Presence updated successfully' })
@@ -128,4 +114,4 @@ export const handler = async (
       body: JSON.stringify({ message: 'Internal server error' })
     };
   }
-}; 
+};

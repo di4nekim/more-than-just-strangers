@@ -34,32 +34,11 @@ module.exports.handler = async (event) => {
             secretAccessKey: isLocal ? "fake" : undefined,
         });
 
-        // Check if connection already exists
-        try {
-            const existingConnection = await dynamoDB.get({
-                TableName: process.env.CONNECTIONS_TABLE || 'connections',
-                Key: { connectionId }
-            }).promise();
-
-            if (existingConnection.Item) {
-                return {
-                    statusCode: 409,
-                    body: JSON.stringify({ error: 'Connection already exists' })
-                };
-            }
-        } catch (error) {
-            console.error('Error checking existing connection:', error);
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ error: 'Internal Server Error' })
-            };
-        }
-
         // Store the new connection
         try {
             await dynamoDB.put({
-                TableName: process.env.CONNECTIONS_TABLE || 'connections',
-                Item: { connectionId }
+                TableName: process.env.USER_METADATA_TABLE || 'userMetadata',
+                Item: { PK: `USER#${userId}`, connectionId }
             }).promise();
 
             return {

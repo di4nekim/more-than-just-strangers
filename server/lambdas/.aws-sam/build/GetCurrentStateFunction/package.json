@@ -1,0 +1,19 @@
+{
+  "name": "getCurrentState",
+  "version": "1.0.0",
+  "description": "Lambda function to get current user state from UserMetadata table",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  },
+  "devDependencies": {
+    "aws-sdk-mock": "^5.8.0",
+    "jest": "^29.7.0"
+  }
+}

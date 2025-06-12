@@ -75,12 +75,8 @@ export const WebSocketProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Use local WebSocket endpoint for development
-    const wsEndpoint = process.env.NODE_ENV === 'development' 
-      ? 'ws://localhost:3001'
-      : process.env.NEXT_PUBLIC_WEBSOCKET_API_ENDPOINT || '';
     
-    const client = new WebSocketClient(wsEndpoint);
+    const client = new WebSocketClient(process.env.WEBSOCKET_API_URL);
     
     // Set up message handlers
     client.onMessage('currentState', (payload) => {

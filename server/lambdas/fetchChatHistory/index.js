@@ -14,11 +14,7 @@ exports.handler = async (event, context) => {
         });
 
         // Extract parameters from the event
-        const chatId = event.queryStringParameters?.chatId;
-        const limit = parseInt(event.queryStringParameters?.limit || '50', 10); // Default to 50 items per page
-        const lastEvaluatedKey = event.queryStringParameters?.lastEvaluatedKey 
-            ? JSON.parse(decodeURIComponent(event.queryStringParameters.lastEvaluatedKey))
-            : undefined;
+        const {chatId, limit, lastEvaluatedKey} = JSON.parse(event.body);
 
         if (!chatId) {
             return {

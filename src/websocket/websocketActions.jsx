@@ -1,6 +1,5 @@
 import { WebSocketClient } from './websocketHandler';
 import {
-  WebSocketActions as WebSocketActionsType,
   ConnectPayload,
   StartConversationPayload,
   ReadyToAdvancePayload,
@@ -13,117 +12,67 @@ import {
   PresenceStatusPayload
 } from './websocketTypes';
 
-// Re-export the WebSocketActions type
-export type WebSocketActions = WebSocketActionsType;
+/**
+ * @typedef {Object} WebSocketActions
+ * @property {function(ConnectPayload): void} connect
+ * @property {function(ReadyToAdvancePayload): void} sendReadyToAdvance
+ * @property {function(EndConversationPayload): void} endConversation
+ * @property {function(SendMessagePayload): void} sendMessage
+ * @property {function(StartConversationPayload): void} startConversation
+ * @property {function(FetchChatHistoryPayload): void} fetchChatHistory
+ * @property {function(FetchUserMetadataPayload): void} fetchUserMetadata
+ * @property {function(SyncConversationPayload): void} syncConversation
+ * @property {function(TypingStatusPayload): void} sendTypingStatus
+ * @property {function(PresenceStatusPayload): void} updatePresence
+ * @property {function(): void} disconnect
+ */
 
-// WebSocket action creators
-export const createWebSocketActions = (wsClient: WebSocketClient): WebSocketActions => ({
-  // Initial connection
-  connect: (payload: ConnectPayload) => {
-    wsClient.send({
-      action: 'connect',
-      data: payload
-    });
+/**
+ * @param {WebSocketClient} wsClient
+ * @returns {WebSocketActions}
+ */
+export const createWebSocketActions = (wsClient) => ({
+  connect: (payload) => {
+    wsClient.send({ action: 'connect', ...payload });
   },
 
-  // Question ready status
-  sendReadyToAdvance: (payload: ReadyToAdvancePayload) => {
-    wsClient.send({
-      action: 'setReady',
-      data: {
-        userId: payload.userId,
-        chatId: payload.chatId
-      }
-    });
+  sendReadyToAdvance: (payload) => {
+    wsClient.send({ action: 'readyToAdvance', ...payload });
   },
 
-  // End conversation
-  endConversation: (payload: EndConversationPayload) => {
-    wsClient.send({
-      action: 'endConversation',
-      data: {
-        userId: payload.userId,
-        chatId: payload.chatId,
-        endReason: payload.endReason,
-        endedBy: payload.endedBy
-      }
-    });
+  endConversation: (payload) => {
+    wsClient.send({ action: 'endConversation', ...payload });
   },
 
-  // Send message
-  sendMessage: (payload: SendMessagePayload) => {
-    wsClient.send({
-      action: 'sendMessage',
-      payload
-    });
+  sendMessage: (payload) => {
+    wsClient.send({ action: 'message', ...payload });
   },
 
-  // Start conversation
-  startConversation: (payload: StartConversationPayload) => {
-    wsClient.send({
-      action: 'startConversation',
-      data: {
-        userAId: payload.userAId,
-        userBId: payload.userBId
-      }
-    });
+  startConversation: (payload) => {
+    wsClient.send({ action: 'startConversation', ...payload });
   },
 
-  // Fetch chat history
-  fetchChatHistory: (payload: FetchChatHistoryPayload) => {
-    wsClient.send({
-      action: 'fetchChatHistory',
-      data: {
-        chatId: payload.chatId,
-        limit: payload.limit || 50,
-        lastEvaluatedKey: payload.lastEvaluatedKey
-      }
-    });
+  fetchChatHistory: (payload) => {
+    wsClient.send({ action: 'fetchChatHistory', ...payload });
   },
 
-  // Fetch user metadata
-  fetchUserMetadata: (payload: FetchUserMetadataPayload) => {
-    wsClient.send({
-      action: 'getCurrentState',
-      data: {
-        userId: payload.userId
-      }
-    });
+  fetchUserMetadata: (payload) => {
+    wsClient.send({ action: 'fetchUserMetadata', ...payload });
   },
 
-  // Sync conversation metadata
-  syncConversation: (payload: SyncConversationPayload) => {
-    wsClient.send({
-      action: 'syncConversation',
-      data: {
-        chatId: payload.chatId
-      }
-    });
+  syncConversation: (payload) => {
+    wsClient.send({ action: 'syncConversation', ...payload });
   },
 
-  // Typing status
-  sendTypingStatus: (payload: TypingStatusPayload) => {
-    wsClient.send({
-      action: 'typingStatus',
-      data: payload
-    });
+  sendTypingStatus: (payload) => {
+    wsClient.send({ action: 'typingStatus', ...payload });
   },
 
-  // Presence status
-  updatePresence: (payload: PresenceStatusPayload) => {
-    wsClient.send({
-      action: 'updatePresence',
-      data: payload
-    });
+  updatePresence: (payload) => {
+    wsClient.send({ action: 'presenceStatus', ...payload });
   },
 
-  // Disconnect
   disconnect: () => {
-    wsClient.send({
-      action: 'disconnect',
-      data: {
-        userId: wsClient.getUserId()
-      }
-    });
+    wsClient.disconnect();
   }
 }); 

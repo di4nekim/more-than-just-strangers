@@ -1,29 +1,35 @@
 import { useWebSocket } from './WebSocketContext';
-import { PresenceStatusPayload } from './websocketTypes';
+import { useEffect, useState, useCallback } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
-import { useState, useEffect } from 'react';
+
+/**
+ * @typedef {'online'|'offline'|'away'} PresenceStatus
+ */
 
 export const usePresenceSystem = () => {
-  const { wsActions, userMetadata, otherUserPresence } = useWebSocket();
-  const [localStatus, setLocalStatus] = useState<PresenceStatusPayload['status']>('online');
-  const debouncedStatus = useDebounce(localStatus, 1000); // 1 second debounce
+  const { wsActions, userMetadata } = useWebSocket();
+  const [localStatus, setLocalStatus] = useState('online');
+  const debouncedStatus = useDebounce(localStatus, 1000);
 
   useEffect(() => {
     if (!wsActions || !userMetadata.userId || !userMetadata.chatId) return;
 
     wsActions.updatePresence({
       chatId: userMetadata.chatId,
-      status: debouncedStatus,
-      lastSeen: debouncedStatus === 'offline' ? new Date().toISOString() : undefined
+      userId: userMetadata.userId,
+      status: debouncedStatus
     });
   }, [debouncedStatus, wsActions, userMetadata]);
 
-  const updatePresence = (status: PresenceStatusPayload['status']) => {
+  /**
+   * @param {PresenceStatus} status
+   */
+  const updatePresence = (status) => {
     setLocalStatus(status);
   };
 
   return {
-    updatePresence,
-    otherUserPresence
+    currentStatus: localStatus,
+    updatePresence
   };
 }; 

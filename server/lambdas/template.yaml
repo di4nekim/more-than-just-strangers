@@ -8,88 +8,26 @@ Globals:
     Timeout: 10
 
 Parameters:
-  WebSocketApiId:
-    Type: String
-    Default: p4d5mngovh
-    Description: ID of the WebSocket API
-  WebSocketStage:
-    Type: String
-    Default: dev
-    Description: Stage name (default 'dev')
   DynamoDBEndpoint:
     Type: String
     Default: ""
     Description: (optional) DynamoDB Local endpoint for local development
 
 Resources:
-  # Table Definitions
-  MessagesTable:
-    Type: AWS::DynamoDB::Table
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
     Properties:
-      TableName: Messages
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: userId
-          AttributeType: S
-        - AttributeName: timestamp
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: userIdTimestampIndex
-          KeySchema:
-            - AttributeName: userId
-              KeyType: HASH
-            - AttributeName: timestamp
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
+      Name: mtjs-websocket-api
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
 
-  ConversationsTable:
-    Type: AWS::DynamoDB::Table
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
     Properties:
-      TableName: Conversations
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: GSI1_PK
-          AttributeType: S
-        - AttributeName: GSI1_SK
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: GSI1
-          KeySchema:
-            - AttributeName: GSI1_PK
-              KeyType: HASH
-            - AttributeName: GSI1_SK
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
+      ApiId: !Ref WebSocketApi
+      StageName: Dev
+      AutoDeploy: true
 
-  UserMetadataTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: UserMetadata
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-
-  # Shared IAM Role for all Lambdas
   SharedLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -106,110 +44,42 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
-      Policies:
-        - PolicyName: AllowLambdaInvoke
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunction
-                Resource:
-                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:mtjs-websocket-backend-*
-        - PolicyName: AllowCognitoAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - cognito-idp:AdminUpdateUserAttributes
-                  - cognito-idp:AdminGetUser
-                Resource: "*"
 
-  # Lambda Permissions
-  AllowApiGatewayInvokeLambda:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt OnConnectFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/@connect
+  # Lambda Functions -- Function, Integration, Route, Permission (automates lambda/api gateway lifecycle)
 
-  AllowApiGatewayInvokeOnDisconnect:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt OnDisconnectFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/@disconnect
-
-  AllowApiGatewayInvokeSendMessage:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt SendMessageFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/sendMessage
-
-  AllowApiGatewayInvokeSetReady:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt SetReadyFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/setReady
-
-  AllowApiGatewayInvokeStartConversation:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt StartConversationFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/startConversation
-
-  AllowApiGatewayInvokeEndConversation:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt EndConversationFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/endConversation
-
-  AllowApiGatewayInvokeFetchChatHistory:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt FetchChatHistoryFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/fetchChatHistory
-
-  AllowApiGatewayInvokeGetCurrentState:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt GetCurrentStateFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/getCurrentState
-
-  AllowApiGatewayInvokeUpdatePresence:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt UpdatePresenceFunction.Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApiId}/${WebSocketStage}/updatePresence
-
-  # Lambda Functions
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
       CodeUri: onConnect/
       Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          CONNECTIONS_TABLE: Connections
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  OnConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt OnConnectFunction.Arn,
+          }
+
+  OnConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      Target: !Sub integrations/${OnConnectIntegration}
+
+  OnConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/$connect
 
   OnDisconnectFunction:
     Type: AWS::Serverless::Function
@@ -217,10 +87,33 @@ Resources:
       Handler: index.handler
       CodeUri: onDisconnect/
       Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          CONNECTIONS_TABLE: Connections
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  OnDisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt OnDisconnectFunction.Arn,
+          }
+
+  OnDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      Target: !Sub integrations/${OnDisconnectIntegration}
+
+  OnDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref OnDisconnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/$disconnect
 
   SendMessageFunction:
     Type: AWS::Serverless::Function
@@ -228,11 +121,33 @@ Resources:
       Handler: index.handler
       CodeUri: sendMessage/
       Role: !GetAtt SharedLambdaRole.Arn
-      Environment:
-        Variables:
-          MESSAGES_TABLE: Messages
-          CONNECTIONS_TABLE: Connections
-          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  SendMessageIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt SendMessageFunction.Arn,
+          }
+
+  SendMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: sendMessage
+      Target: !Sub integrations/${SendMessageIntegration}
+
+  SendMessagePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SendMessageFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/sendMessage
 
   SetReadyFunction:
     Type: AWS::Serverless::Function
@@ -242,8 +157,34 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  SetReadyIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt SetReadyFunction.Arn,
+          }
+
+  SetReadyRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: setReady
+      Target: !Sub integrations/${SetReadyIntegration}
+
+  SetReadyPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SetReadyFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/setReady
 
   StartConversationFunction:
     Type: AWS::Serverless::Function
@@ -253,9 +194,34 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          CONVERSATIONS_TABLE: Conversations
-          USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  StartConversationIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt StartConversationFunction.Arn,
+          }
+
+  StartConversationRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: startConversation
+      Target: !Sub integrations/${StartConversationIntegration}
+
+  StartConversationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StartConversationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/startConversation
 
   EndConversationFunction:
     Type: AWS::Serverless::Function
@@ -265,9 +231,34 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          CONVERSATIONS_TABLE: Conversations
-          USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  EndConversationIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt EndConversationFunction.Arn,
+          }
+
+  EndConversationRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: endConversation
+      Target: !Sub integrations/${EndConversationIntegration}
+
+  EndConversationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EndConversationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/endConversation
 
   FetchChatHistoryFunction:
     Type: AWS::Serverless::Function
@@ -280,6 +271,33 @@ Resources:
           MESSAGES_TABLE: Messages
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
+  FetchChatHistoryIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt FetchChatHistoryFunction.Arn,
+          }
+
+  FetchChatHistoryRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: fetchChatHistory
+      Target: !Sub integrations/${FetchChatHistoryIntegration}
+
+  FetchChatHistoryPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FetchChatHistoryFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/fetchChatHistory
+
   GetCurrentStateFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -291,6 +309,33 @@ Resources:
           USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
 
+  GetCurrentStateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt GetCurrentStateFunction.Arn,
+          }
+
+  GetCurrentStateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: getCurrentState
+      Target: !Sub integrations/${GetCurrentStateIntegration}
+
+  GetCurrentStatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GetCurrentStateFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/getCurrentState
+
   UpdatePresenceFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -300,10 +345,36 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadata
-          CONNECTIONS_TABLE: Connections
           CONVERSATIONS_TABLE: Conversations
-          WEBSOCKET_ENDPOINT: !Sub https://${WebSocketApiId}.execute-api.${AWS::Region}.amazonaws.com/${WebSocketStage}
+          WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  UpdatePresenceIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt UpdatePresenceFunction.Arn,
+          }
+
+  UpdatePresenceRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: updatePresence
+      Target: !Sub integrations/${UpdatePresenceIntegration}
+
+  UpdatePresencePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UpdatePresenceFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/updatePresence
 
   BatchCognitoUploadFunction:
     Type: AWS::Serverless::Function
@@ -315,3 +386,74 @@ Resources:
         Variables:
           USER_METADATA_TABLE: UserMetadata
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  BatchCognitoUploadIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt BatchCognitoUploadFunction.Arn,
+          }
+
+  BatchCognitoUploadRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: batchCognitoUpload
+      Target: !Sub integrations/${BatchCognitoUploadIntegration}
+
+  BatchCognitoUploadPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BatchCognitoUploadFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/batchCognitoUpload
+
+  SyncConversationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      CodeUri: syncConversation/
+      Role: !GetAtt SharedLambdaRole.Arn
+      Environment:
+        Variables:
+          CONVERSATIONS_TABLE: Conversations
+          WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+
+  SyncConversationIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - {
+            Region: !Ref "AWS::Region",
+            LambdaArn: !GetAtt SyncConversationFunction.Arn,
+          }
+
+  SyncConversationRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: syncConversation
+      Target: !Sub integrations/${SyncConversationIntegration}
+
+  SyncConversationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SyncConversationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/syncConversation
+
+Outputs:
+  WebSocketUrl:
+    Description: mtjs websocket url
+    Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev"

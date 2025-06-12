@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -11,72 +12,69 @@ import { useTypingIndicator } from '../../websocket/typingIndicator';
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
 
-interface Message {
-  id?: string;
-  MessageId?: string;
-  sender: string;
-  text?: string;
-  Message?: string;
-  timestamp?: string;
-  Timestamp?: string;
-  ReadTimestamp?: string;
-}
-
-interface Question {
-  index: number;
-  text: string;
-}
-
-interface QuestionSet {
-  setNumber: number;
-  questions: Question[];
-}
-
-interface UserMetadata {
-  userId?: string;
-  questionIndex?: number;
-}
-
-interface ConversationMetadata {
-  chatId?: string;
-  endedBy?: string;
-}
-
-interface PresenceStatus {
-  status: 'online' | 'away' | 'offline';
-  lastSeen?: string;
-}
-
-interface ChatHistoryPayload {
-  messages: Message[];
-  lastEvaluatedKey?: string;
-  hasMore: boolean;
-}
+/**
+ * @typedef {Object} Message
+ * @property {string} [id]
+ * @property {string} [MessageId]
+ * @property {string} sender
+ * @property {string} [text]
+ * @property {string} [Message]
+ * @property {string} [timestamp]
+ * @property {string} [Timestamp]
+ * @property {string} [ReadTimestamp]
+ */
 
 export default function ChatRoom() {
-  const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  /** @type {[string | null, (error: string | null) => void]} */
+  const [error, setError] = useState(null);
+  /** @type {[Message[], (messages: Message[] | ((prev: Message[]) => Message[])) => void]} */
+  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const messageIdsRef = useRef<Set<string>>(new Set());
+  /** @type {React.MutableRefObject<Set<string>>} */
+  const messageIdsRef = useRef(new Set());
 
-  // WebSocket states
+  // Normalize message shape regardless of source
+  const normalizeMessage = (message) => {
+    return {
+      id: message.id || message.MessageId,
+      sender: message.sender,
+      text: message.text || message.Message,
+      timestamp: message.timestamp || message.Timestamp,
+      readTimestamp: message.ReadTimestamp
+    };
+  };
+
+  // Sort messages by timestamp
+  const sortMessagesByTimestamp = (messages) => {
+    return [...messages].sort((a, b) => {
+      const timeA = new Date(a.Timestamp || a.timestamp).getTime();
+      const timeB = new Date(b.Timestamp || b.timestamp).getTime();
+      return timeA - timeB;
+    });
+  };
+
+  // /websocket states
   const { wsClient, wsActions, isConnected, conversationMetadata, syncConversation, userMetadata } = useWebSocket();
   const { updatePresence, otherUserPresence } = usePresenceSystem();
   const { sendTypingStatus, isTyping } = useTypingIndicator();
 
-  // Derived states from context
+  // derived states from context
   const [isFindingMatch, setIsFindingMatch] = useState(!conversationMetadata.chatId);
   const [isEndingChat, setIsEndingChat] = useState(!!conversationMetadata.endedBy);
   const [questionIndex, setQuestionIndex] = useState(userMetadata.questionIndex);
 
   // Refs
   const hasNavigatedRef = useRef(false);
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
-  const chatContainerRef = useRef<HTMLDivElement | null>(null);
-  const lastEvaluatedKeyRef = useRef<string | undefined>(undefined);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /** @type {React.MutableRefObject<HTMLDivElement | null>} */
+  const messageEndRef = useRef(null);
+  /** @type {React.MutableRefObject<HTMLDivElement | null>} */
+  const chatContainerRef = useRef(null);
+  /** @type {React.MutableRefObject<string | undefined>} */
+  const lastEvaluatedKeyRef = useRef(undefined);
+  /** @type {React.MutableRefObject<NodeJS.Timeout | null>} */
+  const typingTimeoutRef = useRef(null);
 
   const { chatId: encodedChatId } = useParams();
   const chatId = typeof encodedChatId === 'string' 
@@ -85,12 +83,8 @@ export default function ChatRoom() {
       ? decodeURIComponent(encodedChatId[0])
       : '';
   
-  const isValidChatId = (id: string | undefined): id is string => {
-    return typeof id === 'string' && id.length > 0;
-  };
-
   const userId = 'DUMMY_USER_ID'; // TODO: Get from auth context
-  const otherUserId = isValidChatId(chatId) ? chatId.split('#').find(id => id !== userId) || '' : '';
+  const otherUserId = chatId.split('#').find(id => id !== userId) || '';
   const router = useRouter();
 
   // Add reconnection handler
@@ -98,7 +92,9 @@ export default function ChatRoom() {
     maxRetries: 5,
     retryInterval: 1000,
     onReconnect: () => {
+      // Re-sync conversation after reconnection
       syncConversation();
+      // Update presence status
       updatePresence('online');
     },
     onMaxRetriesExceeded: () => {
@@ -106,14 +102,14 @@ export default function ChatRoom() {
     }
   });
 
-  // Sync question index from user metadata
+  // sync question index from user metadata
   useEffect(() => {
     if (userMetadata.questionIndex !== undefined) {
       setQuestionIndex(userMetadata.questionIndex);
     }
   }, [userMetadata.questionIndex]);
 
-  // Calculate the set number, current question text
+  // calculate the set number, current question text
   const currentSet = questions.sets.find(set =>
     set.questions.some(q => q.index === questionIndex)
   );
@@ -134,7 +130,7 @@ export default function ChatRoom() {
   }, [router]);
 
   const loadMoreMessages = async () => {
-    if (!hasMoreMessages || isLoadingMore || !isValidChatId(chatId)) return;
+    if (!hasMoreMessages || isLoadingMore) return;
 
     setIsLoadingMore(true);
     try {
@@ -142,7 +138,7 @@ export default function ChatRoom() {
         wsActions.fetchChatHistory({
           chatId,
           limit: 20,
-          lastEvaluatedKey: lastEvaluatedKeyRef.current
+          lastEvaluatedKey: lastEvaluatedKeyRef.current || undefined
         });
       }
     } catch (error) {
@@ -163,32 +159,32 @@ export default function ChatRoom() {
   }, []);
 
   // Add debounced scroll handler
-  const debouncedScrollHandler = useDebounce(handleScroll, 200);
+  const debouncedScrollHandler = useDebounce(handleScroll, 200); // 200ms debounce
 
-  const handleSendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
+  /**
+   * @param {React.FormEvent<HTMLFormElement>} e
+   */
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !isConnected || !wsActions || !isValidChatId(chatId)) return;
+    if (!newMessage.trim() || !isConnected || !wsActions) return;
 
-    const messageId = uuidv4();
-    const timestamp = new Date().toISOString();
-
-    const messageObject: Message = {
-      id: messageId,
+    const messageObject = {
+      id: uuidv4(),
       sender: 'user',
       text: newMessage,
-      timestamp
+      timestamp: new Date().toISOString()
     };
 
     try {
       wsActions.sendMessage({
         chatId,
-        messageId,
+        messageId: messageObject.id,
         senderId: userId,
         content: newMessage,
-        sentAt: timestamp
+        sentAt: messageObject.timestamp
       });
 
-      setMessages(prev => [...prev, messageObject]);
+      setMessages(prev => sortMessagesByTimestamp([...prev, messageObject]));
       setNewMessage('');
       scrollToBottom();
     } catch (error) {
@@ -197,7 +193,10 @@ export default function ChatRoom() {
     }
   };
 
-  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * @param {React.ChangeEvent<HTMLInputElement>} e
+   */
+  const handleTyping = (e) => {
     setNewMessage(e.target.value);
     sendTypingStatus(true);
 
@@ -211,7 +210,7 @@ export default function ChatRoom() {
   };
 
   const handleReady = () => {
-    if (!wsActions || !isValidChatId(chatId)) return;
+    if (!wsActions) return;
     
     wsActions.sendReadyToAdvance({
       chatId,
@@ -220,7 +219,10 @@ export default function ChatRoom() {
     });
   };
 
-  const formatTime = (isoString?: string): string => {
+  /**
+   * @param {string} isoString
+   */
+  const formatTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -229,7 +231,7 @@ export default function ChatRoom() {
   const endConversation = async () => {
     try {
       setIsEndingChat(true);
-      if (wsActions && isValidChatId(chatId)) {
+      if (wsActions) {
         wsActions.endConversation({ chatId, userId });
       }
       navigateToCongrats();
@@ -248,13 +250,16 @@ export default function ChatRoom() {
 
   // Initialize WebSocket connection and fetch chat history
   useEffect(() => {
-    if (wsActions && isValidChatId(chatId)) {
+    if (wsActions) {
+      // Connect and fetch initial data
       wsActions.connect({ userId });
       
+      // Only fetch user metadata if we don't already have it
       if (!userMetadata.userId) {
         wsActions.fetchUserMetadata({ userId });
       }
       
+      // Fetch chat history and sync conversation
       wsActions.fetchChatHistory({ chatId, limit: 20 });
       syncConversation();
       updatePresence('online');
@@ -268,43 +273,70 @@ export default function ChatRoom() {
   // Update WebSocket message handlers
   useEffect(() => {
     if (wsClient) {
-      wsClient.onMessage('message', (payload: Message) => {
+      wsClient.onMessage('message', (payload) => {
         if (payload.text || payload.Message) {
           const messageId = payload.id || payload.MessageId;
           if (messageId && !messageIdsRef.current.has(messageId)) {
             messageIdsRef.current.add(messageId);
-            setMessages(prev => [...prev, payload]);
+            const normalizedMessage = normalizeMessage(payload);
+            setMessages(prev => sortMessagesByTimestamp([...prev, normalizedMessage]));
             scrollToBottom();
           }
         }
       });
 
-      wsClient.onMessage('chatHistory', (payload: ChatHistoryPayload) => {
-        const newMessages = payload.messages.filter(msg => {
-          const messageId = msg.id || msg.MessageId;
-          if (messageId && !messageIdsRef.current.has(messageId)) {
-            messageIdsRef.current.add(messageId);
-            return true;
-          }
-          return false;
-        });
+      wsClient.onMessage('chatHistory', (payload) => {
+        const newMessages = payload.messages
+          .filter(msg => {
+            const messageId = msg.id || msg.MessageId;
+            if (messageId && !messageIdsRef.current.has(messageId)) {
+              messageIdsRef.current.add(messageId);
+              return true;
+            }
+            return false;
+          })
+          .map(normalizeMessage);
         
-        setMessages(prev => [...newMessages, ...prev]);
+        setMessages(prev => sortMessagesByTimestamp([...newMessages, ...prev]));
         lastEvaluatedKeyRef.current = payload.lastEvaluatedKey;
         setHasMoreMessages(payload.hasMore);
       });
 
-      wsClient.onMessage('advanceQuestion', (payload: { questionIndex: number }) => {
+      wsClient.onMessage('advanceQuestion', (payload) => {
         setQuestionIndex(payload.questionIndex);
       });
     }
   }, [wsClient, wsActions, userId, chatId, otherUserId, navigateToCongrats]);
 
+  // Handle conversation end and question completion
   useEffect(() => {
-    if (questionIndex === 36) {
+    if (hasNavigatedRef.current) return;
+
+    // Only navigate if we have a chatId and either condition is met
+    if (chatId && (conversationMetadata.endedBy || questionIndex === 36)) {
+      hasNavigatedRef.current = true;
+      cleanup();
       navigateToCongrats();
     }
-  }, [questionIndex, navigateToCongrats]);
+  }, [conversationMetadata.endedBy, questionIndex, navigateToCongrats, chatId]);
+
+  // Handle early chat termination (before chatId is available)
+  useEffect(() => {
+    if (hasNavigatedRef.current) return;
+
+    // If chat is already ended but we don't have chatId yet, wait for it
+    if (conversationMetadata.endedBy && !chatId) {
+      const timeoutId = setTimeout(() => {
+        if (!hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          cleanup();
+          navigateToCongrats();
+        }
+      }, 5000); // Wait up to 5 seconds for chatId
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [conversationMetadata.endedBy, chatId, navigateToCongrats]);
 
   // Check if chat exists based on conversation metadata
   useEffect(() => {
@@ -314,14 +346,6 @@ export default function ChatRoom() {
       setIsFindingMatch(true);
     }
   }, [conversationMetadata]);
-
-  // Handle conversation end
-  useEffect(() => {
-    if (conversationMetadata.endedBy) {
-      cleanup();
-      navigateToCongrats();
-    }
-  }, [conversationMetadata.endedBy, navigateToCongrats]);
 
   useEffect(() => {
     const chatContainer = chatContainerRef.current;
@@ -366,7 +390,7 @@ export default function ChatRoom() {
         
         {messages.map((message, index) => (
           <div
-            key={message.id || message.MessageId || index} 
+            key={message.id} 
             className={`flex ${
               message.sender === 'user' ? 'justify-end' : 'justify-start'
             }`}
@@ -378,10 +402,10 @@ export default function ChatRoom() {
                   : 'bg-gray-200 text-gray-800'
               }`}
             >
-              <div>{message.Message || message.text}</div>
+              <div>{message.text}</div>
               <div className="flex justify-end gap-1 text-xs mt-1">
-                <span>{formatTime(message.Timestamp || message.timestamp)}</span>
-                {message.ReadTimestamp && <span>✓✓</span>}
+                <span>{formatTime(message.timestamp)}</span>
+                {message.readTimestamp && <span>✓✓</span>}
               </div>
             </div>
           </div>
@@ -431,6 +455,7 @@ export default function ChatRoom() {
           type="text"
           value={newMessage}
           onChange={handleTyping}
+          onBlur={() => sendTypingStatus(false)}
           placeholder="Type a message..."
           className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
         />
@@ -448,4 +473,4 @@ export default function ChatRoom() {
       </form>
     </div>
   );
-} 
+}
