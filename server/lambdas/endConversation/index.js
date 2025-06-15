@@ -1,8 +1,11 @@
 const AWS = require('aws-sdk');
 
-const dynamoDB = new AWS.DynamoDB.DocumentClient({
+// Configure AWS SDK for the deployed environment
+const awsConfig = {
     region: process.env.AWS_REGION || 'us-east-1'
-});
+};
+
+const dynamoDB = new AWS.DynamoDB.DocumentClient(awsConfig);
 
 const apiGateway = new AWS.ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
@@ -24,10 +27,13 @@ exports.handler = async (event) => {
             };
         }
 
-        // Get conversation to find other participant
+        // Get conversation to find other participant (updated for new table schema)
         const conversation = await dynamoDB.get({
             TableName: process.env.CONVERSATIONS_TABLE,
-            Key: { PK: `CHAT#${chatId}` }
+            Key: { 
+                PK: `CHAT#${chatId}`,
+                SK: 'METADATA'
+            }
         }).promise();
 
         if (!conversation.Item) {
@@ -44,11 +50,14 @@ exports.handler = async (event) => {
         const timestamp = new Date().toISOString();
         await dynamoDB.update({
             TableName: process.env.CONVERSATIONS_TABLE,
-            Key: { PK: `CHAT#${chatId}` },
+            Key: { 
+                PK: `CHAT#${chatId}`,
+                SK: 'METADATA'
+            },
             UpdateExpression: 'SET endedBy = :endedBy, endReason = :endReason, lastUpdated = :lastUpdated',
             ExpressionAttributeValues: {
                 ':endedBy': userId,
-                ':endReason': reason ,
+                ':endReason': reason,
                 ':lastUpdated': timestamp
             }
         }).promise();

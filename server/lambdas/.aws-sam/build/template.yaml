@@ -9,66 +9,53 @@ Resources:
   UserMetadataTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: UserMetadata
+      TableName: UserMetadataV2
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
         AttributeType: S
+      - AttributeName: connectionId
+        AttributeType: S
       KeySchema:
       - AttributeName: PK
         KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: GSI_connectionId
+        KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
   MessagesTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: Messages
+      TableName: MessagesV2
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
         AttributeType: S
       - AttributeName: SK
-        AttributeType: S
-      - AttributeName: userId
-        AttributeType: S
-      - AttributeName: timestamp
         AttributeType: S
       KeySchema:
       - AttributeName: PK
         KeyType: HASH
       - AttributeName: SK
         KeyType: RANGE
-      GlobalSecondaryIndexes:
-      - IndexName: userIdTimestampIndex
-        KeySchema:
-        - AttributeName: userId
-          KeyType: HASH
-        - AttributeName: timestamp
-          KeyType: RANGE
-        Projection:
-          ProjectionType: ALL
   ConversationsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: Conversations
+      TableName: ConversationsV2
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
         AttributeType: S
-      - AttributeName: GSI1_PK
-        AttributeType: S
-      - AttributeName: GSI1_SK
+      - AttributeName: SK
         AttributeType: S
       KeySchema:
       - AttributeName: PK
         KeyType: HASH
-      GlobalSecondaryIndexes:
-      - IndexName: GSI1
-        KeySchema:
-        - AttributeName: GSI1_PK
-          KeyType: HASH
-        - AttributeName: GSI1_SK
-          KeyType: RANGE
-        Projection:
-          ProjectionType: ALL
+      - AttributeName: SK
+        KeyType: RANGE
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -109,9 +96,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: OnConnectFunction
   OnConnectIntegration:
@@ -157,9 +144,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: OnDisconnectFunction
   OnDisconnectIntegration:
@@ -205,9 +192,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: SendMessageFunction
   SendMessageIntegration:
@@ -253,9 +240,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: SetReadyFunction
   SetReadyIntegration:
@@ -301,9 +288,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: StartConversationFunction
   StartConversationIntegration:
@@ -349,9 +336,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: EndConversationFunction
   EndConversationIntegration:
@@ -397,9 +384,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: FetchChatHistoryFunction
   FetchChatHistoryIntegration:
@@ -445,9 +432,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV2
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: GetCurrentStateFunction
   GetCurrentStateIntegration:
@@ -635,3 +622,7 @@ Outputs:
     Description: mtjs websocket url
     Value:
       Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+  WebSocketApiId:
+    Description: WebSocket API ID for E2E testing
+    Value:
+      Ref: WebSocketApi
