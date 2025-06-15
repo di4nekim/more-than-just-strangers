@@ -1,3 +1,8 @@
 node_modules
 .next/
 venv/
+.env.local
+.env
+myenv/
+dynamodb/data/*
+coverage/

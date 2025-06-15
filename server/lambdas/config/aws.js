@@ -1,3 +1,5 @@
+// DEPRECATED
+
 const AWS = require('aws-sdk');
 
 // Configure AWS SDK
@@ -7,20 +9,22 @@ AWS.config.update({
 
 // Factory functions to create AWS service instances
 const createDynamoDB = () => new AWS.DynamoDB.DocumentClient();
-const createApiGateway = () => new AWS.ApiGatewayManagementApi({
-    endpoint: process.env.WEBSOCKET_API_URL 
+const createApiGateway = (AWSInstance = AWS) => {
+    return new AWSInstance.ApiGatewayManagementApi({
+      endpoint: process.env.WEBSOCKET_API_URL 
         ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
         : "localhost:3001"
-});
+    });
+  };
 
-// Create default instances
-const dynamoDB = createDynamoDB();
-const apiGateway = createApiGateway();
+
+const createLambda = (AWSInstance = AWS) => {
+return new AWSInstance.Lambda();
+};
 
 module.exports = {
     AWS,
-    dynamoDB,
-    apiGateway,
     createDynamoDB,
-    createApiGateway
-}; 
+    createApiGateway,
+    createLambda,
+};

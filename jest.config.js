@@ -1,17 +1,16 @@
 module.exports = {
-    testEnvironment: 'node',
-    setupFilesAfterEnv: ['<rootDir>/server/lambdas/__tests__/setup.js'],
-    testMatch: ['**/server/lambdas/__tests__/**/*.test.js'],
-    collectCoverage: true,
+    testEnvironment: 'jsdom',
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+    moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+    },
+    transform: {
+        '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+    },
+    testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
     collectCoverageFrom: [
-        'server/lambdas/*.js',
-        '!server/lambdas/__tests__/**'
+        'src/**/*.{js,jsx,ts,tsx}',
+        '!src/**/*.d.ts',
+        '!src/**/*.stories.{js,jsx,ts,tsx}',
     ],
-    coverageDirectory: 'coverage',
-    coveragePathIgnorePatterns: [
-        '/node_modules/',
-        '/__tests__/'
-    ],
-    verbose: true,
-    testTimeout: 30000
 }; 
