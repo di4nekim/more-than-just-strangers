@@ -1,18 +1,26 @@
-const AWS = require('aws-sdk');
+const { CognitoIdentityProviderClient, ListUsersCommand } = require("@aws-sdk/client-cognito-identity-provider");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const questions = require('../questions.json');
 
-const cognito = new AWS.CognitoIdentityServiceProvider();
-
-// config document client for local dev via DynamoDB Local + Docker
-const dynamodb = new AWS.DynamoDB.DocumentClient({
+// Configure AWS SDK v3 clients
+const cognitoClient = new CognitoIdentityProviderClient({
     region: process.env.AWS_REGION || 'us-east-1'
 });
 
+const dynamoDbClient = new DynamoDBClient({
+    region: process.env.AWS_REGION || 'us-east-1'
+});
+const dynamodb = DynamoDBDocumentClient.from(dynamoDbClient);
+
+// TODO: FULLY UPDATE BASED ON NEW SCHEMA
 
 async function getAllUsers() {
     /** @type {{sub: string, name: string, email: string}[]} */
     const users = [];
-    const response = await cognito.listUsers({ UserPoolId: process.env.COGNITO_USER_POOL_ID || '' }).promise();
+    const response = await cognitoClient.send(new ListUsersCommand({ 
+        UserPoolId: process.env.COGNITO_USER_POOL_ID || '' 
+    }));
 
     if (response.Users) {
         response.Users.forEach(user => {
@@ -34,7 +42,7 @@ async function getAllUsers() {
  */
 async function storeUsersInDynamoDB(users) {
     const promises = users.map(user => {
-        return dynamodb.put({
+        return dynamodb.send(new PutCommand({
             TableName: process.env.USER_METADATA_TABLE || '',
             Item: {
                 PK: user.sub,
@@ -46,12 +54,12 @@ async function storeUsersInDynamoDB(users) {
                 OnlineStatus: 'Offline',
                 CurrChatPartnerID: '',
                 QuestionIndex: 0,
-                readyToAdvance: false,
+                ready: false,
                 // connectionId: '',
                 state: 'AWAITING_CONFIRMATION',
                 TTL: Math.floor(Date.now() / 1000) + 3600
             }
-        }).promise();
+        }));
     });
 
     await Promise.all(promises);

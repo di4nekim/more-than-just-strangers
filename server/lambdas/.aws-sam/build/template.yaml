@@ -44,18 +44,14 @@ Resources:
   ConversationsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: ConversationsV2
+      TableName: ConversationsV3
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
         AttributeType: S
-      - AttributeName: SK
-        AttributeType: S
       KeySchema:
       - AttributeName: PK
         KeyType: HASH
-      - AttributeName: SK
-        KeyType: RANGE
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -97,7 +93,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: OnConnectFunction
@@ -145,7 +141,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: OnDisconnectFunction
@@ -193,7 +189,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: SendMessageFunction
@@ -229,6 +225,23 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/sendMessage
+  TypingStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: typingStatus
+      Target:
+        Fn::Sub: integrations/${SendMessageIntegration}
+  TypingStatusPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: SendMessageFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/typingStatus
   SetReadyFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -241,7 +254,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: SetReadyFunction
@@ -289,7 +302,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: StartConversationFunction
@@ -337,7 +350,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: EndConversationFunction
@@ -385,8 +398,10 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
     Metadata:
       SamResourceId: FetchChatHistoryFunction
   FetchChatHistoryIntegration:
@@ -433,8 +448,10 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
     Metadata:
       SamResourceId: GetCurrentStateFunction
   GetCurrentStateIntegration:
@@ -480,11 +497,11 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
-            Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
     Metadata:
       SamResourceId: UpdatePresenceFunction
   UpdatePresenceIntegration:
@@ -530,9 +547,9 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
     Metadata:
       SamResourceId: BatchCognitoUploadFunction
   BatchCognitoUploadIntegration:
@@ -578,11 +595,11 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
-            Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
     Metadata:
       SamResourceId: SyncConversationFunction
   SyncConversationIntegration:

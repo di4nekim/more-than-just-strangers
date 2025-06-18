@@ -5,20 +5,24 @@
  * @param {Object} event - The event object containing the WebSocket connection details and request body
  * @returns {Object} Response object with status code and body
  */
-const AWS = require('aws-sdk');
-const apiGateway = new AWS.ApiGatewayManagementApi({
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
+
+// Configure clients
+const dynamoDbClient = new DynamoDBClient({
+    region: process.env.AWS_REGION || 'us-east-1'
+});
+const dynamoDB = DynamoDBDocumentClient.from(dynamoDbClient);
+
+const apiGateway = new ApiGatewayManagementApiClient({
     endpoint: process.env.WEBSOCKET_API_URL 
-      ? process.env.WEBSOCKET_API_URL.replace("wss://", "").replace("/prod", "")
-      : "localhost:3001"
+      ? process.env.WEBSOCKET_API_URL.replace("wss://", "https://").replace("/prod", "")
+      : "https://localhost:3001"
 });
 
 module.exports.handler = async (event) => {
     try {
-        // Configure DynamoDB DocumentClient for AWS
-        const dynamoDB = new AWS.DynamoDB.DocumentClient({
-            region: process.env.AWS_REGION || 'us-east-1'
-        });
-
         // Handle both production and test environments
         const connectionId = event.requestContext?.connectionId || event.connectionId;
         
@@ -51,7 +55,7 @@ module.exports.handler = async (event) => {
 
         let userMetadata;
         try {
-            userMetadata = await dynamoDB.get(userParams).promise();
+            userMetadata = await dynamoDB.send(new GetCommand(userParams));
             if (!userMetadata.Item) {
                 return { statusCode: 404, body: 'User not found' };
             }
@@ -69,14 +73,14 @@ module.exports.handler = async (event) => {
         const updateParams = {
             TableName: process.env.USER_METADATA_TABLE,
             Key: { PK: `USER#${userId}` },
-            UpdateExpression: 'SET isReady = :ready',
+            UpdateExpression: 'SET ready = :ready',
             ExpressionAttributeValues: {
                 ':ready': true
             }
         };
 
         try {
-            await dynamoDB.update(updateParams).promise();
+            await dynamoDB.send(new UpdateCommand(updateParams));
         } catch (error) {
             console.error('Error updating ready status:', error);
             return { statusCode: 500, body: 'Error updating ready status' };
@@ -90,7 +94,7 @@ module.exports.handler = async (event) => {
 
         let conversation;
         try {
-            conversation = await dynamoDB.get(conversationParams).promise();
+            conversation = await dynamoDB.send(new GetCommand(conversationParams));
             if (!conversation.Item) {
                 return { statusCode: 404, body: 'Conversation not found' };
             }
@@ -110,7 +114,7 @@ module.exports.handler = async (event) => {
 
         let otherUserMetadata;
         try {
-            otherUserMetadata = await dynamoDB.get(otherUserParams).promise();
+            otherUserMetadata = await dynamoDB.send(new GetCommand(otherUserParams));
             if (!otherUserMetadata.Item) {
                 return { statusCode: 404, body: 'Other user not found' };
             }
@@ -120,7 +124,7 @@ module.exports.handler = async (event) => {
         }
 
         // check if both users are ready
-        const bothReady = otherUserMetadata.Item.isReady === true;
+        const bothReady = otherUserMetadata.Item.ready === true;
         if (bothReady) {
             // increment question index for both users
             const updateUserAParams = {
@@ -148,8 +152,8 @@ module.exports.handler = async (event) => {
             let newQuestionIndex;
             try {
                 const [userAResult, userBResult] = await Promise.all([
-                    dynamoDB.update(updateUserAParams).promise(),
-                    dynamoDB.update(updateUserBParams).promise()
+                    dynamoDB.send(new UpdateCommand(updateUserAParams)),
+                    dynamoDB.send(new UpdateCommand(updateUserBParams))
                 ]);
                 newQuestionIndex = userAResult.Attributes.questionIndex;
             } catch (error) {
@@ -166,17 +170,17 @@ module.exports.handler = async (event) => {
             // send WebSocket message to both users if they're connected
             const sendPromises = [conversation.Item.userAId, conversation.Item.userBId]
                 .map(async (userId) => {
-                    const userMetadata = await dynamoDB.get({
+                    const userMetadata = await dynamoDB.send(new GetCommand({
                         TableName: process.env.USER_METADATA_TABLE,
                         Key: { PK: `USER#${userId}` }
-                    }).promise();
+                    }));
 
                     if (userMetadata.Item && userMetadata.Item.connectionId) {
                         try {
-                            await apiGateway.postToConnection({
+                            await apiGateway.send(new PostToConnectionCommand({
                                 ConnectionId: userMetadata.Item.connectionId,
                                 Data: JSON.stringify(messagePayload)
-                            }).promise();
+                            }));
                         } catch (error) {
                             console.error(`Error sending message to user ${userId}:`, error);
                         }

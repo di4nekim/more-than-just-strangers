@@ -1,24 +1,54 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 
-// Configure DynamoDB client for AWS
-const dynamoDB = new AWS.DynamoDB.DocumentClient({
+// Configure DynamoDB client for AWS SDK v3
+const client = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1'
+});
+const dynamoDB = DynamoDBDocumentClient.from(client);
+
+// Configure API Gateway Management API for WebSocket responses
+const apiGateway = new ApiGatewayManagementApiClient({
+    endpoint: process.env.WEBSOCKET_API_URL 
+      ? process.env.WEBSOCKET_API_URL
+      : "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev"
 });
 
 exports.handler = async (event, context) => {
+    const connectionId = event.requestContext.connectionId;
+    
     try {
         console.log('Event:', JSON.stringify(event, null, 2));
         
-        // Extract parameters from the event
-        const {chatId, limit, lastEvaluatedKey} = JSON.parse(event.body);
+        // Parse the WebSocket message body
+        let body;
+        try {
+            body = JSON.parse(event.body);
+        } catch (error) {
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { error: 'Invalid JSON in request body' }
+                })
+            }));
+            return { statusCode: 200 };
+        }
+
+        // Extract parameters from the action/data structure
+        const data = body.data || {};
+        const { chatId, limit = 20, lastEvaluatedKey } = data;
 
         if (!chatId) {
-            return {
-                statusCode: 400,
-                body: JSON.stringify({
-                    message: 'Missing chatId parameter'
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { error: 'Missing chatId parameter' }
                 })
-            };
+            }));
+            return { statusCode: 200 };
         }
 
         // Query messages for the chat
@@ -34,29 +64,51 @@ exports.handler = async (event, context) => {
 
         // Add ExclusiveStartKey if provided
         if (lastEvaluatedKey) {
-            params.ExclusiveStartKey = lastEvaluatedKey;
+            try {
+                params.ExclusiveStartKey = JSON.parse(decodeURIComponent(lastEvaluatedKey));
+            } catch (error) {
+                console.log('Invalid lastEvaluatedKey, ignoring:', error);
+            }
         }
 
-        const result = await dynamoDB.query(params).promise();
+        console.log('Querying messages with params:', params);
+        const result = await dynamoDB.send(new QueryCommand(params));
+        console.log('DynamoDB query result:', result);
         
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                messages: result.Items,
+        // Send the chat history back to the client
+        const response = {
+            action: 'chatHistory',
+            data: {
+                messages: result.Items || [],
                 lastEvaluatedKey: result.LastEvaluatedKey 
                     ? encodeURIComponent(JSON.stringify(result.LastEvaluatedKey))
                     : null,
                 hasMore: !!result.LastEvaluatedKey
-            })
+            }
         };
+        
+        console.log('Sending chat history response:', response);
+        
+        await apiGateway.send(new PostToConnectionCommand({
+            ConnectionId: connectionId,
+            Data: JSON.stringify(response)
+        }));
+        
+        return { statusCode: 200 };
+        
     } catch (error) {
         console.error('Error:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                message: 'Internal server error',
-                error: error.message
-            })
-        };
+        try {
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { error: 'Internal server error', details: error.message }
+                })
+            }));
+        } catch (sendError) {
+            console.error('Error sending error response:', sendError);
+        }
+        return { statusCode: 200 };
     }
 }; 

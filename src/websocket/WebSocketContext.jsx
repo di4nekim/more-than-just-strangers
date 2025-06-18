@@ -13,6 +13,7 @@ import { UserMetadata, ConversationMetadata, PresenceStatusPayload } from './web
  * @property {UserMetadata} userMetadata
  * @property {ConversationMetadata} conversationMetadata
  * @property {function(): void} syncConversation
+ * @property {function(string): void} initializeUserSession - Initialize user session with userId
  * @property {{status: 'online'|'offline'|'away', lastSeen?: string}|null} otherUserPresence
  * @property {Record<string, boolean>} typingStatus
  */
@@ -44,6 +45,7 @@ const WebSocketContext = createContext({
   userMetadata: initialUserMetadata,
   conversationMetadata: initialConversationMetadata,
   syncConversation: () => {},
+  initializeUserSession: () => {},
   otherUserPresence: null,
   typingStatus: {}
 });
@@ -54,6 +56,22 @@ export const useWebSocket = () => useContext(WebSocketContext);
  * @typedef {Object} WebSocketProviderProps
  * @property {React.ReactNode} children
  */
+
+// Helper function to safely convert participants to array (handles both Array and Set formats)
+const getParticipantsAsArray = (participants) => {
+  if (!participants) return [];
+  if (Array.isArray(participants)) return participants;
+  if (participants instanceof Set) return [...participants];
+  // Handle DynamoDB Set format (it comes as an object with values property)
+  if (participants && typeof participants === 'object' && participants.values) {
+    return participants.values;
+  }
+  // Handle string sets from DynamoDB (SS type)
+  if (participants && typeof participants === 'object' && participants.SS) {
+    return participants.SS;
+  }
+  return [];
+};
 
 /**
  * @param {WebSocketProviderProps} props
@@ -74,27 +92,46 @@ export const WebSocketProvider = ({ children }) => {
     }
   };
 
+  // Function to initialize user session - this is what components should call
+  const initializeUserSession = (userId) => {
+    console.log('📍 WebSocketContext: initializeUserSession called with userId:', userId);
+    
+    // Don't fetch if we already have the same user's data
+    if (userMetadata.userId === userId) {
+      console.log('📍 WebSocketContext: User session already initialized for userId:', userId);
+      return;
+    }
+
+    if (wsActions && userId) {
+      console.log('📍 WebSocketContext: Fetching user state for userId:', userId);
+      wsActions.getCurrentState({ userId });
+    }
+  };
+
   useEffect(() => {
     
-    const client = new WebSocketClient(process.env.WEBSOCKET_API_URL);
+    const client = new WebSocketClient(process.env.NEXT_PUBLIC_WEBSOCKET_API_URL);
     
     // Set up message handlers
     client.onMessage('currentState', (payload) => {
+      console.log('📍 WebSocketContext: Received currentState payload:', payload);
       setUserMetadata(payload);
       // Set the user ID in the WebSocket client
       if (payload.userId) {
         client.setUserId(payload.userId);
       }
-      // If we have a chatId, sync the conversation metadata
+      // If we have a chatId, automatically sync the conversation metadata
       if (payload.chatId) {
-        syncConversation();
+        console.log('📍 WebSocketContext: User has active chatId, syncing conversation:', payload.chatId);
+        const actions = createWebSocketActions(client);
+        actions.syncConversation({ chatId: payload.chatId });
       }
     });
 
     client.onMessage('conversationStarted', (payload) => {
       setConversationMetadata({
         chatId: payload.chatId,
-        participants: payload.participants,
+        participants: getParticipantsAsArray(payload.participants),
         lastMessage: null,
         lastUpdated: payload.createdAt,
         endedBy: null,
@@ -124,7 +161,17 @@ export const WebSocketProvider = ({ children }) => {
     });
 
     client.onMessage('conversationSync', (payload) => {
-      setConversationMetadata(payload);
+      console.log('Received conversationSync payload in websocketContext:', payload);
+      // Update conversation metadata with the synced data
+      setConversationMetadata({
+        chatId: payload.chatId,
+        participants: getParticipantsAsArray(payload.participants),
+        lastMessage: payload.lastMessage || null,
+        lastUpdated: payload.lastUpdated || null,
+        endedBy: payload.endedBy || null,
+        endReason: payload.endReason || null,
+        createdAt: payload.createdAt || null
+      });
     });
 
     client.onMessage('typingStatus', (payload) => {
@@ -141,16 +188,24 @@ export const WebSocketProvider = ({ children }) => {
       });
     });
 
+    client.onMessage('error', (payload) => {
+      console.error('📍 WebSocketContext: Received error message:', payload);
+      // You could set an error state here if needed
+      // setError(payload.error);
+    });
+
     client.connect()
       .then(() => {
         setIsConnected(true);
         setWsClient(client);
         const actions = createWebSocketActions(client);
         setWsActions(actions);
-        // Request initial state using the action creator
-        actions.fetchUserMetadata({ userId: '' });
+        // Don't call getCurrentState here - let individual components handle it
+        console.log('📍 WebSocketContext: WebSocket connected, actions created');
       })
-      .catch(console.error);
+      .catch((error) => {
+        console.error('📍 WebSocketContext: Connection error:', error);
+      });
 
     return () => {
       client.disconnect();
@@ -165,6 +220,7 @@ export const WebSocketProvider = ({ children }) => {
       userMetadata, 
       conversationMetadata,
       syncConversation,
+      initializeUserSession,
       otherUserPresence,
       typingStatus
     }}>

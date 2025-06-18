@@ -5,14 +5,16 @@
  * @param {Object} event - The event object containing the WebSocket connection details and request body
  * @returns {Object} Response object with status code and body
  */
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 
 module.exports.handler = async (event) => {
     try {
-        // Configure DynamoDB DocumentClient for AWS
-        const dynamoDB = new AWS.DynamoDB.DocumentClient({
+        // Configure DynamoDB DocumentClient for AWS SDK v3
+        const client = new DynamoDBClient({
             region: process.env.AWS_REGION || 'us-east-1'
         });
+        const dynamoDB = DynamoDBDocumentClient.from(client);
 
         // handle both production and test environments
         const connectionId = event.requestContext?.connectionId || event.connectionId;
@@ -41,17 +43,23 @@ module.exports.handler = async (event) => {
             };
         }
 
-        if (userMetadata.Items && userMetadata.Items.length > 0) {
+        // Check if user exists
+        const userMetadata = await dynamoDB.send(new GetCommand({
+            TableName: process.env.USER_METADATA_TABLE,
+            Key: { PK: `USER#${userId}` }
+        }));
+
+        if (userMetadata.Item) {
             // update user metadata to remove connection
             try {
-                await dynamoDB.update({
+                await dynamoDB.send(new UpdateCommand({
                     TableName: process.env.USER_METADATA_TABLE,
                     Key: { PK: `USER#${userId}` },
                     UpdateExpression: 'REMOVE connectionId SET lastSeen = :timestamp',
                     ExpressionAttributeValues: {
                         ':timestamp': new Date().toISOString()
                     }
-                }).promise();
+                }));
             } catch (error) {
                 console.error('Error updating user metadata:', error);
                 return {
@@ -62,7 +70,7 @@ module.exports.handler = async (event) => {
         } else {
             return {
                 statusCode: 500,
-                body: 'Error updating user metadata'
+                body: 'User not found'
             };
         }
 

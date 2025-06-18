@@ -1,8 +1,11 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
-const dynamoDB = new AWS.DynamoDB.DocumentClient({
+// Configure AWS SDK v3 client
+const dynamoDbClient = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1'
 });
+const dynamoDB = DynamoDBDocumentClient.from(dynamoDbClient);
 
 exports.handler = async (event) => {
     try {
@@ -38,7 +41,7 @@ exports.handler = async (event) => {
             }
         };
 
-        await dynamoDB.put(conversationParams).promise();
+        await dynamoDB.send(new PutCommand(conversationParams));
 
         return {
             statusCode: 200,

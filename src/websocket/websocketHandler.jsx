@@ -36,7 +36,7 @@ export class WebSocketClient {
           this.isConnecting = false;
           resolve();
         };
-
+ 
         this.ws.onclose = () => {
           this.handleDisconnect();
         };
@@ -78,6 +78,7 @@ export class WebSocketClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
     }
+    console.log('Sending WebSocket message:', message);
     this.ws.send(JSON.stringify(message));
   }
 
@@ -93,9 +94,28 @@ export class WebSocketClient {
    * @param {WebSocketMessage} message
    */
   handleMessage(message) {
+    console.log('📍 WebSocketHandler: Received raw WebSocket message:', message);
+    
+    // Handle error messages that might not have a proper action field
+    if (message.error || (message.data && message.data.error)) {
+      console.error('📍 WebSocketHandler: Received error message:', message);
+      return;
+    }
+    
+    // Handle messages that might have missing action field
+    if (!message.action) {
+      console.warn('📍 WebSocketHandler: Message missing action field:', message);
+      return;
+    }
+    
     const handler = this.messageHandlers.get(message.action);
     if (handler) {
-      handler(message.payload);
+      // Check both payload and data fields for compatibility with different message formats
+      const payload = message.payload || message.data;
+      console.log('📍 WebSocketHandler: Calling handler for action:', message.action, 'with payload:', payload);
+      handler(payload);
+    } else {
+      console.warn('📍 WebSocketHandler: No handler found for action:', message.action);
     }
   }
 
