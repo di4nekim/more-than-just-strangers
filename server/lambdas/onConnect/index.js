@@ -5,7 +5,8 @@
  * @param {Object} event - The event object containing the WebSocket connection details
  * @returns {Object} Response object with status code and body
  */
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 
 module.exports.handler = async (event) => {
     // console.log('Lambda triggered with event:', JSON.stringify(event));
@@ -28,19 +29,20 @@ module.exports.handler = async (event) => {
         const tableName = process.env.USER_METADATA_TABLE || 'UserMetadata';
         console.log(`New WebSocket connection established: ${connectionId}`);
 
-        // Configure DynamoDB DocumentClient for AWS
-        const dynamoDB = new AWS.DynamoDB.DocumentClient({
+        // Configure DynamoDB DocumentClient for AWS SDK v3
+        const client = new DynamoDBClient({
             region: process.env.AWS_REGION || 'us-east-1'
         });
+        const dynamoDB = DynamoDBDocumentClient.from(client);
 
         // check if user exists
         const userKey = { PK: `USER#${userId}` };
         console.log('Checking for user with key:', userKey);
         
-        const userExists = await dynamoDB.get({
+        const userExists = await dynamoDB.send(new GetCommand({
             TableName: tableName,
             Key: userKey
-        }).promise();
+        }));
         
         if (!userExists.Item) {
             try {
@@ -51,10 +53,10 @@ module.exports.handler = async (event) => {
                 };
                 console.log('Creating new user:', newUser);
                 
-                await dynamoDB.put({
+                await dynamoDB.send(new PutCommand({
                     TableName: tableName,
                     Item: newUser
-                }).promise();
+                }));
                 
                 return {
                     statusCode: 200,
@@ -73,7 +75,7 @@ module.exports.handler = async (event) => {
             try {
                 console.log('Updating existing user:', userKey);
                 
-                await dynamoDB.update({
+                await dynamoDB.send(new UpdateCommand({
                     TableName: tableName,
                     Key: userKey,
                     UpdateExpression: 'SET connectionId = :connectionId, lastUpdated = :now',
@@ -81,7 +83,7 @@ module.exports.handler = async (event) => {
                         ':connectionId': connectionId,
                         ':now': new Date().toISOString()
                     }
-                }).promise();
+                }));
     
                 return {
                     statusCode: 200,

@@ -49,18 +49,14 @@ Resources:
   ConversationsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: ConversationsV2
+      TableName: ConversationsV3
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
 
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
@@ -104,7 +100,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   OnConnectIntegration:
@@ -143,7 +139,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   OnDisconnectIntegration:
@@ -182,7 +178,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   SendMessageIntegration:
@@ -212,6 +208,22 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/sendMessage
 
+  # Add typingStatus route using the same SendMessage function
+  TypingStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: typingStatus
+      Target: !Sub integrations/${SendMessageIntegration}
+
+  TypingStatusPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SendMessageFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/typingStatus
+
   SetReadyFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -221,7 +233,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   SetReadyIntegration:
@@ -260,7 +272,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   StartConversationIntegration:
@@ -299,7 +311,7 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
 
   EndConversationIntegration:
@@ -338,8 +350,9 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev"
 
   FetchChatHistoryIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -377,8 +390,9 @@ Resources:
       Environment:
         Variables:
           USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV2
+          CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev"
 
   GetCurrentStateIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -415,10 +429,10 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
-          WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev"
 
   UpdatePresenceIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -455,9 +469,9 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
 
   BatchCognitoUploadIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -494,10 +508,10 @@ Resources:
       Role: !GetAtt SharedLambdaRole.Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadata
-          CONVERSATIONS_TABLE: Conversations
-          MESSAGES_TABLE: Messages
-          WEBSOCKET_API_URL: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/"
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+          MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev"
 
   SyncConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration

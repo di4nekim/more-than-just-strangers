@@ -38,11 +38,11 @@ export default function ChatRoom() {
   // Normalize message shape regardless of source
   const normalizeMessage = (message) => {
     return {
-      id: message.id || message.MessageId,
-      sender: message.sender,
-      text: message.text || message.Message,
-      timestamp: message.timestamp || message.Timestamp,
-      readTimestamp: message.ReadTimestamp
+      id: message.id || message.MessageId || message.messageId,
+      sender: message.sender || (message.senderId ? (message.senderId === userId ? 'user' : 'partner') : 'unknown'),
+      text: message.text || message.Message || message.content,
+      timestamp: message.timestamp || message.Timestamp || message.sentAt,
+      readTimestamp: message.ReadTimestamp || message.readTimestamp
     };
   };
 
@@ -56,7 +56,7 @@ export default function ChatRoom() {
   };
 
   // /websocket states
-  const { wsClient, wsActions, isConnected, conversationMetadata, syncConversation, userMetadata } = useWebSocket();
+  const { wsClient, wsActions, isConnected, conversationMetadata, userMetadata, initializeUserSession } = useWebSocket();
   const { updatePresence, otherUserPresence } = usePresenceSystem();
   const { sendTypingStatus, isTyping } = useTypingIndicator();
 
@@ -83,8 +83,52 @@ export default function ChatRoom() {
       ? decodeURIComponent(encodedChatId[0])
       : '';
   
-  const userId = 'DUMMY_USER_ID'; // TODO: Get from auth context
-  const otherUserId = chatId.split('#').find(id => id !== userId) || '';
+  // Extract user ID from chatId (format: userA_userB)
+  // For now, we'll assume we're userA - this should be replaced with actual auth
+  const extractUserIdFromChatId = (chatId) => {
+    if (!chatId) return null;
+    
+    // Split the chatId by underscore to get the two user IDs
+    const parts = chatId.split('_');
+    if (parts.length >= 2) {
+      // For demonstration purposes, we'll use the first user ID
+      // In a real app, this should come from authentication
+      return parts[0];
+    }
+    return null;
+  };
+  
+  const userId = extractUserIdFromChatId(chatId) || 'userA'; // Fallback to 'userA'
+  
+  // Safely compute otherUserId from chatId, but prefer conversation participants when available
+  const getOtherUserIdFromChatId = (chatId, userId) => {
+    if (!chatId) return '';
+    const parts = chatId.split('_');
+    return parts.find(id => id !== userId) || '';
+  };
+
+  // Helper function to safely get participants as array (handles both Array and Set formats)
+  const getParticipantsAsArray = (participants) => {
+    if (!participants) return [];
+    if (Array.isArray(participants)) return participants;
+    if (participants instanceof Set) return [...participants];
+    return [];
+  };
+  
+  // Use conversation participants if available, otherwise fall back to chatId parsing
+  const participantsArray = getParticipantsAsArray(conversationMetadata.participants);
+  const otherUserId = participantsArray.length === 2
+    ? participantsArray.find(id => id !== userId) || ''
+    : getOtherUserIdFromChatId(chatId, userId);
+    
+  // Debug logging
+  console.log('ChatRoom debug:', { 
+    chatId, 
+    userId, 
+    otherUserId, 
+    participants: conversationMetadata.participants 
+  });
+    
   const router = useRouter();
 
   // Add reconnection handler
@@ -93,7 +137,7 @@ export default function ChatRoom() {
     retryInterval: 1000,
     onReconnect: () => {
       // Re-sync conversation after reconnection
-      syncConversation();
+      wsActions.syncConversation({ chatId });
       // Update presence status
       updatePresence('online');
     },
@@ -104,6 +148,12 @@ export default function ChatRoom() {
 
   // sync question index from user metadata
   useEffect(() => {
+    console.log('📍 ChatRoom: questionIndex sync effect triggered:', { 
+      userMetadataQuestionIndex: userMetadata.questionIndex, 
+      currentLocalQuestionIndex: questionIndex,
+      userId,
+      userMetadata
+    });
     if (userMetadata.questionIndex !== undefined) {
       setQuestionIndex(userMetadata.questionIndex);
     }
@@ -115,6 +165,13 @@ export default function ChatRoom() {
   );
   
   const questionText = currentSet?.questions.find(q => q.index === questionIndex)?.text;
+  
+  console.log('📍 ChatRoom: Question calculation:', {
+    questionIndex,
+    currentSet: currentSet?.setNumber,
+    questionText,
+    userMetadataQuestionIndex: userMetadata.questionIndex
+  });
 
   const scrollToBottom = useCallback(() => {
     if (messageEndRef.current) {
@@ -215,7 +272,7 @@ export default function ChatRoom() {
     wsActions.sendReadyToAdvance({
       chatId,
       userId,
-      readyToAdvance: true
+      ready: true
     });
   };
 
@@ -250,25 +307,37 @@ export default function ChatRoom() {
 
   // Initialize WebSocket connection and fetch chat history
   useEffect(() => {
-    if (wsActions) {
-      // Connect and fetch initial data
-      wsActions.connect({ userId });
+    if (wsActions && initializeUserSession && chatId && isConnected) {
+      console.log('📍 ChatRoom: Initializing WebSocket for chatId:', chatId, 'userId:', userId);
+      console.log('📍 ChatRoom: Current userMetadata:', userMetadata);
       
-      // Only fetch user metadata if we don't already have it
-      if (!userMetadata.userId) {
-        wsActions.fetchUserMetadata({ userId });
+      // Initialize user session - the context will handle caching and deduplication
+      console.log('📍 ChatRoom: Calling initializeUserSession with userId:', userId);
+      initializeUserSession(userId);
+      
+      // Only fetch chat history if we have a valid chatId and are connected
+      if (chatId && chatId !== '') {
+        console.log('📍 ChatRoom: Fetching chat history for chatId:', chatId);
+        wsActions.fetchChatHistory({ chatId, limit: 20 });
+        wsActions.syncConversation({ chatId });
+      } else {
+        console.log('📍 ChatRoom: Skipping fetchChatHistory - invalid chatId:', chatId);
       }
       
-      // Fetch chat history and sync conversation
-      wsActions.fetchChatHistory({ chatId, limit: 20 });
-      syncConversation();
       updatePresence('online');
+    } else {
+      console.log('📍 ChatRoom: Skipping initialization - missing dependencies:', {
+        wsActions: !!wsActions,
+        initializeUserSession: !!initializeUserSession,
+        chatId: !!chatId,
+        isConnected
+      });
     }
     return () => {
       cleanup();
       updatePresence('offline');
     };
-  }, [wsActions, userId, chatId]);
+  }, [wsActions, initializeUserSession, userId, chatId, isConnected, updatePresence]);
 
   // Update WebSocket message handlers
   useEffect(() => {
@@ -286,9 +355,20 @@ export default function ChatRoom() {
       });
 
       wsClient.onMessage('chatHistory', (payload) => {
-        const newMessages = payload.messages
+        console.log('Received chatHistory:', payload);
+        
+        // Handle both payload.messages and payload directly containing messages
+        const messages = payload?.messages || payload || [];
+        console.log('Processing chatHistory messages:', messages.length, 'messages');
+        
+        if (!Array.isArray(messages)) {
+          console.warn('ChatHistory messages is not an array:', messages);
+          return;
+        }
+        
+        const newMessages = messages
           .filter(msg => {
-            const messageId = msg.id || msg.MessageId;
+            const messageId = msg.id || msg.MessageId || msg.messageId;
             if (messageId && !messageIdsRef.current.has(messageId)) {
               messageIdsRef.current.add(messageId);
               return true;
@@ -297,9 +377,10 @@ export default function ChatRoom() {
           })
           .map(normalizeMessage);
         
+        console.log('Normalized chatHistory messages:', newMessages);
         setMessages(prev => sortMessagesByTimestamp([...newMessages, ...prev]));
         lastEvaluatedKeyRef.current = payload.lastEvaluatedKey;
-        setHasMoreMessages(payload.hasMore);
+        setHasMoreMessages(payload.hasMore ?? true);
       });
 
       wsClient.onMessage('advanceQuestion', (payload) => {
@@ -319,6 +400,14 @@ export default function ChatRoom() {
       navigateToCongrats();
     }
   }, [conversationMetadata.endedBy, questionIndex, navigateToCongrats, chatId]);
+
+  // Retry fetching chat history when conversation metadata becomes available
+  useEffect(() => {
+    if (wsActions && isConnected && conversationMetadata.chatId && messages.length === 0) {
+      console.log('📍 ChatRoom: Retrying chat history fetch after conversation sync');
+      wsActions.fetchChatHistory({ chatId: conversationMetadata.chatId, limit: 20 });
+    }
+  }, [wsActions, isConnected, conversationMetadata.chatId, messages.length]);
 
   // Handle early chat termination (before chatId is available)
   useEffect(() => {
@@ -340,9 +429,12 @@ export default function ChatRoom() {
 
   // Check if chat exists based on conversation metadata
   useEffect(() => {
+    console.log('Conversation metadata changed:', conversationMetadata);
     if (conversationMetadata.chatId) {
+      console.log('Found conversation, hiding loading screen');
       setIsFindingMatch(false);
     } else {
+      console.log('No conversation metadata, showing loading screen');
       setIsFindingMatch(true);
     }
   }, [conversationMetadata]);
@@ -376,6 +468,17 @@ export default function ChatRoom() {
       {error && (
         <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg">
           {error}
+        </div>
+      )}
+
+      {/* Debug info - only show in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-2 bg-gray-100 text-gray-600 rounded-lg text-xs">
+          <div>Connected: {isConnected ? '✅' : '❌'}</div>
+          <div>Messages: {messages.length}</div>
+          <div>ChatId: {chatId}</div>
+          <div>ConversationId: {conversationMetadata.chatId}</div>
+          <div>UserId: {userId}</div>
         </div>
       )}
 
@@ -413,7 +516,7 @@ export default function ChatRoom() {
         <div ref={messageEndRef} />
       </div>
 
-      {isTyping[otherUserId] && (
+      {isTyping && otherUserId && isTyping[otherUserId] && (
         <div className="text-sm text-gray-500 mb-2">
           Partner is typing...
         </div>
@@ -438,7 +541,7 @@ export default function ChatRoom() {
           onClick={handleReady}
           className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
         >
-          Ready Up
+          Ready For Next Question
         </button>
         
         <button

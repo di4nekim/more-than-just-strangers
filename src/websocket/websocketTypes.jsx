@@ -13,7 +13,7 @@
  * @typedef {Object} ReadyToAdvancePayload
  * @property {string} userId
  * @property {string} chatId
- * @property {boolean} readyToAdvance
+ * @property {boolean} ready
  */
 
 /**
@@ -79,7 +79,7 @@
 /**
  * @typedef {Object} ConversationMetadata
  * @property {string|null} chatId
- * @property {string[]} participants
+ * @property {string[]} participants - Always converted to array on client side, even though it's a Set in DynamoDB
  * @property {{content: string, sentAt: string}|null} lastMessage
  * @property {string|null} lastUpdated
  * @property {string|null} endedBy

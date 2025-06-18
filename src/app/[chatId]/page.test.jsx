@@ -112,7 +112,7 @@ describe('Chat Page E2E Tests', () => {
     },
     conversationMetadata: {
       chatId: null,
-      participants: [],
+      participants: [], // Always an array on client side, even though it's a Set in DynamoDB
       lastMessage: null,
       lastUpdated: null,
       endedBy: null,

@@ -14,7 +14,7 @@ This document summarizes the changes made to pivot from LocalStack-based E2E int
 
 - **Modified:** `server/lambdas/endConversation/__tests__/helpers/testSetup.js`
   - Removed LocalStack endpoint configuration
-  - Updated to use real AWS resources (ConversationsV2, UserMetadataV2, MessagesV2)
+  - Updated to use real AWS resources (ConversationsV3, UserMetadataV2, MessagesV2)
   - Added AWS credentials validation
   - Removed table creation/deletion functions (using existing deployed tables)
 
@@ -100,7 +100,7 @@ npm run test:e2e
 
 ```bash
 AWS_REGION=us-east-1
-CONVERSATIONS_TABLE=ConversationsV2
+CONVERSATIONS_TABLE=ConversationsV3
 USER_METADATA_TABLE=UserMetadataV2
 MESSAGES_TABLE=MessagesV2
 WEBSOCKET_API_URL=wss://your-api-id.execute-api.us-east-1.amazonaws.com/Dev

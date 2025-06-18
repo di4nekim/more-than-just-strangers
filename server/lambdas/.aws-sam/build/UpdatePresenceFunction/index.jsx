@@ -1,16 +1,20 @@
-import { DynamoDB } from 'aws-sdk';
-import { ApiGatewayManagementApi } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 
 // Configure DynamoDB client for local development
 const isLocal = !!process.env.DYNAMODB_ENDPOINT;
-const dynamoDB = new DynamoDB.DocumentClient({
+const dynamoDbClient = new DynamoDBClient({
   region: process.env.AWS_REGION || 'us-east-1',
   endpoint: process.env.DYNAMODB_ENDPOINT || undefined,
-  accessKeyId: isLocal ? "fake" : undefined,
-  secretAccessKey: isLocal ? "fake" : undefined
+  credentials: isLocal ? {
+    accessKeyId: "fake",
+    secretAccessKey: "fake"
+  } : undefined
 });
+const dynamoDB = DynamoDBDocumentClient.from(dynamoDbClient);
 
-const api = new ApiGatewayManagementApi({
+const api = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_API_URL
 });
 
@@ -28,10 +32,10 @@ export const handler = async (event) => {
     }
 
     // Get the conversation to find both participants
-    const conversation = await dynamoDB.get({
+    const conversation = await dynamoDB.send(new GetCommand({
       TableName: process.env.CONVERSATIONS_TABLE,
       Key: { PK: `CHAT#${payload.chatId}` }
-    }).promise();
+    }));
 
     if (!conversation.Item) {
       return {
@@ -42,14 +46,14 @@ export const handler = async (event) => {
 
     // Get both participants' metadata to validate the connection
     const [userAMetadata, userBMetadata] = await Promise.all([
-      dynamoDB.get({
+      dynamoDB.send(new GetCommand({
         TableName: process.env.USER_METADATA_TABLE,
         Key: { PK: `USER#${conversation.Item.userAId}` }
-      }).promise(),
-      dynamoDB.get({
+      })),
+      dynamoDB.send(new GetCommand({
         TableName: process.env.USER_METADATA_TABLE,
         Key: { PK: `USER#${conversation.Item.userBId}` }
-      }).promise()
+      }))
     ]);
 
     let senderId;
@@ -67,7 +71,7 @@ export const handler = async (event) => {
     }
 
     // Update sender's presence in UserMetadata table
-    await dynamoDB.update({
+    await dynamoDB.send(new UpdateCommand({
       TableName: process.env.USER_METADATA_TABLE,
       Key: { PK: `USER#${senderId}` },
       UpdateExpression: 'SET presenceStatus = :status, lastSeen = :lastSeen',
@@ -75,14 +79,14 @@ export const handler = async (event) => {
         ':status': payload.status,
         ':lastSeen': payload.lastSeen || new Date().toISOString()
       }
-    }).promise();
+    }));
 
     const otherUserMetadata =
       conversation.Item.userAId === senderId ? userBMetadata : userAMetadata;
 
     if (otherUserMetadata.Item?.connectionId) {
       try {
-        await api.postToConnection({
+        await api.send(new PostToConnectionCommand({
           ConnectionId: otherUserMetadata.Item.connectionId,
           Data: JSON.stringify({
             action: 'presenceStatus',
@@ -91,7 +95,7 @@ export const handler = async (event) => {
               lastSeen: payload.lastSeen
             }
           })
-        }).promise();
+        }));
       } catch (error) {
         if (error.statusCode === 410) {
           return {

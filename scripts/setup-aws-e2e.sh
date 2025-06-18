@@ -100,7 +100,7 @@ fi
 echo ""
 echo "5. Checking DynamoDB table access..."
 
-TABLES=("ConversationsV2" "UserMetadataV2" "MessagesV2")
+TABLES=("ConversationsV3" "UserMetadataV2" "MessagesV2")
 
 for TABLE in "${TABLES[@]}"; do
     if aws dynamodb describe-table --table-name $TABLE &> /dev/null; then
@@ -132,7 +132,7 @@ cat > $ENV_FILE << EOF
 AWS_REGION=$AWS_REGION
 
 # DynamoDB Table Names
-CONVERSATIONS_TABLE=ConversationsV2
+CONVERSATIONS_TABLE=ConversationsV3
 USER_METADATA_TABLE=UserMetadataV2
 MESSAGES_TABLE=MessagesV2
 
