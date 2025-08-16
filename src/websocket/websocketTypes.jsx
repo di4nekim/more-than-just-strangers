@@ -89,17 +89,20 @@
 
 /**
  * @typedef {Object} WebSocketActions
- * @property {function(ConnectPayload): void} connect
- * @property {function(ReadyToAdvancePayload): void} sendReadyToAdvance
- * @property {function(EndConversationPayload): void} endConversation
- * @property {function(SendMessagePayload): void} sendMessage
- * @property {function(StartConversationPayload): void} startConversation
- * @property {function(FetchChatHistoryPayload): void} fetchChatHistory
- * @property {function(FetchUserMetadataPayload): void} fetchUserMetadata
- * @property {function(SyncConversationPayload): void} syncConversation
- * @property {function(TypingStatusPayload): void} sendTypingStatus
- * @property {function(PresenceStatusPayload): void} updatePresence
+ * @property {function(ConnectPayload): Promise<void>} connect
+ * @property {function(ReadyToAdvancePayload): Promise<void>} sendReadyToAdvance
+ * @property {function(EndConversationPayload): Promise<void>} endConversation
+ * @property {function(SendMessagePayload): Promise<void>} sendMessage
+ * @property {function(StartConversationPayload): Promise<void>} startConversation
+ * @property {function(FetchChatHistoryPayload): Promise<void>} fetchChatHistory
+ * @property {function(FetchUserMetadataPayload): Promise<void>} fetchUserMetadata
+ * @property {function(SyncConversationPayload): Promise<void>} syncConversation
+ * @property {function(TypingStatusPayload): Promise<void>} sendTypingStatus
+ * @property {function(PresenceStatusPayload): Promise<void>} updatePresence
  * @property {function(): void} disconnect
  */
 
-export {}; 
+// Export the types for use in other modules
+export const UserMetadata = {};
+export const ConversationMetadata = {};
+export const PresenceStatusPayload = {}; 

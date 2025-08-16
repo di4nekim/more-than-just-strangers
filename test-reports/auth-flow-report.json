@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-08-06T15:04:35.464Z",
+  "duration": 13543,
+  "summary": {
+    "total": 5,
+    "passed": 0,
+    "failed": 5,
+    "skipped": 0,
+    "successRate": "0.0"
+  },
+  "errors": [
+    {
+      "testFile": "__tests__/auth/full-authentication-flow.test.js",
+      "message": "1 tests failed"
+    },
+    {
+      "testFile": "__tests__/auth/e2e-authentication-flow.test.js",
+      "message": "1 tests failed"
+    },
+    {
+      "testFile": "__tests__/auth/api-routes.test.js",
+      "message": "1 tests failed"
+    },
+    {
+      "testFile": "__tests__/auth/error-scenarios.test.js",
+      "message": "1 tests failed"
+    },
+    {
+      "testFile": "__tests__/auth/auth-monitor.test.js",
+      "message": "1 tests failed"
+    }
+  ],
+  "configuration": {
+    "testFiles": [
+      "__tests__/auth/full-authentication-flow.test.js",
+      "__tests__/auth/e2e-authentication-flow.test.js",
+      "__tests__/auth/api-routes.test.js",
+      "__tests__/auth/error-scenarios.test.js",
+      "__tests__/auth/auth-monitor.test.js"
+    ],
+    "timeout": 30000,
+    "verbose": true,
+    "coverage": false
+  }
+}
