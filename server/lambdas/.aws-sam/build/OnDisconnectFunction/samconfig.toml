@@ -7,11 +7,17 @@ region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
-parameter_overrides = [
-    "FirebaseProjectId=mtjs-70b47",
-    "FirebasePrivateKey=\"-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDcHhfeVcPxGb8U\\nyIcXX0LTampi36HYGlN1I0Fe+tyU3MmYbQKt4bz3bMdG4UTB6OZvWbpMOeE6A6iZ\\njaCWNqnZ/HnagBFwzfuUulAZKxgzOnivndBfo+TcTGFZVO\\nTuC1Gt5ZiACy6Z548g\\novHXLXmGvSSfj53M1k4L+MSOVFHQcaZSEU2u8rxsnNkZhFf1oBVZJEx/8VQyYVSy\\nY4QwN4SZkn+XfERt1ipeSfdBvVVz\\nawL4xkVHQH8D7zzGrFd8sNp8RQ+89WNiAnEj\\nN1UhS3a7bHxVORbJxOcnZc4SpOpBWJhM8vWUMFQWfvkDqGpa79ZKB+wtmTD+xhJS\\nXf9sotlVAg\\nMBAAECggEAD7RO8CQu1WAIn7850itP/XzxZ6n8Zkpki24vPwtHWxCQ\\nioE2iHjbTkzSv+YZDXukGywr7D3R6Z1ytTfjTexK/Hw0pmfuNp3fleogBl\\neug5cn\\nnqH0CKrNDIGfjWvO5IPmuTExCuuhUMYyUjoF5pv+OGR8vSyWLdPZYCXIwj3WU3hy\\nWAHu0ltca3dYabo/LQhgrpm293Vl3DiNl03SXQw/\\nRLJZs7Rw4jYvg5Zrc12vHcbA\\nQDvVYy00B/aUMb0BfYADx1o3l84KD4FPNgSHl2mXwHqpt+pwFzggZAtcTbTMavBa\\nndvmPLy+QhlAlRoenoDD/y\\nt32s/6LHMxKj2qYbVWuQKBgQD+xxit2WSGYoXBIvSl\\nqDgHCuUXGAOL4kEgsLwVml8gQn/bpV2N+FfybGyH/xK1Kl1Usl5mx2mIPPYOPY0A\\n5aNp\\nse6bAeSdz6ivWrUzqtEpQji9HraX62APtlK4CZ7w2p+bCaYpIc3NqQSVvSNW\\nlTjluHo59kZpQziVcLGNJtvP/QKBgQDdLG3eTWwBE+PFhLnjGOJQ\\n2y439ME2NF87\\nOkja2Rmtqvw5wQc7y64q7TN8mposroN2IQ+sSuQUPNTmoXm4C7ZGrkc9AdLJrPBr\\nMOQLz+cYwiXz4PCSPeh4OJlpR6ODIIR6/+\nayfNDgCR6krtmElER4T/3Z8x0EEl34\\nwiWFQ6TSOQKBgQDFPvq6TV3oNIp89kUVo2CNA0BNWsgUGjx1xJ4402TmItW+BQ6j\\nBSuBgbOcrjubiorr\\nMZSoWaY4VYnhiIGLuj2DbL/fvd1y1/wuljlHIO4B1UT8FbUj\\ndJTQVUVBOiGVMozyiMvdeFBO8pWcH+wl8i00nFf0W9gzUlmSSMcNEpKHOQKBgQDc\\nU5Qnbiz3bd7rNusOpg1dytph97o5yzZLBCbrjHYeIUUeK4KPOLoKHT27FTAc7sQa\\n+5hnZDuNRYQ5NAbTJyevhZGF3rkjGtptjci/U569dTrlle\\nFRbcaVbJy22hyzVcNj\\n3GTuzZQueidCmsQpZKJI0Dbr1VnEYp+mXZGPDfG1UQKBgFTV4QVSe4HmFMhxrGRj\\nXCj2QJgHxYUjoV+4HjtvNKsWs8Ww\\nvpWUPWOS9tsRZ4OP01cmvzbSobgctedFHWPF\\n4pxAiawsTTD3wcPLRzEx1S2D+PHaTD+I7uVjS4Q/+AShtadezFn3lJHrc66tCOA8\\njmJRtYbhf0\\n7hHb4DL3rc7YdC\\n-----END PRIVATE KEY-----\\n\"",
-    "FirebaseClientEmail=firebase-adminsdk-fbsvc@mtjs-70b47.iam.gserviceaccount.com"
-]
+
+# NOTE: Real Firebase credentials should be set via environment variables before deployment
+# Example parameter overrides (replace with actual environment variable values):
+# parameter_overrides = [
+#     "FirebaseProjectId=${FIREBASE_PROJECT_ID}",
+#     "FirebasePrivateKey=${FIREBASE_PRIVATE_KEY}",
+#     "FirebaseClientEmail=${FIREBASE_CLIENT_EMAIL}"
+# ]
+
+# SECURITY WARNING: Do not commit real Firebase credentials to version control!
+# Set these via AWS SAM environment variables or parameter store for production deployment
 
 [default.local_invoke.parameters]
 # parameter_overrides removed for AWS deployment

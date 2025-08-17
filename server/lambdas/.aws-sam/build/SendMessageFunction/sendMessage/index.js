@@ -73,13 +73,15 @@ const handlerLogic = async (event) => {
         
         // Configure API Gateway Management API for WebSocket responses
         try {
+            const websocketApiUrl = process.env.WEBSOCKET_API_URL;
+            if (!websocketApiUrl) {
+                throw new Error('WEBSOCKET_API_URL environment variable is required');
+            }
             apiGateway = new ApiGatewayManagementApiClient({
-                endpoint: process.env.WEBSOCKET_API_URL 
-                  ? process.env.WEBSOCKET_API_URL
-                  : "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev"
+                endpoint: websocketApiUrl
             });
             console.log('✓ API Gateway client created successfully');
-            console.log('API Gateway endpoint configured:', process.env.WEBSOCKET_API_URL || "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev");
+            console.log('API Gateway endpoint configured:', websocketApiUrl);
         } catch (error) {
             console.error('CRITICAL: Failed to create API Gateway client:', error);
             throw new Error(`API Gateway client creation failed: ${error.message}`);
@@ -627,6 +629,12 @@ const handlerLogic = async (event) => {
             // if receiver is connected, send message immediately
             if (receiverMetadata.Item.connectionId) {
                 console.log('Receiver is connected, sending message immediately...');
+                console.log('Receiver connection details:', {
+                    connectionId: receiverMetadata.Item.connectionId,
+                    lastConnected: receiverMetadata.Item.lastConnected,
+                    lastSeen: receiverMetadata.Item.lastSeen
+                });
+                
                 try {
                     const messagePayload = {
                         action: 'message',
@@ -645,6 +653,27 @@ const handlerLogic = async (event) => {
                         Data: JSON.stringify(messagePayload)
                     }));
                     console.log('Message sent to receiver successfully');
+                    
+                    // Mark message as delivered (not queued)
+                    console.log('Updating message delivery status...');
+                    try {
+                        await dynamoDB.send(new UpdateCommand({
+                            TableName: process.env.MESSAGES_TABLE,
+                            Key: {
+                                PK: `CHAT#${chatId}`,
+                                SK: `MSG#${messageId}`
+                            },
+                            UpdateExpression: 'SET queued = :queued, deliveredAt = :deliveredAt',
+                            ExpressionAttributeValues: {
+                                ':queued': false,
+                                ':deliveredAt': new Date().toISOString()
+                            }
+                        }));
+                        console.log('Message marked as delivered');
+                    } catch (updateError) {
+                        console.error('Error updating message delivery status:', updateError);
+                    }
+                    
                 } catch (error) {
                     console.error('Error sending message to receiver:', error);
                     console.error('API Gateway error details:', {
@@ -655,6 +684,26 @@ const handlerLogic = async (event) => {
                         errorCode: error.code,
                         errorName: error.name
                     });
+                    
+                    // Check if this is a stale connection ID (common error codes for disconnected clients)
+                    if (error.code === 'GoneException' || error.statusCode === 410) {
+                        console.log('Receiver connection is stale, clearing connection ID...');
+                        try {
+                            await dynamoDB.send(new UpdateCommand({
+                                TableName: process.env.USER_METADATA_TABLE,
+                                Key: { PK: `USER#${receiverId}` },
+                                UpdateExpression: 'REMOVE connectionId',
+                                ConditionExpression: 'connectionId = :staleConnectionId',
+                                ExpressionAttributeValues: {
+                                    ':staleConnectionId': receiverMetadata.Item.connectionId
+                                }
+                            }));
+                            console.log('Stale connection ID cleared from user metadata');
+                        } catch (clearError) {
+                            console.error('Error clearing stale connection ID:', clearError);
+                        }
+                    }
+                    
                     // If we can't send to the receiver, mark the message as queued
                     console.log('Marking message as queued due to delivery failure...');
                     try {
@@ -664,18 +713,29 @@ const handlerLogic = async (event) => {
                                 PK: `CHAT#${chatId}`,
                                 SK: `MSG#${messageId}`
                             },
-                            UpdateExpression: 'SET queued = :queued',
+                            UpdateExpression: 'SET queued = :queued, deliveryError = :error',
                             ExpressionAttributeValues: {
-                                ':queued': true
+                                ':queued': true,
+                                ':error': {
+                                    code: error.code || 'UNKNOWN',
+                                    message: error.message || 'Unknown error',
+                                    timestamp: new Date().toISOString()
+                                }
                             }
                         }));
-                        console.log('Message marked as queued');
+                        console.log('Message marked as queued with error details');
                     } catch (updateError) {
                         console.error('Error updating message queued status:', updateError);
                     }
                 }
             } else {
                 console.log('Receiver not connected, message will remain queued');
+                console.log('Receiver metadata:', {
+                    userId: receiverId,
+                    hasConnectionId: !!receiverMetadata.Item.connectionId,
+                    lastConnected: receiverMetadata.Item.lastConnected,
+                    lastSeen: receiverMetadata.Item.lastSeen
+                });
             }
 
             console.log('About to send confirmation to sender...');
@@ -723,133 +783,34 @@ const handlerLogic = async (event) => {
             return createSuccessResponse(200, { message: 'Message sent successfully' }, action, requestId);
         }
 
-        // Handle typingStatus action
+        // Handle typingStatus action (DEPRECATED)
         if (action === 'typingStatus') {
-            console.log('Processing TYPING_STATUS action for authenticated user:', userId);
+            console.log('DEPRECATED: typingStatus action received - functionality has been temporarily disabled');
+            console.log('Processing DEPRECATED TYPING_STATUS action for authenticated user:', userId);
+            
+            // Basic validation to maintain API compatibility
             const { chatId, isTyping } = data;
-            console.log('Typing status details - User:', userId, 'Chat:', chatId, 'Is typing:', isTyping);
-
-            // Validate required fields
             if (!chatId || typeof isTyping !== 'boolean') {
-                console.log('Invalid typing status data provided');
+                console.log('Invalid typing status data provided (deprecated handler)');
                 const requestId = extractRequestId(event);
                 return handleValidationError(['chatId', 'isTyping'], action, {
-                    operation: 'typing_status_validation',
+                    operation: 'typing_status_validation_deprecated',
                     requiredFields: ['chatId', 'isTyping'],
                     providedFields: Object.keys(data || {}),
-                    fieldErrors: ['chatId', 'isTyping']
+                    fieldErrors: ['chatId', 'isTyping'],
+                    note: 'Typing status functionality is deprecated'
                 });
             }
 
-            // Get conversation to find other participant
-            console.log('Looking up conversation for typing status...');
-            let conversation;
-            try {
-                const conversationResult = await dynamoDB.send(new QueryCommand({
-                    TableName: process.env.CONVERSATIONS_TABLE,
-                    KeyConditionExpression: 'PK = :pk',
-                    ExpressionAttributeValues: {
-                        ':pk': `CHAT#${chatId}`
-                    }
-                }));
-                console.log('Conversation result for typing:', JSON.stringify(conversationResult, null, 2));
-                conversation = conversationResult.Items[0];
-            } catch (error) {
-                console.error('Error getting conversation for typing:', error);
-                return handleDynamoDBError(error, action, {
-                    operation: 'conversation_lookup_typing',
-                    resource: 'conversations',
-                    tableName: process.env.CONVERSATIONS_TABLE,
-                    chatId
-                });
-            }
-
-            if (!conversation) {
-                console.log('Conversation not found for typing status');
-                const requestId = extractRequestId(event);
-                return createErrorResponse(404, 'Conversation not found', action, {
-                    operation: 'conversation_verification_typing',
-                    chatId: chatId,
-                    tableName: process.env.CONVERSATIONS_TABLE
-                }, requestId);
-            }
-
-            // Find the other participant - handle both Array and Set formats
-            let otherUserId;
-            if (Array.isArray(conversation.participants)) {
-                otherUserId = conversation.participants.find(id => id !== userId);
-            } else if (conversation.participants instanceof Set) {
-                otherUserId = [...conversation.participants].find(id => id !== userId);
-            } else {
-                console.log('Invalid participants format in typing status');
-                const requestId = extractRequestId(event);
-                return createErrorResponse(500, 'Invalid participants format', action, {
-                    operation: 'participant_parsing_typing',
-                    participantsType: typeof conversation.participants,
-                    participantsValue: conversation.participants,
-                    chatId: chatId
-                }, requestId);
-            }
-            console.log('Other participant for typing status:', otherUserId);
-            if (!otherUserId) {
-                console.log('Other participant not found in conversation');
-                const requestId = extractRequestId(event);
-                return createErrorResponse(400, 'Other participant not found', action, {
-                    operation: 'participant_identification_typing',
-                    participants: conversation.participants,
-                    currentUserId: userId,
-                    chatId: chatId
-                }, requestId);
-            }
-
-            // Get other user's connection status
-            console.log('Looking up other user connection for typing status...');
-            let otherUserMetadata;
-            try {
-                otherUserMetadata = await dynamoDB.send(new GetCommand({
-                    TableName: process.env.USER_METADATA_TABLE,
-                    Key: { PK: `USER#${otherUserId}` }
-                }));
-                console.log('Other user metadata for typing:', JSON.stringify(otherUserMetadata, null, 2));
-            } catch (error) {
-                console.error('Error getting other user metadata for typing:', error);
-                return handleDynamoDBError(error, action, {
-                    operation: 'other_user_metadata_typing',
-                    resource: 'user_metadata',
-                    tableName: process.env.USER_METADATA_TABLE,
-                    otherUserId
-                });
-            }
-
-            // If other user is connected, send typing status
-            if (otherUserMetadata.Item?.connectionId) {
-                console.log('Other user connected, sending typing status...');
-                try {
-                    const typingPayload = {
-                        action: 'typingStatus',
-                        data: {
-                            userId,
-                            isTyping
-                        }
-                    };
-                    console.log('Typing status payload:', JSON.stringify(typingPayload, null, 2));
-                    
-                    await apiGateway.send(new PostToConnectionCommand({
-                        ConnectionId: otherUserMetadata.Item.connectionId,
-                        Data: JSON.stringify(typingPayload)
-                    }));
-                    console.log('Typing status sent successfully');
-                } catch (error) {
-                    console.error('Error sending typing status:', error);
-                    // Continue execution even if notification fails
-                }
-            } else {
-                console.log('Other user not connected, skipping typing status notification');
-            }
-
-            console.log('Typing status action completed successfully');
+            console.log('Typing status action completed (deprecated - no operation performed)');
             const requestId = extractRequestId(event);
-            return createSuccessResponse(200, { message: 'Typing status sent' }, action, requestId);
+            
+            // Return success to maintain API compatibility but note deprecation
+            return createSuccessResponse(200, { 
+                message: 'Typing status received (deprecated)', 
+                deprecated: true,
+                note: 'Typing status functionality has been temporarily disabled and will be reimplemented in a future update'
+            }, action, requestId);
         }
 
         console.log('Unknown action received:', action);

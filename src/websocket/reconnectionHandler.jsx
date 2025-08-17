@@ -71,9 +71,6 @@ export const useReconnectionHandler = (options = {}) => {
 
       wsClient.connect()
         .then(() => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('ReconnectionHandler: Reconnected successfully');
-          }
           isReconnectingRef.current = false;
           retryCountRef.current = 0;
           if (onReconnect) onReconnect();

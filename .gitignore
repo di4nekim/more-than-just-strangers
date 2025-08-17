@@ -7,5 +7,7 @@ venv/
 myenv/
 dynamodb/data/*
 coverage/
+test-reports/
 # Test environment variables
 .env.test
+test.env.example

@@ -13,7 +13,7 @@ const { getAuth } = require('firebase/auth');
 const admin = require('firebase-admin');
 
 // Configuration
-const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev';
+const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://your-websocket-api.execute-api.us-east-1.amazonaws.com/dev';
 
 /**
  * Test 1: Basic WebSocket Connection (without authentication)

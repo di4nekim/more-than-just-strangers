@@ -73,13 +73,15 @@ const handlerLogic = async (event) => {
         
         // Configure API Gateway Management API for WebSocket responses
         try {
+            const websocketApiUrl = process.env.WEBSOCKET_API_URL;
+            if (!websocketApiUrl) {
+                throw new Error('WEBSOCKET_API_URL environment variable is required');
+            }
             apiGateway = new ApiGatewayManagementApiClient({
-                endpoint: process.env.WEBSOCKET_API_URL 
-                  ? process.env.WEBSOCKET_API_URL
-                  : "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev"
+                endpoint: websocketApiUrl
             });
             console.log('✓ API Gateway client created successfully');
-            console.log('API Gateway endpoint configured:', process.env.WEBSOCKET_API_URL || "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev");
+            console.log('API Gateway endpoint configured:', websocketApiUrl);
         } catch (error) {
             console.error('CRITICAL: Failed to create API Gateway client:', error);
             throw new Error(`API Gateway client creation failed: ${error.message}`);

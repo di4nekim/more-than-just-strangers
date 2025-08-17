@@ -1,35 +1,4 @@
-import boto3
-import os
-from dotenv import load_dotenv
+from .config import dynamodb, TABLE_CONFIGS
+from .utils import create_table_if_not_exists
 
-# Load environment variables from .env.local
-load_dotenv('.env.local')
-
-# Initialize DynamoDB resource with region from environment variable
-dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION'))
-
-# Create the DynamoDB table
-table = dynamodb.create_table(
-    TableName='Connections',
-    KeySchema=[
-        {
-            'AttributeName': 'ConnectionID',
-            'KeyType': 'HASH'  # Partition key
-        }
-    ],
-    AttributeDefinitions=[
-        {
-            'AttributeName': 'ConnectionID',
-            'AttributeType': 'S'  # String
-        }
-    ],
-    ProvisionedThroughput={
-        'ReadCapacityUnits': 5,
-        'WriteCapacityUnits': 5
-    }
-)
-
-# Wait until the table exists
-table.meta.client.get_waiter('table_exists').wait(TableName='Connections')
-
-print(f"Table {table.table_name} created successfully!")
+ConnectionsTable = create_table_if_not_exists(TABLE_CONFIGS['CONNECTIONS'])

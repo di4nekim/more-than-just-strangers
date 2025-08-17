@@ -1,125 +1,8 @@
 /**
- * Enhanced WebSocket Context with REST API Integration
+ * WebSocket Context with REST API Integration
  * 
- * This context provides a unified data layer that manages both REST API operations
- * and WebSocket real-time updates. It handles the complete initialization sequence,
- * message management, and hybrid data loading patterns.
- * 
- * @example Basic Usage in a Component:
- * ```javascript
- * import { useWebSocket } from '@/websocket/WebSocketContext';
- * 
- * function ChatPage() {
- *   const {
- *     initializeUser,
- *     userProfile,
- *     hasActiveChat,
- *     messages,
- *     sendMessageOptimistic,
- *     loadMoreMessages,
- *     initState
- *   } = useWebSocket();
- * 
- *   useEffect(() => {
- *     const userId = getCurrentUserId(); // Your user ID logic
- *     initializeUser(userId);
- *   }, []);
- * 
- *   const handleSendMessage = async (content) => {
- *     try {
- *       await sendMessageOptimistic(content);
- *     } catch (error) {
- *       console.error('Failed to send message:', error);
- *     }
- *   };
- * 
- *   if (initState.isInitializing) {
- *     return <LoadingSpinner />;
- *   }
- * 
- *   return <ChatInterface messages={messages} onSendMessage={handleSendMessage} />;
- * }
- * ```
- * 
- * @example Matchmaking Flow:
- * ```javascript
- * function HomePage() {
- *   const { startNewChat, hasActiveChat, userProfile } = useWebSocket();
- * 
- *   const handleStartChat = async () => {
- *     try {
- *       const result = await startNewChat();
- *       if (result.matched) {
- *         router.push(`/chat/${result.chatId}`);
- *       }
- *     } catch (error) {
- *       console.error('Matchmaking failed:', error);
- *     }
- *   };
- * 
- *   return (
- *     <div>
- *       {hasActiveChat ? <ResumeButton /> : <StartChatButton onClick={handleStartChat} />}
- *     </div>
- *   );
- * }
- * ```
- * 
- * @example Route Protection:
- * ```javascript
- * function ChatRoomPage({ params }) {
- *   const { validateChatAccess, initializeUser } = useWebSocket();
- *   const [hasAccess, setHasAccess] = useState(null);
- * 
- *   useEffect(() => {
- *     const checkAccess = async () => {
- *       const userId = getCurrentUserId();
- *       await initializeUser(userId);
- *       const access = await validateChatAccess(params.chatId);
- *       if (!access) {
- *         router.push('/');
- *       }
- *       setHasAccess(access);
- *     };
- *     checkAccess();
- *   }, [params.chatId]);
- * 
- *   if (hasAccess === null) return <LoadingSpinner />;
- *   if (!hasAccess) return <AccessDenied />;
- *   
- *   return <ChatRoom chatId={params.chatId} />;
- * }
- * ```
- * 
- * @example Message Pagination:
- * ```javascript
- * function MessageList() {
- *   const { messages, loadMoreMessages, isLoadingMessages, hasMoreMessages } = useWebSocket();
- * 
- *   const handleLoadMore = () => {
- *     if (!isLoadingMessages && hasMoreMessages) {
- *       loadMoreMessages();
- *     }
- *   };
- * 
- *   return (
- *     <div>
- *       {hasMoreMessages && (
- *         <button onClick={handleLoadMore} disabled={isLoadingMessages}>
- *           {isLoadingMessages ? 'Loading...' : 'Load More Messages'}
- *         </button>
- *       )}
- *       {messages.map(message => (
- *         <MessageItem 
- *           key={message.id} 
- *           message={message} 
- *           isOptimistic={message.isOptimistic}
- *         />
- *       ))}
- *     </div>
- *   );
- * }
- * ```
+ * Unified data layer managing WebSocket real-time updates and REST API operations.
+ * Handles initialization, message management, and hybrid data loading.
  */
 
 'use client';
@@ -246,27 +129,34 @@ const WebSocketContext = createContext({
 
 export const useWebSocket = () => useContext(WebSocketContext);
 
-/**
- * @typedef {Object} WebSocketProviderProps
- * @property {React.ReactNode} children
- */
-
-// Helper function to safely convert participants to array
 const getParticipantsAsArray = (participants) => {
   if (!participants) return [];
   if (Array.isArray(participants)) return participants;
   if (participants instanceof Set) return [...participants];
-  if (participants && typeof participants === 'object' && participants.values) {
-    return participants.values;
-  }
-  if (participants && typeof participants === 'object' && participants.SS) {
-    return participants.SS;
-  }
+  if (participants?.values) return participants.values;
+  if (participants?.SS) return participants.SS;
   return [];
 };
 
-// Helper function to generate optimistic message ID
 const generateOptimisticId = () => `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+const mergeOptimisticMessages = (previousMessages, fetchedMessages) => {
+  const optimisticMessages = previousMessages.filter(msg => msg.isOptimistic);
+  const allMessages = [...fetchedMessages];
+  
+  optimisticMessages.forEach(optimisticMsg => {
+    const hasConfirmedVersion = fetchedMessages.some(msg => 
+      msg.content === optimisticMsg.content && 
+      msg.senderId === optimisticMsg.senderId &&
+      Math.abs(new Date(msg.timestamp) - new Date(optimisticMsg.timestamp)) < 5000
+    );
+    if (!hasConfirmedVersion) {
+      allMessages.push(optimisticMsg);
+    }
+  });
+  
+  return allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+};
 
 export const WebSocketProvider = ({ children }) => {
   const [wsClient, setWsClient] = useState(null);
@@ -287,29 +177,19 @@ export const WebSocketProvider = ({ children }) => {
     restApiHealthy: true,
     wsConnected: false
   });
-  // Add state to track if Firebase is ready
   const [firebaseReady, setFirebaseReady] = useState(false);
-  // Add state to track matchmaking promise
   const [matchmakingPromise, setMatchmakingPromise] = useState(null);
-  // Add ref for matchmakingPromise to avoid dependency issues in message handlers
   const matchmakingPromiseRef = useRef(null);
-  // Add ref for userMetadata to avoid stale closure issues
   const userMetadataRef = useRef(userMetadata);
-  // Track timeouts for optimistic messages
   const optimisticTimeouts = useRef(new Map());
 
   const messagesRef = useRef(messages);
   const lastMessageTimestamp = useRef(null);
 
-  // Update ref when matchmakingPromise changes
   useEffect(() => {
     matchmakingPromiseRef.current = matchmakingPromise;
-  }, [matchmakingPromise]);
-
-  // Update ref when userMetadata changes
-  useEffect(() => {
     userMetadataRef.current = userMetadata;
-  }, [userMetadata]);
+  }, [matchmakingPromise, userMetadata]);
 
   // Load initial message history via WebSocket
   const loadInitialMessages = useCallback(async (chatId, limit = 50) => {
@@ -321,29 +201,7 @@ export const WebSocketProvider = ({ children }) => {
         
         const fetchedMessages = response.messages || [];
         
-        // Preserve optimistic messages when loading from REST API
-        setMessages(prev => {
-          const optimisticMessages = prev.filter(msg => msg.isOptimistic);
-          console.log('REST API: Preserving optimistic messages:', optimisticMessages);
-          console.log('REST API: Loaded messages:', fetchedMessages);
-          
-          // Combine loaded messages with optimistic messages, avoiding duplicates
-          const allMessages = [...fetchedMessages];
-          optimisticMessages.forEach(optimisticMsg => {
-            // Only add optimistic message if there's no confirmed version already
-            const hasConfirmedVersion = fetchedMessages.some(msg => 
-              msg.content === optimisticMsg.content && 
-              msg.senderId === optimisticMsg.senderId &&
-              Math.abs(new Date(msg.timestamp) - new Date(optimisticMsg.timestamp)) < 5000 // Within 5 seconds
-            );
-            if (!hasConfirmedVersion) {
-              allMessages.push(optimisticMsg);
-            }
-          });
-          
-          // Sort by timestamp to maintain order
-          return allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        });
+        setMessages(prev => mergeOptimisticMessages(prev, fetchedMessages));
         
         setHasMoreMessages(response.hasMore || false);
         
@@ -379,29 +237,7 @@ export const WebSocketProvider = ({ children }) => {
         
         const fetchedMessages = response.messages || [];
         
-        // Preserve optimistic messages when loading from REST API fallback
-        setMessages(prev => {
-          const optimisticMessages = prev.filter(msg => msg.isOptimistic);
-          console.log('REST API Fallback: Preserving optimistic messages:', optimisticMessages);
-          console.log('REST API Fallback: Loaded messages:', fetchedMessages);
-          
-          // Combine loaded messages with optimistic messages, avoiding duplicates
-          const allMessages = [...fetchedMessages];
-          optimisticMessages.forEach(optimisticMsg => {
-            // Only add optimistic message if there's no confirmed version already
-            const hasConfirmedVersion = fetchedMessages.some(msg => 
-              msg.content === optimisticMsg.content && 
-              msg.senderId === optimisticMsg.senderId &&
-              Math.abs(new Date(msg.timestamp) - new Date(optimisticMsg.timestamp)) < 5000 // Within 5 seconds
-            );
-            if (!hasConfirmedVersion) {
-              allMessages.push(optimisticMsg);
-            }
-          });
-          
-          // Sort by timestamp to maintain order
-          return allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        });
+        setMessages(prev => mergeOptimisticMessages(prev, fetchedMessages));
         
         setHasMoreMessages(response.hasMore || false);
         
@@ -437,23 +273,18 @@ export const WebSocketProvider = ({ children }) => {
     wsClient.onMessage('currentState', (data) => {
       console.log('WebSocket: Received currentState response:', data);
       
-      // Defer state updates to prevent render-time updates
-      setTimeout(() => {
-        // Update user metadata with current state
-        setUserMetadata(prev => ({
-          ...prev,
-          userId: data.userId,
-          connectionId: data.connectionId,
-          chatId: data.chatId,
-          ready: data.ready,
-          questionIndex: data.questionIndex,
-          lastSeen: data.lastSeen,
-          createdAt: data.createdAt
-        }));
-        
-        // Update hasActiveChat based on whether user has a chatId
-        setHasActiveChat(!!data.chatId);
-      }, 0);
+      setUserMetadata(prev => ({
+        ...prev,
+        userId: data.userId,
+        connectionId: data.connectionId,
+        chatId: data.chatId,
+        ready: data.ready,
+        questionIndex: data.questionIndex,
+        lastSeen: data.lastSeen,
+        createdAt: data.createdAt
+      }));
+      
+      setHasActiveChat(!!data.chatId);
       
       // If user has an active chat, load the messages
       if (data.chatId && wsActions) {
@@ -480,17 +311,13 @@ export const WebSocketProvider = ({ children }) => {
     wsClient.onMessage('conversationStarted', (data) => {
       console.log('WebSocket: Received conversationStarted response:', data);
       
-      // Defer state updates to prevent render-time updates
-      setTimeout(() => {
-        // Update local state
-        if (data.chatId) {
-          setHasActiveChat(true);
-          setUserMetadata(prev => ({
-            ...prev,
-            chatId: data.chatId
-          }));
-        }
-      }, 0);
+      if (data.chatId) {
+        setHasActiveChat(true);
+        setUserMetadata(prev => ({
+          ...prev,
+          chatId: data.chatId
+        }));
+      }
       
       // Resolve the matchmaking promise if it exists
       if (matchmakingPromiseRef.current) {
@@ -734,18 +561,18 @@ export const WebSocketProvider = ({ children }) => {
     });
 
     wsClient.onMessage('userJoined', (data) => {
-      console.log('📍 WebSocket: User joined:', data);
+      console.log('WebSocket: User joined:', data);
       // Handle user joined events
     });
 
     wsClient.onMessage('userLeft', (data) => {
-      console.log('📍 WebSocket: User left:', data);
+      console.log('WebSocket: User left:', data);
       // Handle user left events
     });
 
     // Handle server errors that might affect optimistic messages
     wsClient.onMessage('error', (data) => {
-      console.log('📍 WebSocket: Received error:', data);
+      console.log('WebSocket: Received error:', data);
       
       // Extract action from error data, with fallback to data.action for backward compatibility
       const action = data?.data?.action || data?.action;
@@ -753,11 +580,11 @@ export const WebSocketProvider = ({ children }) => {
       if (action) {
         switch (action) {
           case 'sendMessage':
-            console.log('📍 WebSocket: Server error for sendMessage action, removing optimistic messages');
+            console.log('WebSocket: Server error for sendMessage action, removing optimistic messages');
             // Remove all optimistic messages since we can't determine which specific one failed
             setMessages(prev => {
               const filtered = prev.filter(msg => !msg.isOptimistic);
-              console.log('📍 WebSocket: Removed optimistic messages due to server error. Remaining messages:', filtered);
+              console.log('WebSocket: Removed optimistic messages due to server error. Remaining messages:', filtered);
               return filtered;
             });
             
@@ -769,26 +596,26 @@ export const WebSocketProvider = ({ children }) => {
             break;
             
           case 'fetchChatHistory':
-            console.log('📍 WebSocket: Server error for fetchChatHistory action:', data.data?.error || data.error);
+            console.log('WebSocket: Server error for fetchChatHistory action:', data.data?.error || data.error);
             // Set loading state to false and show error
             setIsLoadingMessages(false);
             // You could also set an error state here if you want to show it to the user
             break;
             
           default:
-            console.log('📍 WebSocket: Server error for action:', action, 'Error:', data.data?.error || data.error);
+            console.log('WebSocket: Server error for action:', action, 'Error:', data.data?.error || data.error);
             // Handle other action errors as needed
             break;
         }
       } else {
         // Handle errors without action field (backward compatibility)
-        console.log('📍 WebSocket: Received error without action field:', data);
+        console.log('WebSocket: Received error without action field:', data);
         // Set loading state to false for any error
         setIsLoadingMessages(false);
       }
     });
     
-    console.log('📍 WebSocket: Message handlers set up successfully');
+    console.log('WebSocket: Message handlers set up successfully');
   }, [loadInitialMessages, wsActions]); // Remove handlePresenceUpdate from dependencies
 
   // Check for Firebase readiness
@@ -799,7 +626,7 @@ export const WebSocketProvider = ({ children }) => {
         const auth = getAuth();
         
         if (!auth) {
-          console.log('📍 WebSocketProvider: Firebase auth not available, using demo mode');
+          console.log('WebSocketProvider: Firebase auth not available, using demo mode');
           setFirebaseReady(true);
           return;
         }
@@ -816,12 +643,12 @@ export const WebSocketProvider = ({ children }) => {
           checkReady();
         });
         
-        console.log('📍 WebSocketProvider: Firebase is ready');
+        console.log('WebSocketProvider: Firebase is ready');
         setFirebaseReady(true);
       } catch (error) {
-        console.error('📍 WebSocketProvider: Error waiting for Firebase:', error);
+        console.error('WebSocketProvider: Error waiting for Firebase:', error);
         // Set Firebase as ready even if there's an error to prevent blocking
-        console.log('📍 WebSocketProvider: Setting Firebase as ready despite error');
+        console.log('WebSocketProvider: Setting Firebase as ready despite error');
         setFirebaseReady(true);
       }
     };
@@ -831,17 +658,17 @@ export const WebSocketProvider = ({ children }) => {
 
   // Initialize WebSocket client and actions when Firebase is ready
   useEffect(() => {
-    console.log('📍 WebSocketProvider: firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
+    console.log('WebSocketProvider: firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
     
     if (firebaseReady && !wsClient) {
       try {
-        console.log('📍 WebSocketProvider: Initializing WebSocket client...');
+        console.log('WebSocketProvider: Initializing WebSocket client...');
         
         // Validate environment variables
         const wsApiUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL;
         if (!wsApiUrl) {
-          console.warn('📍 WebSocketProvider: NEXT_PUBLIC_WEBSOCKET_API_URL is not configured');
-          console.warn('📍 WebSocket will not be available. Please set NEXT_PUBLIC_WEBSOCKET_API_URL in your environment variables');
+          console.warn('WebSocketProvider: NEXT_PUBLIC_WEBSOCKET_API_URL is not configured');
+          console.warn('WebSocket will not be available. Please set NEXT_PUBLIC_WEBSOCKET_API_URL in your environment variables');
           setInitState(prev => ({ 
             ...prev, 
             error: 'WebSocket API URL not configured - WebSocket features will be disabled' 
@@ -849,31 +676,31 @@ export const WebSocketProvider = ({ children }) => {
           return;
         }
         
-        console.log('📍 WebSocketProvider: Using WebSocket URL:', wsApiUrl);
+        console.log('WebSocketProvider: Using WebSocket URL:', wsApiUrl);
         
         // Create connection state callback
         const onConnectionStateChange = (connected) => {
-          console.log('📍 WebSocket connection state changed:', connected);
-          console.log('📍 WebSocket: Connection details - wsClient:', !!client, 'wsActions:', !!actions);
+          console.log('WebSocket connection state changed:', connected);
+          console.log('WebSocket: Connection details - wsClient:', !!client, 'wsActions:', !!actions);
           setIsConnected(connected);
         };
         
         const client = new WebSocketClient(wsApiUrl, onConnectionStateChange);
-        console.log('📍 WebSocketProvider: WebSocketClient created successfully');
+        console.log('WebSocketProvider: WebSocketClient created successfully');
         
         const actions = createWebSocketActions(client);
-        console.log('📍 WebSocketProvider: WebSocket actions created successfully');
+        console.log('WebSocketProvider: WebSocket actions created successfully');
         
         // Set up message handlers
         setupMessageHandlers(client);
-        console.log('📍 WebSocketProvider: Message handlers set up successfully');
+        console.log('WebSocketProvider: Message handlers set up successfully');
         
         setWsClient(client);
         setWsActions(actions);
         
-        console.log('📍 WebSocketProvider: WebSocket client and actions initialized and set in state');
+        console.log('WebSocketProvider: WebSocket client and actions initialized and set in state');
       } catch (error) {
-        console.error('📍 WebSocketProvider: Failed to initialize WebSocket client:', error);
+        console.error('WebSocketProvider: Failed to initialize WebSocket client:', error);
         setInitState(prev => ({ 
           ...prev, 
           error: `WebSocket initialization failed: ${error.message}` 
@@ -906,19 +733,19 @@ export const WebSocketProvider = ({ children }) => {
     
     // Wait for Firebase to be ready before proceeding
     if (!firebaseReady) {
-      console.log('📍 WebSocketProvider: Waiting for Firebase to be ready before initializing user...');
+      console.log('WebSocketProvider: Waiting for Firebase to be ready before initializing user...');
       return;
     }
     
     // Prevent multiple initializations
     if (initState.isInitializing) {
-      console.log('📍 Initialization already in progress, skipping');
+      console.log('Initialization already in progress, skipping');
       return;
     }
 
     // Check if user is already initialized with the same userId
     if (userMetadata.userId === userId && initState.profileLoaded && !initState.error) {
-      console.log('📍 User already initialized with same userId, skipping');
+      console.log('User already initialized with same userId, skipping');
       return;
     }
 
@@ -948,7 +775,7 @@ export const WebSocketProvider = ({ children }) => {
         if (!signal.aborted) {
           // Wait for WebSocket actions to be available
           if (!wsActions) {
-            console.log('📍 Waiting for WebSocket actions to be initialized...');
+            console.log('Waiting for WebSocket actions to be initialized...');
             // Wait up to 5 seconds for WebSocket actions to be ready
             let attempts = 0;
             while (!wsActions && attempts < 50 && !signal.aborted) {
@@ -966,9 +793,9 @@ export const WebSocketProvider = ({ children }) => {
 
         // Step 3: Get current state from backend via WebSocket
         if (!signal.aborted && wsActions) {
-          console.log('📍 Getting current state from backend via WebSocket...');
+          console.log('Getting current state from backend via WebSocket...');
           await wsActions.getCurrentState({ userId });
-          console.log('📍 getCurrentState request sent');
+          console.log('getCurrentState request sent');
         }
 
         // Step 4: Mark initialization as complete
@@ -983,7 +810,7 @@ export const WebSocketProvider = ({ children }) => {
       } catch (error) {
         if ((error.message && error.message.includes('Firebase is not configured')) || 
             (error.message && error.message.includes('not configured'))) {
-          console.log('📍 Firebase not yet configured, retrying in 1 second...');
+          console.log('Firebase not yet configured, retrying in 1 second...');
           // Retry after a short delay
           setTimeout(() => {
             if (!signal.aborted) {
@@ -1000,7 +827,7 @@ export const WebSocketProvider = ({ children }) => {
 
     } catch (error) {
       if (error.message === 'Initialization cancelled') {
-        console.log('📍 User initialization was cancelled');
+        console.log('User initialization was cancelled');
         return;
       }
       
@@ -1011,7 +838,7 @@ export const WebSocketProvider = ({ children }) => {
         error.message.includes('Firebase authentication timeout') ||
         error.message.includes('Authentication failed')
       )) {
-        console.log('📍 Authentication error during initialization:', error.message);
+        console.log('Authentication error during initialization:', error.message);
         // Don't set this as a permanent error, just wait for authentication
         setTimeout(() => {
           setInitState(prev => ({ 
@@ -1023,7 +850,7 @@ export const WebSocketProvider = ({ children }) => {
         return;
       }
       
-      console.error('📍 Failed to initialize user:', error);
+      console.error('Failed to initialize user:', error);
       setTimeout(() => {
         setInitState(prev => ({ 
           ...prev, 
@@ -1043,12 +870,12 @@ export const WebSocketProvider = ({ children }) => {
           userId: userMetadata.userId, 
           status: 'online' 
         }).catch(error => {
-          console.warn('📍 Heartbeat failed, connection may be stale:', error);
+          console.warn('Heartbeat failed, connection may be stale:', error);
           // If heartbeat fails, try to reconnect
           if (wsActions && userMetadata.userId) {
-            console.log('📍 Attempting to reconnect due to failed heartbeat...');
+            console.log('Attempting to reconnect due to failed heartbeat...');
             wsActions.connect().catch(reconnectError => {
-              console.error('📍 Reconnection failed:', reconnectError);
+              console.error('Reconnection failed:', reconnectError);
             });
           }
         });
@@ -1071,19 +898,19 @@ export const WebSocketProvider = ({ children }) => {
             try {
               const token = await auth.currentUser.getIdToken();
               if (token) {
-                console.log('📍 User is authenticated, initializing user session...');
+                console.log('User is authenticated, initializing user session...');
                 initializeUser(userMetadata.userId);
               } else {
-                console.log('📍 User not fully authenticated yet, waiting...');
+                console.log('User not fully authenticated yet, waiting...');
               }
             } catch (tokenError) {
-              console.log('📍 User authentication not ready yet, waiting...');
+              console.log('User authentication not ready yet, waiting...');
             }
           } else {
-            console.log('📍 No authenticated user yet, waiting for sign-in...');
+            console.log('No authenticated user yet, waiting for sign-in...');
           }
         } catch (error) {
-          console.log('📍 Firebase auth check failed, waiting...');
+          console.log('Firebase auth check failed, waiting...');
         }
       }
     };
@@ -1097,18 +924,18 @@ export const WebSocketProvider = ({ children }) => {
     if (!auth) return;
 
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      console.log('📍 Auth state changed:', user ? 'User signed in' : 'User signed out');
+      console.log('Auth state changed:', user ? 'User signed in' : 'User signed out');
       
       if (user && firebaseReady && userMetadata.userId && !initState.isInitializing && !initState.profileLoaded) {
         try {
           // Verify the user is fully authenticated
           const token = await user.getIdToken();
           if (token) {
-            console.log('📍 User authenticated via auth state change, initializing...');
+            console.log('User authenticated via auth state change, initializing...');
             initializeUser(userMetadata.userId);
           }
         } catch (error) {
-          console.log('📍 User not fully authenticated yet:', error.message);
+          console.log('User not fully authenticated yet:', error.message);
         }
       } else if (!user) {
         // User signed out, reset initialization state
@@ -1143,7 +970,7 @@ export const WebSocketProvider = ({ children }) => {
         setHasMoreMessages(false);
       }
     } catch (error) {
-      console.error('📍 Failed to load more messages:', error);
+      console.error('Failed to load more messages:', error);
     } finally {
       setIsLoadingMessages(false);
     }
@@ -1151,8 +978,8 @@ export const WebSocketProvider = ({ children }) => {
 
   // Send message with optimistic updates
   const sendMessageOptimistic = useCallback(async (content) => {
-    console.log('📍 sendMessageOptimistic: Starting with content:', content);
-    console.log('📍 sendMessageOptimistic: wsActions:', !!wsActions, 'userMetadata.chatId:', userMetadata.chatId);
+    console.log('sendMessageOptimistic: Starting with content:', content);
+    console.log('sendMessageOptimistic: wsActions:', !!wsActions, 'userMetadata.chatId:', userMetadata.chatId);
     
     if (!wsActions || !userMetadata.chatId) {
       throw new Error('WebSocket not ready or no active chat');
@@ -1161,8 +988,8 @@ export const WebSocketProvider = ({ children }) => {
     const messageId = generateOptimisticId();
     const timestamp = new Date().toISOString();
     
-    console.log('📍 sendMessageOptimistic: Generated messageId:', messageId);
-    console.log('📍 sendMessageOptimistic: Generated timestamp:', timestamp);
+    console.log('sendMessageOptimistic: Generated messageId:', messageId);
+    console.log('sendMessageOptimistic: Generated timestamp:', timestamp);
     
     // Create optimistic message
     const optimisticMessage = {
@@ -1173,43 +1000,43 @@ export const WebSocketProvider = ({ children }) => {
       isOptimistic: true
     };
 
-    console.log('📍 sendMessageOptimistic: Created optimistic message:', optimisticMessage);
+    console.log('sendMessageOptimistic: Created optimistic message:', optimisticMessage);
 
     // Add optimistic message to UI immediately
     setMessages(prev => {
-      console.log('📍 sendMessageOptimistic: Adding optimistic message to UI. Previous messages:', prev);
+      console.log('sendMessageOptimistic: Adding optimistic message to UI. Previous messages:', prev);
       const updated = [...prev, optimisticMessage];
-      console.log('📍 sendMessageOptimistic: Updated messages with optimistic:', updated);
+      console.log('sendMessageOptimistic: Updated messages with optimistic:', updated);
       return updated;
     });
 
     // Set up timeout to remove optimistic message if not confirmed within 10 seconds
     const timeoutId = setTimeout(() => {
-      console.warn('📍 sendMessageOptimistic: Timeout reached for message:', messageId);
-      console.warn('📍 sendMessageOptimistic: Checking if message still exists and is optimistic...');
+      console.warn('sendMessageOptimistic: Timeout reached for message:', messageId);
+      console.warn('sendMessageOptimistic: Checking if message still exists and is optimistic...');
       setMessages(prev => {
         const messageExists = prev.some(msg => msg.id === messageId && msg.isOptimistic);
-        console.warn('📍 sendMessageOptimistic: Message exists and is optimistic:', messageExists);
+        console.warn('sendMessageOptimistic: Message exists and is optimistic:', messageExists);
         if (messageExists) {
-          console.log('📍 sendMessageOptimistic: Removing optimistic message due to timeout:', messageId);
+          console.log('sendMessageOptimistic: Removing optimistic message due to timeout:', messageId);
           const filtered = prev.filter(msg => msg.id !== messageId);
-          console.log('📍 sendMessageOptimistic: Messages after timeout removal:', filtered);
+          console.log('sendMessageOptimistic: Messages after timeout removal:', filtered);
           return filtered;
         } else {
-          console.log('📍 sendMessageOptimistic: Message was already confirmed or does not exist, no removal needed');
+          console.log('sendMessageOptimistic: Message was already confirmed or does not exist, no removal needed');
         }
         return prev;
       });
       // Clean up timeout reference
       optimisticTimeouts.current.delete(messageId);
-      console.warn('📍 sendMessageOptimistic: Timeout cleanup completed for message:', messageId);
+      console.warn('sendMessageOptimistic: Timeout cleanup completed for message:', messageId);
     }, 10000); // 10 second timeout
 
     // Store timeout reference
     optimisticTimeouts.current.set(messageId, timeoutId);
 
     try {
-      console.log('📍 sendMessageOptimistic: Sending message via WebSocket...');
+      console.log('sendMessageOptimistic: Sending message via WebSocket...');
       // Send message via WebSocket
       await wsActions.sendMessage({
         chatId: userMetadata.chatId,
@@ -1219,20 +1046,20 @@ export const WebSocketProvider = ({ children }) => {
         sentAt: timestamp
       });
 
-      console.log('📍 sendMessageOptimistic: Message sent successfully, waiting for confirmation from backend');
+      console.log('sendMessageOptimistic: Message sent successfully, waiting for confirmation from backend');
       // The message will be confirmed via the 'messageConfirmed' WebSocket action
       // No need to mark it as confirmed here
     } catch (error) {
-      console.error('📍 sendMessageOptimistic: Error sending message:', error);
+      console.error('sendMessageOptimistic: Error sending message:', error);
       // Clear the timeout since we're handling the error
       clearTimeout(timeoutId);
       optimisticTimeouts.current.delete(messageId);
       
       // Remove optimistic message on error
       setMessages(prev => {
-        console.log('📍 sendMessageOptimistic: Removing optimistic message due to error. Previous messages:', prev);
+        console.log('sendMessageOptimistic: Removing optimistic message due to error. Previous messages:', prev);
         const filtered = prev.filter(msg => msg.id !== messageId);
-        console.log('📍 sendMessageOptimistic: Messages after error removal:', filtered);
+        console.log('sendMessageOptimistic: Messages after error removal:', filtered);
         return filtered;
       });
       throw error;
@@ -1249,7 +1076,7 @@ export const WebSocketProvider = ({ children }) => {
       await wsActions.startConversation({ userId: userProfile.userId });
       return { success: true };
     } catch (error) {
-      console.error('📍 Failed to start new chat:', error);
+      console.error('Failed to start new chat:', error);
       throw error;
     }
   }, [wsActions, userProfile?.userId]);
@@ -1267,7 +1094,7 @@ export const WebSocketProvider = ({ children }) => {
         endReason: 'user_ended'
       });
     } catch (error) {
-      console.error('📍 Failed to end chat:', error);
+      console.error('Failed to end chat:', error);
       throw error;
     }
   }, [wsActions, userProfile?.userId, userMetadata.chatId]);
@@ -1278,11 +1105,11 @@ export const WebSocketProvider = ({ children }) => {
       const response = await apiClient.validateChatAccess(chatId);
       return response.hasAccess || false;
     } catch (error) {
-      console.error('📍 Failed to validate chat access:', error);
+      console.error('Failed to validate chat access:', error);
       
       // Fallback: Check if user has this chat in their metadata
       if (userMetadata.chatId === chatId) {
-        console.log('📍 Falling back to local metadata for chat validation');
+        console.log('Falling back to local metadata for chat validation');
         return true;
       }
       
@@ -1295,52 +1122,52 @@ export const WebSocketProvider = ({ children }) => {
     if (!userId) return;
 
     try {
-      console.log('📍 initializeWebSocketConnection: Starting...');
-      console.log('📍 Current connection state - wsActions:', !!wsActions, 'isConnected:', isConnected);
-      console.log('📍 firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
+      console.log('initializeWebSocketConnection: Starting...');
+      console.log('Current connection state - wsActions:', !!wsActions, 'isConnected:', isConnected);
+      console.log('firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
       
       // Check if Firebase is configured before making API calls
       const auth = getAuth();
       if (!auth.currentUser) {
-        console.error('📍 initializeWebSocketConnection: No authenticated user found');
+        console.error('initializeWebSocketConnection: No authenticated user found');
         throw new Error('No authenticated user');
       }
 
-      console.log('📍 initializeWebSocketConnection: Firebase user found:', auth.currentUser.uid);
+      console.log('initializeWebSocketConnection: Firebase user found:', auth.currentUser.uid);
 
-      console.log('📍 Initializing WebSocket connection...');
-      console.log('📍 wsActions available:', !!wsActions);
+      console.log('Initializing WebSocket connection...');
+      console.log('wsActions available:', !!wsActions);
       
       // Initialize WebSocket connection
       if (wsActions) {
-        console.log('📍 Calling wsActions.connect...');
+        console.log('Calling wsActions.connect...');
         // Let the WebSocketClient handle authentication automatically
         await wsActions.connect();
-        console.log('📍 wsActions.connect completed');
+        console.log('wsActions.connect completed');
         
         // After connection is established, get current state from backend
-        console.log('📍 Getting current state from backend...');
+        console.log('Getting current state from backend...');
         await wsActions.getCurrentState({ userId });
-        console.log('📍 getCurrentState request sent');
+        console.log('getCurrentState request sent');
         
         // The connection state is now handled by the onConnectionStateChange callback
         // No need to manually check isConnected here since it's updated via the callback
-        console.log('📍 WebSocket connection established successfully');
+        console.log('WebSocket connection established successfully');
         
         // Set up connection heartbeat to ensure we stay connected
-        console.log('📍 Setting up connection heartbeat...');
+        console.log('Setting up connection heartbeat...');
         setupConnectionHeartbeat();
         
       } else {
-        console.warn('📍 wsActions not available for WebSocket connection');
-        console.warn('📍 This might be a timing issue - waiting for initialization...');
+        console.warn('wsActions not available for WebSocket connection');
+        console.warn('This might be a timing issue - waiting for initialization...');
         throw new Error('WebSocket actions not initialized');
       }
       
       setInitState(prev => ({ ...prev, wsConnected: true }));
-      console.log('📍 WebSocket connection initialized successfully');
+      console.log('WebSocket connection initialized successfully');
     } catch (error) {
-      console.error('📍 Failed to initialize WebSocket connection:', error);
+      console.error('Failed to initialize WebSocket connection:', error);
       setInitState(prev => ({ 
         ...prev, 
         wsConnected: false,
@@ -1359,92 +1186,25 @@ export const WebSocketProvider = ({ children }) => {
     };
   }, [wsClient]);
 
-  // Legacy function for backward compatibility
-  const syncConversation = useCallback(async () => {
-    if (wsActions && userMetadata.chatId) {
-      await wsActions.syncConversation({ chatId: userMetadata.chatId });
-    }
-  }, [wsActions, userMetadata.chatId]);
 
-  // Legacy function for backward compatibility
-  const initializeUserSession = useCallback(async (userId) => {
-    if (userMetadata.userId === userId) return;
-    if (wsActions && userId) {
-      await wsActions.getCurrentState({ userId });
-    }
-  }, [wsActions, userMetadata.userId]);
 
-  // State synchronization with conflict resolution
-  const handleStateConflict = useCallback((restData, wsData, dataType) => {
-    const restTimestamp = new Date(restData.timestamp || restData.lastUpdated || 0);
-    const wsTimestamp = new Date(wsData.timestamp || wsData.lastUpdated || 0);
-    
-    // Always prefer WebSocket data if it's more recent
-    if (wsTimestamp > restTimestamp) {
-      console.log(`📍 Using WebSocket data for ${dataType} (more recent)`);
-      return wsData;
-    }
-    
-    // Use REST data if WebSocket data is stale
-    console.log(`📍 Using REST data for ${dataType} (WebSocket data stale)`);
-    return restData;
-  }, []);
 
-  // Enhanced error handling with exponential backoff
-  const handleInitializationError = useCallback((error, retryCallback) => {
-    setInitState(prev => {
-      const newRetryCount = prev.retryCount + 1;
-      
-      if (newRetryCount <= prev.maxRetries) {
-        console.log(`📍 Retrying initialization (${newRetryCount}/${prev.maxRetries})`);
-        
-        // Exponential backoff retry
-        setTimeout(() => {
-          retryCallback();
-        }, 1000 * Math.pow(2, newRetryCount - 1));
-        
-        return {
-          ...prev,
-          error: error.message,
-          retryCount: newRetryCount
-        };
-      }
-      
-      // Max retries reached
-      return {
-        ...prev,
-        isInitializing: false,
-        error: `Initialization failed after ${prev.maxRetries} attempts: ${error.message}`,
-        retryCount: newRetryCount
-      };
-    });
-  }, []);
 
-  // Cache invalidation strategy
   const invalidateCache = useCallback(async (dataType) => {
-    console.log(`📍 Invalidating cache for ${dataType}`);
-    
     switch (dataType) {
       case 'messages':
-        // Re-fetch messages from REST API
         if (userMetadata.chatId) {
           loadInitialMessages(userMetadata.chatId);
         }
         break;
       case 'userProfile':
-        // Re-fetch user profile
         apiClient.getCurrentUserProfile()
-          .then(profile => setUserProfile(profile))
+          .then(setUserProfile)
           .catch(console.error);
         break;
       case 'chatContext':
-        // Re-sync conversation state
         if (wsActions && userMetadata.chatId) {
-          try {
-            await wsActions.syncConversation({ chatId: userMetadata.chatId });
-          } catch (error) {
-            console.error('📍 Failed to sync conversation during cache invalidation:', error);
-          }
+          wsActions.syncConversation({ chatId: userMetadata.chatId }).catch(console.error);
         }
         break;
     }
@@ -1454,20 +1214,20 @@ export const WebSocketProvider = ({ children }) => {
   useEffect(() => {
     const handleOnline = () => {
       setNetworkStatus(prev => ({ ...prev, isOnline: true }));
-      console.log('📍 Network back online, attempting reconnection');
+      console.log('Network back online, attempting reconnection');
       
       // Only attempt to reconnect if not already connected and not already connecting
       if (!isConnected && wsClient && !wsClient.isConnecting) {
-        console.log('📍 Attempting WebSocket reconnection after network recovery');
+        console.log('Attempting WebSocket reconnection after network recovery');
         wsClient.connect().catch(console.error);
       } else {
-        console.log('📍 WebSocket already connected or connecting, skipping reconnection');
+        console.log('WebSocket already connected or connecting, skipping reconnection');
       }
     };
     
     const handleOffline = () => {
       setNetworkStatus(prev => ({ ...prev, isOnline: false }));
-      console.log('📍 Network offline detected');
+      console.log('Network offline detected');
     };
     
     if (typeof window !== 'undefined') {
@@ -1516,10 +1276,7 @@ export const WebSocketProvider = ({ children }) => {
       sendMessageOptimistic,
       validateChatAccess,
       resetInitialization,
-      invalidateCache,
-      // Legacy functions for backward compatibility
-      syncConversation,
-      initializeUserSession
+      invalidateCache
     }}>
       {children}
     </WebSocketContext.Provider>

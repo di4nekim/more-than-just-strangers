@@ -102,7 +102,4 @@
  * @property {function(): void} disconnect
  */
 
-// Export the types for use in other modules
-export const UserMetadata = {};
-export const ConversationMetadata = {};
-export const PresenceStatusPayload = {}; 
+ 

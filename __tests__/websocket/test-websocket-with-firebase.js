@@ -1,13 +1,13 @@
 const WebSocket = require('ws');
 
-// Firebase configuration from .env.local
+// Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyAWwk2D5TRAK-7G-BnFeW0UZQ9kDcDpswg",
-  authDomain: "mtjs-70b47.firebaseapp.com",
-  projectId: "mtjs-70b47",
-  storageBucket: "mtjs-70b47.firebasestorage.app",
-  messagingSenderId: "319505755372",
-  appId: "1:319505755372:web:de17a7eafd1d8e94bc49c9"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase (this would normally be done in the browser)
@@ -17,7 +17,7 @@ console.log('Firebase Config:', {
   projectId: firebaseConfig.projectId ? '✅ Set' : '❌ Missing'
 });
 
-const wsUrl = 'wss://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev';
+const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://your-websocket-api.execute-api.us-east-1.amazonaws.com/dev';
 
 console.log('Testing WebSocket with Firebase Authentication');
 console.log('URL:', wsUrl);

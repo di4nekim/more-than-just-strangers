@@ -305,8 +305,8 @@ export const setupAuthTests = () => {
   // Mock window.location
   global.window = {
     location: {
-      origin: 'http://localhost:3000',
-      href: 'http://localhost:3000',
+      origin: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+      href: process.env.NEXTAUTH_URL || 'http://localhost:3000',
       pathname: '/',
       search: '',
       hash: ''

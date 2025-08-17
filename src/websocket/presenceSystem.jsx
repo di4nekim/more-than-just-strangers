@@ -37,13 +37,7 @@ export const usePresenceSystem = () => {
 
     const sendPresenceUpdate = async () => {
       try {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('PresenceSystem: Sending debounced presence update:', {
-            userId: userMetadata.userId,
-            chatId: userMetadata.chatId,
-            status: 'online'
-          });
-        }
+
         
         await wsActions.updatePresence({
           chatId: userMetadata.chatId,
@@ -51,15 +45,10 @@ export const usePresenceSystem = () => {
           status: debouncedStatus
         });
         
-        // Update the last sent values
         lastSentRef.current = currentValues;
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log('PresenceSystem: Debounced presence update sent successfully');
-        }
       } catch (error) {
         console.warn('Failed to send presence update:', error);
-        // Don't throw - presence updates are not critical
+
       }
     };
 
@@ -72,30 +61,17 @@ export const usePresenceSystem = () => {
       // Send current status when data becomes available
       const sendCurrentStatus = async () => {
         try {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('PresenceSystem: Sending initial presence update:', {
-              userId: userMetadata.userId,
-              chatId: userMetadata.chatId,
-              status: 'online'
-            });
-          }
-          
           await wsActions.updatePresence({
             chatId: userMetadata.chatId,
             userId: userMetadata.userId,
             status: localStatus
           });
           
-          // Update the last sent values
           lastSentRef.current = {
             status: localStatus,
             userId: userMetadata.userId,
             chatId: userMetadata.chatId
           };
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('PresenceSystem: Initial presence update sent successfully');
-          }
         } catch (error) {
           console.warn('Failed to send initial presence update:', error);
         }
@@ -113,14 +89,6 @@ export const usePresenceSystem = () => {
     const hasRequiredData = wsActions && userMetadata.chatId && userMetadata.userId;
     
     if (!hasRequiredData) {
-      // Only log warning in development mode and provide more detailed info
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('PresenceSystem: Cannot update presence - missing required data', {
-          userId: userMetadata.userId,
-          chatId: userMetadata.chatId,
-          hasWsActions: !!wsActions
-        });
-      }
       return;
     }
 

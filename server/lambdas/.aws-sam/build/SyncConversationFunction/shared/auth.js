@@ -11,6 +11,7 @@ const { createErrorResponse, extractAction, extractRequestId } = require('./erro
  * @returns {Promise<Object>} Decoded token payload
  */
 const validateFirebaseToken = async (token) => {
+
     try {
         console.log('🔥 FIREBASE: Starting token validation');
         console.log('🔥 FIREBASE: Token length:', token ? token.length : 'no token');

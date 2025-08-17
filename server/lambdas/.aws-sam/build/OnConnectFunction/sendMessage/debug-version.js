@@ -32,8 +32,12 @@ exports.debugHandler = async (event, context) => {
 
         // Test 3: API Gateway Management API
         console.log('=== TESTING API GATEWAY SETUP ===');
+        const websocketApiUrl = process.env.WEBSOCKET_API_URL;
+        if (!websocketApiUrl) {
+            throw new Error('WEBSOCKET_API_URL environment variable is required');
+        }
         const apiGateway = new ApiGatewayManagementApiClient({
-            endpoint: process.env.WEBSOCKET_API_URL || "https://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev"
+            endpoint: websocketApiUrl
         });
         console.log('API Gateway client created successfully');
 

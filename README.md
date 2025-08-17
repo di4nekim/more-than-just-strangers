@@ -1,12 +1,13 @@
 # more-than-just-strangers
+
 ––– a websocket application that puts the 36 questions for falling in love to the test.
 
-## techstack
+## Techstack
+
 - React
 - Node.js
 - Next.js
 - DynamoDB
-- AWS API Gateway (WebSockets)
+- AWS API Gateway (WebSocket API)
 - AWS Lambda
-- AWS Cognito
-- DynamoDB
+- Firebase Auth

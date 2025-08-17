@@ -6,7 +6,7 @@
 import WebSocket from 'ws';
 
 // Configuration
-const WEBSOCKET_URL = 'wss://82hp8bmge8.execute-api.us-east-1.amazonaws.com/Dev';
+const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://your-websocket-api.execute-api.us-east-1.amazonaws.com/dev';
 
 console.log('Testing WebSocket Connection');
 console.log('URL:', WEBSOCKET_URL);

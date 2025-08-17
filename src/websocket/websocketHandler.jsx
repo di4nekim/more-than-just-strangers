@@ -1,57 +1,42 @@
-/**
- * @typedef {Object} WebSocketMessage
- * @property {string} action
- * @property {any} [payload]
- * @property {any} [data]
- */
 
 import { getAuth } from 'firebase/auth';
 
 export class WebSocketClient {
-  /**
-   * @param {string} wsUrl - Base WebSocket URL (will be enhanced with token)
-   * @param {function(boolean)} onConnectionStateChange - Callback for connection state changes
-   */
+
   constructor(wsUrl, onConnectionStateChange = null) {
     this.baseWsUrl = wsUrl;
     this.ws = null;
     this.isConnecting = false;
-    this.connectionPromise = null; // Add connection promise to prevent multiple simultaneous connections
+    this.connectionPromise = null;
     this.reconnectTimeout = null;
     this.messageHandlers = new Map();
     this.userId = null;
-    this.errorCount = new Map(); // Track error frequencies
-    this.lastErrorTime = new Map(); // Track last error time for throttling
-    this.lastSentAction = null; // Track last action sent
-    this.sentActionHistory = []; // Keep history of recent actions
+    this.errorCount = new Map();
+    this.lastErrorTime = new Map();
+    this.lastSentAction = null;
+    this.sentActionHistory = [];
     this.authRetryCount = 0;
     this.maxAuthRetries = 3;
     this.onConnectionStateChange = onConnectionStateChange;
     this.isConnected = false;
-    
-    // Listen for Firebase auth state changes
     this.auth = getAuth();
     this.authUnsubscribe = this.auth.onAuthStateChanged((user) => {
       this.handleAuthStateChange(user);
     });
   }
 
-  /**
-   * Handle Firebase auth state changes
-   */
+
   handleAuthStateChange(user) {
     if (!user) {
-      // User signed out, disconnect WebSocket
+
       this.disconnect();
     } else {
-      // User signed in, reset auth retry count
+
       this.authRetryCount = 0;
     }
   }
 
-  /**
-   * Get authenticated WebSocket URL
-   */
+
   async getAuthenticatedWebSocketUrl() {
     try {
       const user = this.auth.currentUser;
@@ -395,10 +380,7 @@ export class WebSocketClient {
     }
   }
 
-  /**
-   * @param {string} action
-   * @param {function(any): void} handler
-   */
+
   onMessage(action, handler) {
     this.messageHandlers.set(action, handler);
   }
