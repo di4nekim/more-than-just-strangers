@@ -1,49 +1,15 @@
-import boto3
-from botocore.exceptions import ClientError
 import uuid
 import datetime
+from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Attr
-import os
-from dotenv import load_dotenv
+from .config import dynamodb, TABLE_CONFIGS
+from .utils import create_table_if_not_exists
 
-# Load environment variables from .env.local
-load_dotenv('.env.local')
+MessageQueue = create_table_if_not_exists(TABLE_CONFIGS['MESSAGE_QUEUE'])
 
-# Initialize DynamoDB resource with region from environment variable
-dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION'))
-TABLE_NAME = "MessageQueue"
-
-try:
-    # Create MessageQueue table if it doesn't exist
-    table = dynamodb.create_table(
-        TableName=TABLE_NAME,
-        KeySchema=[
-            {'AttributeName': 'messageId', 'KeyType': 'HASH'},
-        ],
-        AttributeDefinitions=[
-            {'AttributeName': 'messageId', 'AttributeType': 'S'},
-        ],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': 5,
-            'WriteCapacityUnits': 5
-        }
-    )
-    # wait until table exists before proceeding
-    table.meta.client.get_waiter('table_exists').wait(TableName=TABLE_NAME)
-    print(f"Table {table.table_name} created successfully!")
-except ClientError as e:
-    if e.response['Error']['Code'] == 'ResourceInUseException':
-        print("Table already exists!")
-    else:
-        print("Unexpected error:", e)
-
-# Reference to the MessageQueue table
-message_queue_table = dynamodb.Table(TABLE_NAME)
-
-# Function to add a message to the queue
 def add_message_to_queue(chatId, senderId, receiverId, message):
     try:
-        response = message_queue_table.put_item(
+        response = MessageQueue.put_item(
             Item={
                 'messageId': str(uuid.uuid4()),
                 'chatId': chatId,
@@ -56,14 +22,13 @@ def add_message_to_queue(chatId, senderId, receiverId, message):
         )
         return response
     except ClientError as e:
-        print(e.response['Error']['Message'])
+        raise
 
-# Function to fetch undelivered messages for a user
 def fetch_undelivered_messages(receiverId):
     try:
-        response = message_queue_table.scan(
+        response = MessageQueue.scan(
             FilterExpression=Attr('receiverId').eq(receiverId) & Attr('delivered').eq(False)
         )
         return response['Items']
     except ClientError as e:
-        print(e.response['Error']['Message']) 
+        raise

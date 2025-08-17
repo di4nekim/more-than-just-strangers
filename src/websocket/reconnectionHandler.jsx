@@ -1,11 +1,12 @@
 import { useWebSocket } from './WebSocketContext';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 /**
  * @typedef {Object} ReconnectionOptions
  * @property {number} [maxRetries]
  * @property {number} [retryInterval]
  * @property {function(): void} [onReconnect]
+ * @property {function(): void} [onMaxRetriesExceeded]
  */
 
 /**
@@ -16,39 +17,100 @@ export const useReconnectionHandler = (options = {}) => {
   const {
     maxRetries = 5,
     retryInterval = 1000,
-    onReconnect
+    onReconnect,
+    onMaxRetriesExceeded
   } = options;
 
-  const handleReconnect = useCallback(() => {
-    if (!wsClient) return;
+  // Add refs to track reconnection state
+  const isReconnectingRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef(null);
 
-    let retryCount = 0;
+  const handleReconnect = useCallback(() => {
+    if (!wsClient || isReconnectingRef.current) {
+      console.log('ReconnectionHandler: Already reconnecting or no client available');
+      return;
+    }
+
+    if (retryCountRef.current >= maxRetries) {
+      console.error('ReconnectionHandler: Max reconnection attempts reached');
+      isReconnectingRef.current = false;
+      if (onMaxRetriesExceeded) {
+        onMaxRetriesExceeded();
+      }
+      return;
+    }
+
+    if (isConnected) {
+      console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
+      isReconnectingRef.current = false;
+      if (onReconnect) onReconnect();
+      return;
+    }
+
+    isReconnectingRef.current = true;
+    retryCountRef.current = 0;
+
     const attemptReconnect = () => {
-      if (retryCount >= maxRetries) {
-        console.error('Max reconnection attempts reached');
+      if (retryCountRef.current >= maxRetries) {
+        console.error('ReconnectionHandler: Max reconnection attempts reached');
+        isReconnectingRef.current = false;
+        if (onMaxRetriesExceeded) {
+          onMaxRetriesExceeded();
+        }
+        return;
+      }
+
+      // Check if already connected before attempting reconnection
+      if (isConnected) {
+        console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
+        isReconnectingRef.current = false;
+        if (onReconnect) onReconnect();
         return;
       }
 
       wsClient.connect()
         .then(() => {
-          console.log('Reconnected successfully');
+          isReconnectingRef.current = false;
+          retryCountRef.current = 0;
           if (onReconnect) onReconnect();
         })
         .catch((error) => {
-          console.error('Reconnection attempt failed:', error);
-          retryCount++;
-          setTimeout(attemptReconnect, retryInterval);
+          console.error('ReconnectionHandler: Reconnection attempt failed:', error);
+          retryCountRef.current++;
+          isReconnectingRef.current = false;
+          
+          // Only schedule next attempt if we haven't reached max retries
+          if (retryCountRef.current < maxRetries) {
+            retryTimeoutRef.current = setTimeout(attemptReconnect, retryInterval);
+          } else {
+            if (onMaxRetriesExceeded) {
+              onMaxRetriesExceeded();
+            }
+          }
         });
     };
 
     attemptReconnect();
-  }, [wsClient, maxRetries, retryInterval, onReconnect]);
+  }, [wsClient, maxRetries, retryInterval, onReconnect, onMaxRetriesExceeded, isConnected]);
 
   useEffect(() => {
-    if (!isConnected && wsClient) {
+    // Only attempt reconnection if not connected and not already reconnecting
+    if (!isConnected && wsClient && !isReconnectingRef.current) {
+      console.log('ReconnectionHandler: Connection lost, starting reconnection attempts');
       handleReconnect();
     }
   }, [isConnected, wsClient, handleReconnect]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      isReconnectingRef.current = false;
+    };
+  }, []);
 
   return {
     handleReconnect

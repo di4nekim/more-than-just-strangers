@@ -12,62 +12,69 @@ import {
   PresenceStatusPayload
 } from './websocketTypes';
 
-/**
- * @typedef {Object} WebSocketActions
- * @property {function(ReadyToAdvancePayload): void} sendReadyToAdvance
- * @property {function(EndConversationPayload): void} endConversation
- * @property {function(SendMessagePayload): void} sendMessage
- * @property {function(StartConversationPayload): void} startConversation
- * @property {function(FetchChatHistoryPayload): void} fetchChatHistory
- * @property {function(FetchUserMetadataPayload): void} getCurrentState
- * @property {function(SyncConversationPayload): void} syncConversation
- * @property {function(TypingStatusPayload): void} sendTypingStatus
- * @property {function(PresenceStatusPayload): void} updatePresence
- * @property {function(): void} disconnect
- */
 
-/**
- * @param {WebSocketClient} wsClient
- * @returns {WebSocketActions}
- */
 export const createWebSocketActions = (wsClient) => ({
-  sendReadyToAdvance: (payload) => {
-    wsClient.send({ action: 'setReady', data: payload });
+  connect: async () => {
+    try {
+      await wsClient.connect();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await wsClient.send({ action: 'connect', data: {} });
+    } catch (error) {
+      console.error('Failed to establish WebSocket connection or update connection ID:', error);
+      throw error;
+    }
   },
 
-  endConversation: (payload) => {
-    wsClient.send({ action: 'endConversation', data: payload });
+  sendReadyToAdvance: async (payload) => {
+    await wsClient.send({ action: 'setReady', data: payload });
   },
 
-  sendMessage: (payload) => {
-    wsClient.send({ action: 'sendMessage', data: payload });
+  endConversation: async (payload) => {
+    await wsClient.send({ action: 'endConversation', data: payload });
   },
 
-  startConversation: (payload) => {
-    wsClient.send({ action: 'startConversation', data: payload });
+  sendMessage: async (payload) => {
+    await wsClient.send({ action: 'sendMessage', data: payload });
   },
 
-  fetchChatHistory: (payload) => {
-    wsClient.send({ action: 'fetchChatHistory', data: payload });
+  startConversation: async (payload) => {
+    await wsClient.send({ action: 'startConversation', data: payload });
   },
 
-  getCurrentState: (payload) => {
-    wsClient.send({ action: 'getCurrentState', data: payload });
+  fetchChatHistory: async (payload) => {
+    await wsClient.send({ action: 'fetchChatHistory', data: payload });
   },
 
-  syncConversation: (payload) => {
-    wsClient.send({ action: 'syncConversation', data: payload });
+  getCurrentState: async (payload) => {
+    await wsClient.send({ action: 'getCurrentState', data: payload });
   },
 
-  sendTypingStatus: (payload) => {
-    wsClient.send({ action: 'typingStatus', data: payload });
+  syncConversation: async (payload) => {
+    await wsClient.send({ action: 'syncConversation', data: payload });
   },
 
-  updatePresence: (payload) => {
-    wsClient.send({ action: 'updatePresence', data: payload });
+  /**
+   * @deprecated No-op function for API compatibility.
+   */
+  sendTypingStatus: async (payload) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('sendTypingStatus WebSocket action is deprecated and has been disabled.');
+    }
+
+    return Promise.resolve();
+  },
+
+  updatePresence: async (payload) => {
+    await wsClient.send({ action: 'updatePresence', data: payload });
+  },
+
+  setReady: async (payload) => {
+    await wsClient.send({ action: 'setReady', data: payload });
   },
 
   disconnect: () => {
     wsClient.disconnect();
   }
-}); 
+});
+
+export const WebSocketActions = createWebSocketActions; 

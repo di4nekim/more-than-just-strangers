@@ -1,19 +1,22 @@
 # more-than-just-strangers
+
 ––– a websocket application that puts the 36 questions for falling in love to the test.
 
-## techstack
+## Techstack
+
 - React
 - Node.js
 - Next.js
 - DynamoDB
-- AWS API Gateway (WebSockets)
+- AWS API Gateway (WebSocket API)
 - AWS Lambda
-- AWS Cognito
+- Firebase Auth
 - AWS SAM
 - DynamoDB Local + Docker
 
 ## scope of functions and features
-- real-time chatrooms (via Websocketse)
+- real-time chatrooms (via websockets)
 - message queueing
 - persistent chat history
-- federated login (via AWS Cognito)
+- scalable matchmaking queue
+- google federated login (via Firebase Auth)

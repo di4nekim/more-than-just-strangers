@@ -52,6 +52,33 @@ Resources:
       KeySchema:
       - AttributeName: PK
         KeyType: HASH
+  MatchmakingQueueTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: MatchmakingQueue-Dev
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: status
+        AttributeType: S
+      - AttributeName: joinedAt
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: StatusIndex
+        KeySchema:
+        - AttributeName: status
+          KeyType: HASH
+        - AttributeName: joinedAt
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -84,7 +111,7 @@ Resources:
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: onConnect/index.handler
       CodeUri: OnConnectFunction
       Role:
         Fn::GetAtt:
@@ -95,6 +122,12 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: OnConnectFunction
   OnConnectIntegration:
@@ -120,6 +153,7 @@ Resources:
       RouteKey: $connect
       Target:
         Fn::Sub: integrations/${OnConnectIntegration}
+      AuthorizationType: NONE
   OnConnectPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -128,11 +162,11 @@ Resources:
         Ref: OnConnectFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/$connect
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
   OnDisconnectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: onDisconnect/index.handler
       CodeUri: OnDisconnectFunction
       Role:
         Fn::GetAtt:
@@ -143,6 +177,12 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: OnDisconnectFunction
   OnDisconnectIntegration:
@@ -180,7 +220,7 @@ Resources:
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: sendMessage/index.handler
       CodeUri: SendMessageFunction
       Role:
         Fn::GetAtt:
@@ -191,6 +231,14 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: SendMessageFunction
   SendMessageIntegration:
@@ -245,7 +293,7 @@ Resources:
   SetReadyFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: setReady/index.handler
       CodeUri: SetReadyFunction
       Role:
         Fn::GetAtt:
@@ -256,6 +304,15 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          MATCHMAKING_QUEUE_TABLE: MatchmakingQueue-Dev
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: SetReadyFunction
   SetReadyIntegration:
@@ -293,7 +350,7 @@ Resources:
   StartConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: startConversation/index.handler
       CodeUri: StartConversationFunction
       Role:
         Fn::GetAtt:
@@ -304,6 +361,15 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          MATCHMAKING_QUEUE_TABLE: MatchmakingQueue-Dev
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: StartConversationFunction
   StartConversationIntegration:
@@ -341,7 +407,7 @@ Resources:
   EndConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: endConversation/index.handler
       CodeUri: EndConversationFunction
       Role:
         Fn::GetAtt:
@@ -352,6 +418,14 @@ Resources:
           USER_METADATA_TABLE: UserMetadataV2
           CONVERSATIONS_TABLE: ConversationsV3
           MESSAGES_TABLE: MessagesV2
+          WEBSOCKET_API_URL:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: EndConversationFunction
   EndConversationIntegration:
@@ -389,7 +463,7 @@ Resources:
   FetchChatHistoryFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: fetchChatHistory/index.handler
       CodeUri: FetchChatHistoryFunction
       Role:
         Fn::GetAtt:
@@ -402,6 +476,12 @@ Resources:
           MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: FetchChatHistoryFunction
   FetchChatHistoryIntegration:
@@ -439,7 +519,7 @@ Resources:
   GetCurrentStateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: getCurrentState/index.handler
       CodeUri: GetCurrentStateFunction
       Role:
         Fn::GetAtt:
@@ -452,6 +532,12 @@ Resources:
           MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: GetCurrentStateFunction
   GetCurrentStateIntegration:
@@ -489,7 +575,7 @@ Resources:
   UpdatePresenceFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: updatePresence/index.handler
       CodeUri: UpdatePresenceFunction
       Role:
         Fn::GetAtt:
@@ -502,6 +588,12 @@ Resources:
           MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: UpdatePresenceFunction
   UpdatePresenceIntegration:
@@ -536,58 +628,10 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn:
         Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/updatePresence
-  BatchCognitoUploadFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: index.handler
-      CodeUri: BatchCognitoUploadFunction
-      Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
-      Environment:
-        Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
-    Metadata:
-      SamResourceId: BatchCognitoUploadFunction
-  BatchCognitoUploadIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId:
-        Ref: WebSocketApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri:
-        Fn::Sub:
-        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
-        - Region:
-            Ref: AWS::Region
-          LambdaArn:
-            Fn::GetAtt:
-            - BatchCognitoUploadFunction
-            - Arn
-  BatchCognitoUploadRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId:
-        Ref: WebSocketApi
-      RouteKey: batchCognitoUpload
-      Target:
-        Fn::Sub: integrations/${BatchCognitoUploadIntegration}
-  BatchCognitoUploadPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName:
-        Ref: BatchCognitoUploadFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/batchCognitoUpload
   SyncConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: index.handler
+      Handler: syncConversation/index.handler
       CodeUri: SyncConversationFunction
       Role:
         Fn::GetAtt:
@@ -600,6 +644,12 @@ Resources:
           MESSAGES_TABLE: MessagesV2
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+          FIREBASE_PROJECT_ID:
+            Ref: FirebaseProjectId
+          FIREBASE_PRIVATE_KEY:
+            Ref: FirebasePrivateKey
+          FIREBASE_CLIENT_EMAIL:
+            Ref: FirebaseClientEmail
     Metadata:
       SamResourceId: SyncConversationFunction
   SyncConversationIntegration:
@@ -643,3 +693,16 @@ Outputs:
     Description: WebSocket API ID for E2E testing
     Value:
       Ref: WebSocketApi
+Parameters:
+  FirebaseProjectId:
+    Type: String
+    Description: Firebase Project ID for authentication
+    Default: ''
+  FirebasePrivateKey:
+    Type: String
+    Description: Firebase Private Key for service account authentication
+    Default: ''
+  FirebaseClientEmail:
+    Type: String
+    Description: Firebase Client Email for service account authentication
+    Default: ''

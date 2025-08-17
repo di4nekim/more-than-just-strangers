@@ -1,0 +1,15 @@
+# Exclude unnecessary files from SAM packaging
+node_modules/
+*.log
+*.zip
+.env*
+.DS_Store
+.git/
+.gitignore
+README.md
+test-*.js
+diagnose-*.js
+events/
+__tests__/
+coverage/
+.aws-sam/ 

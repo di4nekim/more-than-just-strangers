@@ -81,15 +81,6 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["UpdatePresenceFunction"]
 
-[function_build_definitions.452b1d8d-6467-404c-a5b7-673ee5151bed]
-codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/batchCognitoUpload"
-runtime = "nodejs20.x"
-architecture = "x86_64"
-handler = "index.handler"
-manifest_hash = ""
-packagetype = "Zip"
-functions = ["BatchCognitoUploadFunction"]
-
 [function_build_definitions.f58dc2d8-a940-4191-8356-546774c007e5]
 codeuri = "/Users/Diane/Desktop/mtjs/more-than-just-strangers/server/lambdas/syncConversation"
 runtime = "nodejs20.x"

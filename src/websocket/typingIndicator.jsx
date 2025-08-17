@@ -1,24 +1,27 @@
 import { useWebSocket } from './WebSocketContext';
 import { useCallback } from 'react';
 
+/**
+ * @deprecated Typing indicator functionality disabled for API compatibility.
+ * Will be reimplemented in future update.
+ */
 export const useTypingIndicator = () => {
-  const { wsActions, userMetadata, typingStatus } = useWebSocket();
+  const { typingStatus } = useWebSocket();
 
   /**
-   * @param {boolean} isTyping
+   * @deprecated No-op function for API compatibility.
+   * @param {boolean} isTyping - Ignored
    */
-  const sendTypingStatus = (isTyping) => {
-    if (!wsActions || !userMetadata.userId || !userMetadata.chatId) return;
+  const sendTypingStatus = useCallback(async (isTyping) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('sendTypingStatus is deprecated and has been disabled. Typing status will not be sent.');
+    }
 
-    wsActions.sendTypingStatus({
-      userId: userMetadata.userId,
-      chatId: userMetadata.chatId,
-      isTyping
-    });
-  };
+    return Promise.resolve();
+  }, []);
 
   return {
-    typingStatus,
+    typingStatus: {},
     sendTypingStatus
   };
 }; 
