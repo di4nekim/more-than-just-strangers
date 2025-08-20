@@ -7,6 +7,6 @@ architecture = "x86_64"
 handler = "onConnect/index.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["OnConnectFunction", "OnDisconnectFunction", "SendMessageFunction", "SetReadyFunction", "StartConversationFunction", "EndConversationFunction", "FetchChatHistoryFunction", "GetCurrentStateFunction", "UpdatePresenceFunction", "SyncConversationFunction"]
+functions = ["OnConnectFunction", "AuthenticateMessageFunction", "OnDisconnectFunction", "SendMessageFunction", "SetReadyFunction", "StartConversationFunction", "EndConversationFunction", "FetchChatHistoryFunction", "GetCurrentStateFunction", "UpdatePresenceFunction", "SyncConversationFunction"]
 
 [layer_build_definitions]

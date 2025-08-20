@@ -1,0 +1,1 @@
+{"statusCode":200,"body":"{\"message\":\"Cleanup completed successfully\",\"summary\":{\"totalUsersScanned\":8,\"totalUsersWithChatIds\":8,\"totalOrphanedChatIds\":0,\"totalFixedUsers\":0,\"totalErrors\":0,\"executionTimeMs\":681}}"}

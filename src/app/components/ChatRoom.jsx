@@ -12,6 +12,7 @@ import { usePresenceSystem } from '../../websocket/presenceSystem';
 import { useTypingIndicator } from '../../websocket/typingIndicator';
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
+import { logChatIdInfo, normalizeChatId, validateChatIdFormat, sanitizeChatId } from '../../lib/chatIdUtils';
 
 export default function ChatRoom({ chatId: propChatId }) {
   const [error, setError] = useState(null);
@@ -19,6 +20,7 @@ export default function ChatRoom({ chatId: propChatId }) {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [chatAccessValidated, setChatAccessValidated] = useState(false);
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [queuedMessageNotification, setQueuedMessageNotification] = useState(null);
 
   const { user, isAuthenticated, loading: authLoading } = useFirebaseAuth();
   const router = useRouter();
@@ -41,7 +43,10 @@ export default function ChatRoom({ chatId: propChatId }) {
     sendMessageOptimistic,
     loadMoreMessages,
     validateChatAccess,
-    endChat
+    endChat,
+    retryFailedMessage,
+    checkMessageConfirmation,
+    fetchQueuedMessages
   } = useWebSocket();
 
   const { updatePresence, setLocalStatus } = usePresenceSystem();
@@ -55,6 +60,23 @@ export default function ChatRoom({ chatId: propChatId }) {
 
   const { chatId: encodedChatId } = useParams();
   const chatId = propChatId || (encodedChatId ? decodeURIComponent(Array.isArray(encodedChatId) ? encodedChatId[0] : encodedChatId) : '');
+  
+  // Log chat ID information for debugging
+  useEffect(() => {
+    if (chatId) {
+      logChatIdInfo(chatId, 'ChatRoom');
+      
+      // Validate chat ID format
+      const validation = validateChatIdFormat(chatId);
+      if (!validation.isValid) {
+        console.error('ChatRoom: Invalid chat ID format:', validation.error);
+        setError(`Invalid chat ID format: ${validation.error}`);
+      } else {
+        // Clear any previous validation errors
+        setError(null);
+      }
+    }
+  }, [chatId]);
   
   const userId = user?.uid || 'userA';
 
@@ -149,6 +171,14 @@ export default function ChatRoom({ chatId: propChatId }) {
             return;
           }
           setChatAccessValidated(true);
+          
+          // Fetch any queued messages that were sent while user was offline
+          if (fetchQueuedMessages) {
+            console.log('ChatRoom: Fetching queued messages after chat initialization...');
+            setTimeout(() => {
+              fetchQueuedMessages();
+            }, 2000); // Small delay to ensure WebSocket is fully connected
+          }
         }
         
         setLocalStatus('online');
@@ -162,13 +192,21 @@ export default function ChatRoom({ chatId: propChatId }) {
     if (!authLoading && isAuthenticated()) {
       initializeAndValidate();
     }
-  }, [userId, chatId, authLoading, isAuthenticated, initializeUser, validateChatAccess, setLocalStatus, router]);
+  }, [userId, chatId, authLoading, isAuthenticated, initializeUser, validateChatAccess, setLocalStatus, router, fetchQueuedMessages]);
 
   useEffect(() => {
     if (isConnected && userMetadata.userId && userMetadata.chatId) {
       setLocalStatus('online');
+      
+      // Fetch any queued messages when connection is established
+      if (fetchQueuedMessages && chatAccessValidated) {
+        console.log('ChatRoom: Fetching queued messages after WebSocket connection...');
+        setTimeout(() => {
+          fetchQueuedMessages();
+        }, 1000); // Small delay to ensure connection is fully established
+      }
     }
-  }, [isConnected, userMetadata.userId, userMetadata.chatId, setLocalStatus]);
+  }, [isConnected, userMetadata.userId, userMetadata.chatId, setLocalStatus, fetchQueuedMessages, chatAccessValidated]);
 
   useReconnectionHandler({
     maxRetries: 5,
@@ -176,12 +214,24 @@ export default function ChatRoom({ chatId: propChatId }) {
     onReconnect: async () => {
       if (wsActions && chatId) {
         try {
+          console.log('ChatRoom: Attempting to sync conversation after reconnection...');
           await wsActions.syncConversation({ chatId });
+          console.log('ChatRoom: Conversation sync successful after reconnection');
         } catch (error) {
-          console.warn('Failed to sync conversation after reconnection:', error);
+          console.warn('ChatRoom: Failed to sync conversation after reconnection:', error);
+          // Don't show error to user - sync failures are often expected during reconnection
+          // The conversation will be synced when the user navigates or when other events trigger sync
         }
       }
       setLocalStatus('online');
+      
+      // Fetch any queued messages after reconnection
+      if (fetchQueuedMessages && chatAccessValidated) {
+        console.log('ChatRoom: Fetching queued messages after reconnection...');
+        setTimeout(() => {
+          fetchQueuedMessages();
+        }, 2000); // Delay to ensure reconnection is fully established
+      }
     },
     onMaxRetriesExceeded: () => {
       setError('Connection lost. Please refresh the page to reconnect.');
@@ -370,6 +420,26 @@ export default function ChatRoom({ chatId: propChatId }) {
       scrollToBottom();
     }
   }, [messages.length, scrollToBottom]);
+
+  // Listen for queued messages and show notifications
+  useEffect(() => {
+    const queuedMessages = messages.filter(msg => msg.isQueued);
+    if (queuedMessages.length > 0) {
+      const latestQueuedMessage = queuedMessages[queuedMessages.length - 1];
+      setQueuedMessageNotification({
+        message: `You received ${queuedMessages.length} message${queuedMessages.length > 1 ? 's' : ''} while offline`,
+        count: queuedMessages.length,
+        timestamp: latestQueuedMessage.timestamp
+      });
+      
+      // Auto-hide notification after 5 seconds
+      const timer = setTimeout(() => {
+        setQueuedMessageNotification(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
 
   useEffect(() => {
     const chatContainer = chatContainerRef.current;
@@ -562,6 +632,88 @@ export default function ChatRoom({ chatId: propChatId }) {
           </div>
         )}
 
+        {/* Debug Section - Only show in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mx-4 mb-4 p-3 bg-gray-100 border border-gray-300 rounded-lg">
+            <div className="text-sm text-gray-700 mb-2">
+              <strong>🔧 Debug Info:</strong>
+            </div>
+            <div className="text-xs text-gray-600 space-y-1">
+              <div>
+                <strong>WebSocket:</strong> {isConnected ? '✅ Connected' : '❌ Disconnected'} | 
+                <strong> Client:</strong> {wsClient ? '✅' : '❌'} | 
+                <strong> Actions:</strong> {wsActions ? '✅' : '❌'}
+              </div>
+              <div>
+                <strong>User:</strong> {userMetadata.userId || 'N/A'} | 
+                <strong> Chat:</strong> {userMetadata.chatId || 'N/A'}
+              </div>
+              <div>
+                <strong>Messages:</strong> {messages.length} | 
+                <strong> Optimistic:</strong> {messages.filter(m => m.isOptimistic).length} | 
+                <strong> Failed:</strong> {messages.filter(m => m.isFailed).length} | 
+                <strong> Queued:</strong> {messages.filter(m => m.isQueued).length}
+              </div>
+              <div>
+                <strong>Unique IDs:</strong> {new Set(messages.map(m => m.id)).size} | 
+                <strong> Last Update:</strong> {new Date().toLocaleTimeString()}
+              </div>
+              <div className="border-t pt-1 mt-1 text-blue-600">
+                <strong>🚨 WebSocket Debug:</strong> 
+                <span id="ws-debug-info" className="ml-2">
+                  Raw: <span id="ws-raw-count">-</span> | 
+                  Messages: <span id="ws-message-actions">-</span> | 
+                  Added: <span id="ws-messages-added">-</span> | 
+                  Filtered: <span id="ws-messages-filtered">-</span>
+                </span>
+              </div>
+              <div className="text-xs text-gray-500">
+                <strong>Recent Message IDs:</strong> {messages.slice(-3).map(m => m.id.slice(-8)).join(', ')}
+              </div>
+            </div>
+            {messages.filter(m => m.isOptimistic).length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-600">Optimistic Messages:</div>
+                {messages.filter(m => m.isOptimistic).map(msg => (
+                  <div key={msg.id} className="flex items-center space-x-2 text-xs">
+                    <span className="bg-yellow-200 px-2 py-1 rounded">
+                      {msg.content.substring(0, 20)}...
+                    </span>
+                    <button
+                      onClick={() => checkMessageConfirmation(msg.id)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Check Confirmation
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Queued Message Notification */}
+        {queuedMessageNotification && (
+          <div className="mx-4 mb-4 p-3 bg-orange-100 border border-orange-300 text-orange-800 rounded-lg animate-pulse">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">{queuedMessageNotification.message}</span>
+              </div>
+              <button
+                onClick={() => setQueuedMessageNotification(null)}
+                className="text-orange-600 hover:text-orange-800"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Messages Container */}
         <div 
           ref={chatContainerRef}
@@ -601,10 +753,44 @@ export default function ChatRoom({ chatId: propChatId }) {
                           <span className={`${bgColor} text-white text-xs px-2 py-[3px] rounded`}>
                             {formatTime(message.timestamp)}
                           </span>
+                          {message.isQueued && (
+                            <span className="bg-orange-500 text-white text-xs px-2 py-[3px] rounded animate-pulse">
+                              QUEUED
+                            </span>
+                          )}
+                          {message.isOptimistic && (
+                            <span className="bg-yellow-500 text-white text-xs px-2 py-[3px] rounded animate-pulse">
+                              SENDING...
+                            </span>
+                          )}
+                          {message.isFailed && (
+                            <div className="flex items-center space-x-2">
+                              <span className="bg-red-500 text-white text-xs px-2 py-[3px] rounded">
+                                FAILED
+                              </span>
+                              <button
+                                onClick={() => retryFailedMessage(message.id)}
+                                className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-[3px] rounded transition-colors"
+                                title="Retry sending message"
+                              >
+                                RETRY
+                              </button>
+                            </div>
+                          )}
+                          {message.isRetrying && (
+                            <span className="bg-blue-500 text-white text-xs px-2 py-[3px] rounded animate-pulse">
+                              RETRYING...
+                            </span>
+                          )}
                         </div>
                         <div className={`${textColor} leading-tight text-sm`}>
                           {message.content}
                         </div>
+                        {message.error && (
+                          <div className="text-red-500 text-xs mt-1">
+                            Error: {message.error}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -37,18 +37,12 @@ export class WebSocketClient {
   }
 
 
+  /**
+   * Get authenticated WebSocket URL
+   */
   async getAuthenticatedWebSocketUrl() {
     try {
-      const user = this.auth.currentUser;
-      if (!user) {
-        console.log('WebSocket: No authenticated user, using demo token');
-        // Return a URL with demo token for development
-        const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://api.more-than-just-strangers.com';
-        return `${baseUrl}?token=demo-token`;
-      }
-
-      // Force refresh token to ensure it's not expired
-      const token = await user.getIdToken(true); // true forces refresh
+      // Return base URL without token - authentication will be handled via first message
       const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://api.more-than-just-strangers.com';
       
       // Ensure baseUrl is a valid WebSocket URL
@@ -56,15 +50,13 @@ export class WebSocketClient {
         throw new Error('Invalid WebSocket API URL configuration');
       }
       
-      const authenticatedUrl = `${baseUrl}?token=${token}`;
-      
-      console.log('WebSocket: Generated authenticated URL with fresh token');
-      return authenticatedUrl;
+      console.log('WebSocket: Using base URL - authentication via first message');
+      return baseUrl;
     } catch (error) {
-      console.error('WebSocket: Error getting authenticated URL:', error);
-      // Fallback to demo URL
+      console.error('WebSocket: Error getting WebSocket URL:', error);
+      // Fallback to base URL
       const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://api.more-than-just-strangers.com';
-      return `${baseUrl}?token=demo-token`;
+      return baseUrl;
     }
   }
 
@@ -141,26 +133,31 @@ export class WebSocketClient {
   }
   
   /**
-   * @param {string} [wsUrl] - Optional WebSocket URL with token (if not provided, will generate one)
+   * Connect to WebSocket server
+   * @param {string} wsUrl - Optional WebSocket URL override
    * @returns {Promise<void>}
    */
   async connect(wsUrl = null) {
     // If already connected, return existing promise
     if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('WebSocket: Already connected, returning existing connection');
       return Promise.resolve();
     }
 
     // If already connecting, return the existing connection promise
     if (this.isConnecting && this.connectionPromise) {
+      console.log('WebSocket: Already connecting, returning existing promise');
       return this.connectionPromise;
     }
 
     // If there's an existing connection promise that's still pending, return it
     if (this.connectionPromise) {
+      console.log('WebSocket: Connection promise exists, returning it');
       return this.connectionPromise;
     }
 
     this.isConnecting = true;
+    console.log('WebSocket: Starting connection process...');
 
     // Create a new connection promise
     this.connectionPromise = new Promise(async (resolve, reject) => {
@@ -169,12 +166,15 @@ export class WebSocketClient {
         const authenticatedUrl = wsUrl || await this.getAuthenticatedWebSocketUrl();
         
         console.log('WebSocket: Creating WebSocket connection to:', authenticatedUrl);
+        console.log('WebSocket: URL type:', typeof authenticatedUrl);
+        console.log('WebSocket: URL length:', authenticatedUrl ? authenticatedUrl.length : 'undefined');
+        
         this.ws = new WebSocket(authenticatedUrl);
 
         // Set up connection timeout
         const connectionTimeout = setTimeout(() => {
           if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
-            console.error('WebSocket: Connection timeout');
+            console.error('WebSocket: Connection timeout after 10 seconds');
             this.ws.close();
             reject(new Error('WebSocket connection timeout'));
           }
@@ -186,15 +186,51 @@ export class WebSocketClient {
           this.authRetryCount = 0; // Reset on successful connection
           this.isConnected = true;
           this.onConnectionStateChange?.(true);
-          console.log('WebSocket: Connected with authentication');
+          console.log('WebSocket: Connected successfully');
+          console.log('WebSocket: Ready state:', this.ws.readyState);
+          console.log('WebSocket: Connection established at:', new Date().toISOString());
+          
+          // Send authentication message immediately after connection
+          this.sendAuthenticationMessage().then(success => {
+            if (success) {
+              console.log('WebSocket: Authentication message sent successfully');
+            } else {
+              console.error('WebSocket: Failed to send authentication message');
+            }
+          });
+          
           resolve();
         };
    
         this.ws.onclose = (event) => {
           clearTimeout(connectionTimeout);
-          console.log('WebSocket: Connection closed with code:', event.code, 'reason:', event.reason);
-          this.handleDisconnect(event);
-          // Don't reject here, let handleDisconnect handle reconnection
+          this.isConnecting = false;
+          this.isConnected = false;
+          this.onConnectionStateChange?.(false);
+          
+          console.log('WebSocket: Connection closed');
+          console.log('WebSocket: Close event details:', {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            timestamp: new Date().toISOString()
+          });
+          
+          if (event.code === 1000) {
+            console.log('WebSocket: Normal closure');
+          } else if (event.code === 1006) {
+            console.error('WebSocket: Abnormal closure - connection lost');
+          } else {
+            console.error('WebSocket: Connection closed with code:', event.code, 'Reason:', event.reason);
+          }
+          
+          // Clear the connection promise so we can try to reconnect
+          this.connectionPromise = null;
+          
+          // Don't reject here if this is a normal closure
+          if (event.code !== 1000) {
+            reject(new Error(`WebSocket connection closed: ${event.code} - ${event.reason}`));
+          }
         };
 
         this.ws.onerror = (error) => {
@@ -202,8 +238,17 @@ export class WebSocketClient {
           this.isConnecting = false;
           this.isConnected = false;
           this.onConnectionStateChange?.(false);
-          console.error('WebSocket connection error:', error);
-          // Don't reject immediately, let onclose handle it
+          
+          console.error('WebSocket: Connection error occurred');
+          console.error('WebSocket: Error details:', error);
+          console.error('WebSocket: Error type:', typeof error);
+          console.error('WebSocket: Error message:', error.message || 'No message');
+          console.error('WebSocket: Error stack:', error.stack || 'No stack');
+          
+          // Clear the connection promise so we can try to reconnect
+          this.connectionPromise = null;
+          
+          reject(new Error(`WebSocket connection error: ${error.message || 'Unknown error'}`));
         };
 
         this.ws.onmessage = (event) => {
@@ -334,11 +379,24 @@ export class WebSocketClient {
     console.log('WebSocket: Attempting to send message:', message);
     console.log('WebSocket: Connection state:', this.ws ? this.ws.readyState : 'No WebSocket');
     console.log('WebSocket: Is connected:', this.isConnected);
+    console.log('WebSocket: WebSocket readyState values:', {
+      CONNECTING: WebSocket.CONNECTING,
+      OPEN: WebSocket.OPEN,
+      CLOSING: WebSocket.CLOSING,
+      CLOSED: WebSocket.CLOSED,
+      current: this.ws ? this.ws.readyState : 'No WebSocket'
+    });
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket: Cannot send message - WebSocket is not connected');
       console.error('WebSocket: WebSocket exists:', !!this.ws);
       console.error('WebSocket: Ready state:', this.ws ? this.ws.readyState : 'No WebSocket');
+      console.error('WebSocket: Connection details:', {
+        ws: !!this.ws,
+        readyState: this.ws ? this.ws.readyState : 'No WebSocket',
+        isConnected: this.isConnected,
+        url: this.url
+      });
       throw new Error('WebSocket is not connected');
     }
     
@@ -370,6 +428,7 @@ export class WebSocketClient {
       }
       
       console.log('WebSocket: Sending message with fresh token at root level');
+      console.log('WebSocket: Final message payload:', JSON.stringify(messageWithToken, null, 2));
       this.ws.send(JSON.stringify(messageWithToken));
       console.log('WebSocket: Message sent successfully');
     } catch (error) {
@@ -377,6 +436,51 @@ export class WebSocketClient {
       // Fallback to sending without token if token retrieval fails (reverted for compatibility)
       console.log('WebSocket: Sending message without token:', message);
       this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  /**
+   * Send authentication message after connection is established
+   */
+  async sendAuthenticationMessage() {
+    try {
+      const user = this.auth.currentUser;
+      if (!user) {
+        console.error('WebSocket: No authenticated user to send authentication message');
+        return false;
+      }
+
+      // Get fresh Firebase token
+      const token = await user.getIdToken(true);
+      
+      // Send authentication message
+      const authMessage = {
+        action: 'authenticate',
+        token: token
+      };
+      
+      console.log('WebSocket: Sending authentication message');
+      this.ws.send(JSON.stringify(authMessage));
+      
+      return true;
+    } catch (error) {
+      console.error('WebSocket: Failed to send authentication message:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle authentication response from server
+   */
+  handleAuthenticationResponse(data) {
+    console.log('WebSocket: Authentication response received:', data);
+    
+    if (data.status === 'authenticated') {
+      console.log('WebSocket: User authenticated successfully');
+      // The user is now authenticated and can receive messages
+      // This will be handled by the WebSocket context
+    } else {
+      console.error('WebSocket: Authentication failed:', data);
     }
   }
 
@@ -475,11 +579,33 @@ export class WebSocketClient {
     
     console.log('WebSocketHandler: Processing message with action:', message.action);
     console.log('WebSocketHandler: Available message handlers:', Array.from(this.messageHandlers.keys()));
+    console.log('WebSocketHandler: Full message structure:', {
+      hasPayload: !!message.payload,
+      hasData: !!message.data,
+      hasAction: !!message.action,
+      messageKeys: Object.keys(message),
+      messageType: typeof message
+    });
     
     const handler = this.messageHandlers.get(message.action);
     if (handler) {
-      // Check both payload and data fields for compatibility with different message formats
-      const payload = message.payload || message.data;
+      // Check for different message formats:
+      // 1. message.payload (legacy format)
+      // 2. message.data (nested data format) 
+      // 3. message itself (root level data format)
+      let payload = message.payload || message.data;
+      
+      // If no payload/data found, use the message itself (for root-level data)
+      if (!payload && message.action !== 'error') {
+        // For non-error messages, pass the message object itself
+        // but exclude the action field to avoid confusion
+        const { action, ...messageData } = message;
+        payload = messageData;
+      }
+      
+      console.log('WebSocketHandler: Extracted payload:', payload);
+      console.log('WebSocketHandler: Payload type:', typeof payload);
+      console.log('WebSocketHandler: Payload keys:', payload ? Object.keys(payload) : 'undefined');
       console.log('WebSocketHandler: Calling handler for action:', message.action, 'with payload:', payload);
       try {
         handler(payload);

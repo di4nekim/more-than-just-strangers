@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
 
@@ -75,8 +75,64 @@ const handlerLogic = async (event, context) => {
             return { statusCode: 200 };
         }
 
-        // TODO: Verify that the authenticated user has access to this chat
-        // This would involve checking if userId is a participant in the chat
+        // Get conversation to verify user is a participant
+        console.log('fetchChatHistory: Getting conversation for chatId:', chatId);
+        let conversation;
+        try {
+            const conversationResponse = await dynamoDB.send(new GetCommand({
+                TableName: process.env.CONVERSATIONS_TABLE,
+                Key: { PK: `CHAT#${chatId}` }
+            }));
+            conversation = conversationResponse.Item;
+        } catch (error) {
+            console.error('Error fetching conversation:', error);
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { 
+                        action: 'fetchChatHistory',
+                        error: 'Failed to verify chat access', 
+                        details: error.message 
+                    }
+                })
+            }));
+            return { statusCode: 200 };
+        }
+
+        if (!conversation) {
+            console.log('fetchChatHistory: Conversation not found for chatId:', chatId);
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { 
+                        action: 'fetchChatHistory',
+                        error: 'Conversation not found' 
+                    }
+                })
+            }));
+            return { statusCode: 200 };
+        }
+
+        // Verify the authenticated user is a participant in this conversation
+        const isParticipant = conversation.userAId === userId || conversation.userBId === userId;
+        if (!isParticipant) {
+            console.log('fetchChatHistory: User not authorized for this conversation:', userId);
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { 
+                        action: 'fetchChatHistory',
+                        error: 'Unauthorized - user not participant in this conversation' 
+                    }
+                })
+            }));
+            return { statusCode: 200 };
+        }
+
+        console.log('fetchChatHistory: User authorized, fetching chat history');
 
         // Query messages for the chat
         const params = {

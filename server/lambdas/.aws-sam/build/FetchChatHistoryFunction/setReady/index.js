@@ -187,12 +187,14 @@ const handlerLogic = async (event) => {
                 }
             };
 
-            if (currentUserMetadata.Item?.connectionId) {
+            if (currentUserMetadata.Item?.connectionId && !currentUserMetadata.Item?.pending_auth) {
                 await apiGateway.send(new PostToConnectionCommand({
                     ConnectionId: currentUserMetadata.Item.connectionId,
                     Data: JSON.stringify(response)
                 }));
                 console.log(`setReady: Sent readyStatusUpdated response to user ${userId}`);
+            } else if (currentUserMetadata.Item?.pending_auth) {
+                console.log(`setReady: User ${userId} is still pending authentication, skipping WebSocket response`);
             } else {
                 console.error(`setReady: No connection ID found for user ${userId}`);
                 console.error(`setReady: User metadata:`, currentUserMetadata.Item);
@@ -204,7 +206,8 @@ const handlerLogic = async (event) => {
                 error: error.message,
                 stack: error.stack,
                 userId: userId,
-                connectionId: currentUserMetadata.Item?.connectionId
+                connectionId: currentUserMetadata.Item?.connectionId,
+                pending_auth: currentUserMetadata.Item?.pending_auth
             });
             
             if (error.name === 'GoneException') {

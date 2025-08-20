@@ -113,7 +113,7 @@ export default function HomeContent() {
 
   const getPartnerName = useCallback(async () => {
     try {
-      if (!currentChatId || !conversationMetadata.participants || conversationMetadata.participants.length === 0) {
+      if (!currentChatId || !conversationMetadata?.participants || conversationMetadata.participants.length === 0) {
         return "Anonymous";
       }
 
@@ -122,7 +122,7 @@ export default function HomeContent() {
         return "Anonymous";
       }
 
-      const participantsArray = Array.isArray(conversationMetadata.participants) 
+      const participantsArray = Array.isArray(conversationMetadata?.participants) 
         ? conversationMetadata.participants 
         : [];
       
@@ -138,7 +138,7 @@ export default function HomeContent() {
       console.error('Failed to get partner name:', error);
       return "Anonymous";
     }
-  }, [currentChatId, conversationMetadata.participants, user?.uid]);
+  }, [currentChatId, conversationMetadata?.participants, user?.uid]);
 
   // Update local state when WebSocket state changes
   useEffect(() => {
@@ -154,6 +154,8 @@ export default function HomeContent() {
     }
   }, [userMetadata.chatId, hasActiveChat, userMetadata.connectionId, userMetadata.ready]);
 
+  // Trust the atomic database approach - no polling needed
+
   // Update partner name when conversation metadata changes
   useEffect(() => {
     const updatePartnerName = async () => {
@@ -166,12 +168,12 @@ export default function HomeContent() {
       }
     };
 
-    if (currentChatId && conversationMetadata.participants && conversationMetadata.participants.length > 0) {
+    if (currentChatId && conversationMetadata?.participants && conversationMetadata.participants.length > 0) {
       updatePartnerName();
     } else {
       setPartnerName("Johnathan");
     }
-  }, [currentChatId, conversationMetadata.participants, getPartnerName]);
+  }, [currentChatId, conversationMetadata?.participants, getPartnerName]);
 
   const loadUserData = async () => {
     try {
@@ -204,8 +206,34 @@ export default function HomeContent() {
     }
   };
 
-  const handleEnterConversation = () => {
-    if (currentChatId) {
+  const handleEnterConversation = async () => {
+    if (!currentChatId) return;
+    
+    try {
+      // Refresh state before entering chat to ensure conversation is still valid
+      console.log('🔄 Refreshing state before entering conversation:', currentChatId);
+      
+      if (wsActions && userProfile?.userId) {
+        await wsActions.getCurrentState({ userId: userProfile.userId });
+        
+        // Small delay to process state update
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Check if conversation is still active after refresh
+        if (hasActiveChat && userMetadata.chatId) {
+          console.log('🔄 Conversation confirmed active, navigating to chat');
+          router.push(`/${encodeURIComponent(userMetadata.chatId)}`);
+        } else {
+          console.log('🔄 Conversation no longer active after state refresh');
+          setError('This conversation is no longer active.');
+        }
+      } else {
+        // Fallback: navigate directly if WebSocket not available
+        router.push(`/${encodeURIComponent(currentChatId)}`);
+      }
+    } catch (error) {
+      console.error('Error refreshing state before entering conversation:', error);
+      // Fallback: navigate anyway
       router.push(`/${encodeURIComponent(currentChatId)}`);
     }
   };
@@ -281,8 +309,8 @@ export default function HomeContent() {
 
       await endChat(currentChatId, 'user_ended');
       
-      setCurrentChatId(null);
-      setIsConversationActive(false);
+      // Note: Local state is now cleared automatically by the WebSocket context
+      // No need to manually set currentChatId, isConversationActive, etc.
       setShowConversationDropdown(false);
       
       console.log('Successfully left conversation');

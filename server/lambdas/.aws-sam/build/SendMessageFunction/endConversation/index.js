@@ -38,7 +38,10 @@ const handlerLogic = async (event) => {
         let payload;
         try {
             payload = JSON.parse(event.body);
+            console.log('endConversation: Parsed payload:', JSON.stringify(payload, null, 2));
         } catch (error) {
+            console.error('endConversation: Failed to parse JSON body:', error.message);
+            console.log('endConversation: Raw event.body:', event.body);
             const action = extractAction(event);
         const requestId = extractRequestId(event);
         return createErrorResponse(400, 'Invalid JSON in request body', action, {
@@ -46,10 +49,30 @@ const handlerLogic = async (event) => {
         }, requestId);;
         }
 
-        // Validate required fields
-        const { chatId, reason } = payload;
+        // Extract data from the WebSocket message structure
+        const { data } = payload;
+        if (!data) {
+            console.log('endConversation: Missing data field in payload');
+            console.log('endConversation: Available payload keys:', Object.keys(payload));
+            return {
+                statusCode: 400,
+                body: JSON.stringify({
+                    action: 'error',
+                    data: { error: 'Missing data field in request' }
+                })
+            };
+        }
+
+        // Validate required fields from data
+        const { chatId, reason } = data;
+        console.log('endConversation: Extracted chatId from data:', chatId);
+        console.log('endConversation: Extracted reason from data:', reason);
+        console.log('endConversation: Full data payload keys:', Object.keys(data));
+        
         if (!chatId) {
-            console.log('endConversation: Missing chatId');
+            console.log('endConversation: Missing chatId in data');
+            console.log('endConversation: Available data fields:', Object.keys(data));
+            console.log('endConversation: Data values:', JSON.stringify(data, null, 2));
             return {
                 statusCode: 400,
                 body: JSON.stringify({
@@ -109,33 +132,115 @@ const handlerLogic = async (event) => {
         // Determine the other user in the conversation
         const otherUserId = conversation.Item.userAId === userId ? conversation.Item.userBId : conversation.Item.userAId;
 
-        // Get other user's connection status
+        // Get other user's metadata BEFORE clearing it, so we can use their connectionId
+        console.log('🔥 endConversation: Getting other user metadata for notification');
         const otherUserMetadata = await dynamoDB.send(new GetCommand({
             TableName: process.env.USER_METADATA_TABLE,
             Key: { PK: `USER#${otherUserId}` }
         }));
+        console.log('🔥 endConversation: Other user metadata retrieved:', JSON.stringify(otherUserMetadata.Item, null, 2));
 
-        // If other user is connected, notify them
+        // Clear chatId from both users' metadata to mark them as available for new conversations
+        console.log('endConversation: Clearing chatId from both users metadata');
+        await Promise.all([
+            // Clear chatId from the user who ended the conversation
+            dynamoDB.send(new UpdateCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${userId}` },
+                UpdateExpression: 'REMOVE chatId SET ready = :ready, questionIndex = :questionIndex, lastUpdated = :lastUpdated',
+                ExpressionAttributeValues: {
+                    ':ready': false,
+                    ':questionIndex': 0,
+                    ':lastUpdated': timestamp
+                }
+            })),
+            // Clear chatId from the other user
+            dynamoDB.send(new UpdateCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${otherUserId}` },
+                UpdateExpression: 'REMOVE chatId SET ready = :ready, questionIndex = :questionIndex, lastUpdated = :lastUpdated',
+                ExpressionAttributeValues: {
+                    ':ready': false,
+                    ':questionIndex': 0,
+                    ':lastUpdated': timestamp
+                }
+            }))
+        ]);
+
+        console.log('🔥 endConversation: Both users metadata cleared successfully');
+        
+        // IMMEDIATELY try to notify other user while we know their connection ID
+        // Do this BEFORE any verification steps to maximize chance of delivery
+        console.log('🔥 endConversation: Attempting immediate notification to other user');
+        
         if (otherUserMetadata.Item?.connectionId) {
-            console.log('endConversation: Notifying other user');
+            console.log('🔥 endConversation: Found other user connectionId, sending notification immediately');
+            console.log('🔥 endConversation: Other user connectionId:', otherUserMetadata.Item.connectionId);
+            
             try {
+                const message = {
+                    action: 'conversationEnded',
+                    data: {
+                        chatId,
+                        endedBy: userId,
+                        endReason: reason || 'User ended conversation',
+                        timestamp
+                    }
+                };
+                console.log('🔥 endConversation: Sending immediate notification:', JSON.stringify(message, null, 2));
+                
                 await apiGateway.send(new PostToConnectionCommand({
                     ConnectionId: otherUserMetadata.Item.connectionId,
-                    Data: JSON.stringify({
-                        action: 'conversationEnded',
-                        data: {
-                            chatId,
-                            endedBy: userId,
-                            endReason: reason || 'User ended conversation',
-                            timestamp
-                        }
-                    })
+                    Data: JSON.stringify(message)
                 }));
+                
+                console.log('🔥 endConversation: Immediate notification sent successfully!');
             } catch (error) {
-                console.error('Error notifying other user:', error);
-                // Continue execution even if notification fails
+                console.error('🔥 endConversation: Immediate notification failed:', error);
+                
+                // If notification fails, clean up the stale connection
+                if (error.name === 'GoneException') {
+                    console.log('🔥 endConversation: Cleaning up stale connection after failed notification');
+                    try {
+                        await dynamoDB.send(new UpdateCommand({
+                            TableName: process.env.USER_METADATA_TABLE,
+                            Key: { PK: `USER#${otherUserId}` },
+                            UpdateExpression: 'REMOVE connectionId SET lastUpdated = :lastUpdated',
+                            ExpressionAttributeValues: {
+                                ':lastUpdated': timestamp
+                            }
+                        }));
+                        console.log('🔥 endConversation: Cleaned up stale connection');
+                    } catch (cleanupError) {
+                        console.error('🔥 endConversation: Error cleaning up stale connection:', cleanupError);
+                    }
+                }
             }
+        } else {
+            console.log('🔥 endConversation: No connectionId found for other user');
         }
+        
+        // Verify the database updates by reading back the user metadata
+        console.log('🔥 endConversation: Verifying database updates...');
+        try {
+            const verifyUser1 = await dynamoDB.send(new GetCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${userId}` }
+            }));
+            const verifyUser2 = await dynamoDB.send(new GetCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${otherUserId}` }
+            }));
+            
+            console.log('🔥 endConversation: User1 metadata after update:', JSON.stringify(verifyUser1.Item, null, 2));
+            console.log('🔥 endConversation: User2 metadata after update:', JSON.stringify(verifyUser2.Item, null, 2));
+            console.log('🔥 endConversation: User1 chatId after update:', verifyUser1.Item?.chatId);
+            console.log('🔥 endConversation: User2 chatId after update:', verifyUser2.Item?.chatId);
+        } catch (verifyError) {
+            console.error('🔥 endConversation: Error verifying database updates:', verifyError);
+        }
+
+        // Notification was already attempted immediately after database update
 
         return {
             statusCode: 200,
@@ -158,5 +263,39 @@ const handlerLogic = async (event) => {
                 data: { error: 'Internal server error' }
             })
         };
+    }
+};
+
+// Export the handler for AWS Lambda
+module.exports = { 
+    handler: async (event, context) => {
+        try {
+            const userInfo = await authenticateWebSocketEvent(event);
+            // Add user info to event for handler to use
+            event.userInfo = userInfo;
+            return await handlerLogic(event, context);
+        } catch (error) {
+            console.error('Authentication failed:', error.message);
+            
+            const action = extractAction(event);
+            const requestId = extractRequestId(event);
+            
+            if (error.message === 'FIREBASE_TOKEN_MISSING') {
+                return createErrorResponse(401, 'Authentication required. Firebase ID token missing.', action, {
+                    operation: 'authentication',
+                    authType: 'firebase'
+                }, requestId);
+            } else if (error.message === 'FIREBASE_TOKEN_INVALID') {
+                return createErrorResponse(401, 'Invalid or expired Firebase ID token', action, {
+                    operation: 'authentication',
+                    authType: 'firebase'
+                }, requestId);
+            } else {
+                return createErrorResponse(500, 'Internal Server Error', action, {
+                    operation: 'authentication',
+                    errorMessage: error.message
+                }, requestId);
+            }
+        }
     }
 };

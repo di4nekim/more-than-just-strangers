@@ -133,6 +133,12 @@ const handlerLogic = async (event) => {
 
         const item = userMetadata.Item;
         
+        console.log('🔥 getCurrentState: Raw user metadata from database:', JSON.stringify(item, null, 2));
+        console.log('🔥 getCurrentState: item.chatId value:', item.chatId);
+        console.log('🔥 getCurrentState: typeof item.chatId:', typeof item.chatId);
+        console.log('🔥 getCurrentState: item.chatId === null:', item.chatId === null);
+        console.log('🔥 getCurrentState: item.chatId === undefined:', item.chatId === undefined);
+        
         // Send the current state back to the client
         const response = {
             action: 'currentState',
@@ -147,7 +153,7 @@ const handlerLogic = async (event) => {
             }
         };
         
-        console.log('Sending response:', response);
+        console.log('🔥 getCurrentState: Sending response:', JSON.stringify(response, null, 2));
         
         await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,

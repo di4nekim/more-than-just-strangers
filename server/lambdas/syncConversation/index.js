@@ -12,6 +12,7 @@ const {
     handleApiGatewayError,
     handleValidationError
 } = require("../shared/errorHandler");
+
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1'
@@ -21,6 +22,7 @@ const dynamoDB = DynamoDBDocumentClient.from(client);
 console.log('Environment variables:');
 console.log('AWS_REGION:', process.env.AWS_REGION || 'us-east-1');
 console.log('WEBSOCKET_API_URL:', process.env.WEBSOCKET_API_URL);
+console.log('CONVERSATIONS_TABLE:', process.env.CONVERSATIONS_TABLE);
 
 // Validate WebSocket API URL
 if (!process.env.WEBSOCKET_API_URL) {
@@ -38,6 +40,113 @@ if (!process.env.WEBSOCKET_API_URL) {
 const apiGateway = new ApiGatewayManagementApiClient({
     endpoint: process.env.WEBSOCKET_API_URL
 });
+
+// Chat ID validation and normalization functions
+const validateChatId = (chatId) => {
+    if (!chatId || typeof chatId !== 'string') {
+        return { isValid: false, error: 'Chat ID must be a non-empty string' };
+    }
+    
+    if (chatId.trim().length === 0) {
+        return { isValid: false, error: 'Chat ID cannot be empty or whitespace' };
+    }
+    
+    if (chatId.length > 100) {
+        return { isValid: false, error: 'Chat ID is too long (max 100 characters)' };
+    }
+    
+    // Try to decode the chat ID first in case it's URL encoded
+    let decodedChatId = chatId;
+    try {
+        decodedChatId = decodeURIComponent(chatId);
+    } catch (error) {
+        // If decoding fails, use the original
+        decodedChatId = chatId;
+    }
+    
+    // Check if chat ID follows the expected format: userId1#userId2
+    // Try splitting by both # and %23 (encoded hash)
+    let parts = decodedChatId.split('#');
+    
+    // If no hash found, try splitting by encoded hash
+    if (parts.length === 1) {
+        parts = chatId.split('%23');
+    }
+    
+    if (parts.length !== 2) {
+        return { isValid: false, error: 'Chat ID should follow format: userId1#userId2' };
+    }
+    
+    if (parts[0].trim().length === 0 || parts[1].trim().length === 0) {
+        return { isValid: false, error: 'Chat ID parts cannot be empty' };
+    }
+    
+    return { isValid: true };
+};
+
+const normalizeChatId = (chatId) => {
+    if (!chatId) return chatId;
+    
+    let normalized = chatId;
+    
+    // Remove trailing hash if present
+    if (normalized.includes('#')) {
+        normalized = normalized.split('#')[0];
+    }
+    
+    // Remove trailing encoded hash if present
+    if (normalized.includes('%23')) {
+        normalized = normalized.split('%23')[0];
+    }
+    
+    return normalized;
+};
+
+// Helper function to decode URL-encoded chat IDs
+const decodeChatId = (chatId) => {
+    try {
+        // First try to decode the entire string
+        const decoded = decodeURIComponent(chatId);
+        console.log(`Decoded chatId: ${chatId} -> ${decoded}`);
+        return decoded;
+    } catch (error) {
+        console.log(`Failed to decode chatId: ${chatId}, using as-is`);
+        return chatId;
+    }
+};
+
+// Helper function to try multiple chat ID formats
+const tryChatIdFormats = (chatId) => {
+    const formats = [];
+    
+    // Original encoded format
+    formats.push(chatId);
+    
+    // Decoded format
+    try {
+        const decoded = decodeURIComponent(chatId);
+        if (decoded !== chatId) {
+            formats.push(decoded);
+        }
+    } catch (error) {
+        console.log(`Could not decode chatId: ${chatId}`);
+    }
+    
+    // Remove any trailing hash if present
+    if (chatId.includes('#')) {
+        const withoutHash = chatId.split('#')[0];
+        formats.push(withoutHash);
+    }
+    
+    // Remove any trailing encoded hash if present
+    if (chatId.includes('%23')) {
+        const withoutEncodedHash = chatId.split('%23')[0];
+        formats.push(withoutEncodedHash);
+    }
+    
+    console.log(`Trying chat ID formats:`, formats);
+    return formats;
+};
 
 exports.handler = async (event) => {
     console.log('Starting syncConversation handler');
@@ -79,36 +188,113 @@ exports.handler = async (event) => {
             return { statusCode: 200 };
         }
 
-        console.log(`Querying DynamoDB for conversation: ${chatId}`);
-        // Get conversation metadata
-        const params = {
-            TableName: process.env.CONVERSATIONS_TABLE,
-            KeyConditionExpression: 'PK = :pk',
-            ExpressionAttributeValues: {
-                ':pk': `CHAT#${chatId}`
+        // Validate chat ID format
+        const validation = validateChatId(chatId);
+        if (!validation.isValid) {
+            console.log(`Invalid chat ID format: ${validation.error}`);
+            
+            // Send validation error to client
+            try {
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { 
+                            error: 'Invalid chat ID format',
+                            details: validation.error,
+                            chatId: chatId
+                        }
+                    })
+                }));
+            } catch (sendError) {
+                console.error('Failed to send validation error response:', sendError);
             }
-        };
-
-        console.log('DynamoDB query params:', JSON.stringify(params, null, 2));
-        const result = await dynamoDB.send(new QueryCommand(params));
-        console.log(`DynamoDB query completed. Items found: ${result.Items.length}`);
-        console.log('Query result:', JSON.stringify(result, null, 2));
-        
-        const conversation = result.Items[0];
-
-        if (!conversation) {
-            console.log(`Conversation not found for chatId: ${chatId}`);
-            console.log('Sending 404 error response');
+            
             return {
-                statusCode: 404,
+                statusCode: 400,
                 body: JSON.stringify({
                     action: 'error',
-                    data: { error: 'Conversation not found' }
+                    data: { 
+                        error: 'Invalid chat ID format',
+                        details: validation.error,
+                        chatId: chatId
+                    }
                 })
             };
         }
 
-        console.log('Conversation found:', JSON.stringify(conversation, null, 2));
+        // Try multiple chat ID formats to find the conversation
+        const chatIdFormats = tryChatIdFormats(chatId);
+        let conversation = null;
+        let foundChatId = null;
+        
+        for (const format of chatIdFormats) {
+            console.log(`Trying to find conversation with chatId format: ${format}`);
+            
+            const params = {
+                TableName: process.env.CONVERSATIONS_TABLE,
+                KeyConditionExpression: 'PK = :pk',
+                ExpressionAttributeValues: {
+                    ':pk': `CHAT#${format}`
+                }
+            };
+
+            console.log('DynamoDB query params:', JSON.stringify(params, null, 2));
+            const result = await dynamoDB.send(new QueryCommand(params));
+            console.log(`DynamoDB query completed for format ${format}. Items found: ${result.Items.length}`);
+            
+            if (result.Items.length > 0) {
+                conversation = result.Items[0];
+                foundChatId = format;
+                console.log(`Conversation found with format: ${format}`);
+                break;
+            }
+        }
+
+        if (!conversation) {
+            console.log(`Conversation not found for any chatId format. Tried: ${chatIdFormats.join(', ')}`);
+            console.log('Sending 404 error response');
+            
+            // Log this as a potential data inconsistency issue
+            console.error(`DATA INCONSISTENCY DETECTED: Chat ID ${chatId} exists in user metadata but not in conversations table`);
+            console.error('This suggests an orphaned chat ID that needs cleanup');
+            
+            // Send a more informative error response
+            try {
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { 
+                            error: 'Conversation not found',
+                            details: 'This chat ID exists in user metadata but not in conversations table. This suggests a data inconsistency that needs cleanup.',
+                            attemptedFormats: chatIdFormats,
+                            originalChatId: chatId,
+                            requiresCleanup: true
+                        }
+                    })
+                }));
+            } catch (sendError) {
+                console.error('Failed to send error response to WebSocket:', sendError);
+            }
+            
+            return {
+                statusCode: 404,
+                body: JSON.stringify({
+                    action: 'error',
+                    data: { 
+                        error: 'Conversation not found',
+                        details: 'Data inconsistency detected - orphaned chat ID',
+                        attemptedFormats: chatIdFormats,
+                        originalChatId: chatId,
+                        requiresCleanup: true
+                    }
+                })
+            };
+        }
+
+        console.log(`Conversation found with chatId: ${foundChatId}`);
+        console.log('Conversation data:', JSON.stringify(conversation, null, 2));
         console.log(`Sending conversation sync data to connection: ${connectionId}`);
 
         // Check if we have a valid API Gateway client before using it
@@ -125,7 +311,7 @@ exports.handler = async (event) => {
         const syncData = {
             action: 'conversationSync',
             data: {
-                chatId: chatId,
+                chatId: foundChatId, // Use the found chat ID format
                 participants: conversation.participants,
                 lastMessage: conversation.lastMessage,
                 lastUpdated: conversation.lastUpdated,

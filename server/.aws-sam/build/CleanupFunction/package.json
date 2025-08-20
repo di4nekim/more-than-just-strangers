@@ -1,0 +1,22 @@
+{
+  "name": "cleanup-orphaned-chat-ids",
+  "version": "1.0.0",
+  "description": "Lambda function to clean up orphaned chat IDs from UserMetadataV2 table",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "dynamodb",
+    "cleanup",
+    "chat"
+  ],
+  "author": "MTJS Team",
+  "license": "MIT"
+}

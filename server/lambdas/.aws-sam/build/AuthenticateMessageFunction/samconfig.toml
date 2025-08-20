@@ -1,0 +1,23 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "mtjs-websocket-backend"
+resolve_s3 = true
+s3_prefix = "mtjs-websocket-backend"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+# NOTE: Real Firebase credentials should be set via environment variables before deployment
+# Example parameter overrides (replace with actual environment variable values):
+# parameter_overrides = [
+#     "FirebaseProjectId=${FIREBASE_PROJECT_ID}",
+#     "FirebasePrivateKey=${FIREBASE_PRIVATE_KEY}",
+#     "FirebaseClientEmail=${FIREBASE_CLIENT_EMAIL}"
+# ]
+
+# SECURITY WARNING: Do not commit real Firebase credentials to version control!
+# Set these via AWS SAM environment variables or parameter store for production deployment
+
+[default.local_invoke.parameters]
+# parameter_overrides removed for AWS deployment

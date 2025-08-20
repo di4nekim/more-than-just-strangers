@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Cleanup Lambda Function for MTJS
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 300
+    MemorySize: 256
+
+Resources:
+  CleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cleanupOrphanedChatIds
+      Handler: index.handler
+      CodeUri: lambdas/cleanupOrphanedChatIds/
+      Role: !GetAtt CleanupLambdaRole.Arn
+      Environment:
+        Variables:
+          USER_METADATA_TABLE: UserMetadataV2
+          CONVERSATIONS_TABLE: ConversationsV3
+      Events:
+        ManualInvoke:
+          Type: Api
+          Properties:
+            Path: /cleanup
+            Method: post
+
+  CleanupLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource:
+                  - !Sub "arn:aws:dynamodb:::table/UserMetadataV2"
+                  - !Sub "arn:aws:dynamodb:::table/ConversationsV3"
+                  - !Sub "arn:aws:dynamodb:::table/UserMetadataV2/*"
+                  - !Sub "arn:aws:dynamodb:::table/ConversationsV3/*"
+
+Outputs:
+  CleanupFunctionArn:
+    Description: ARN of the cleanup Lambda function
+    Value: !GetAtt CleanupFunction.Arn
+  CleanupFunctionName:
+    Description: Name of the cleanup Lambda function
+    Value: !Ref CleanupFunction

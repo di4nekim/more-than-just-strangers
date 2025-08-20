@@ -1,4 +1,5 @@
 import { WebSocketClient } from './websocketHandler';
+import { validateChatIdFormat, validateUserId } from '../lib/chatIdUtils';
 import {
   ConnectPayload,
   StartConversationPayload,
@@ -38,7 +39,25 @@ export const createWebSocketActions = (wsClient) => ({
   },
 
   startConversation: async (payload) => {
-    await wsClient.send({ action: 'startConversation', data: payload });
+    try {
+      console.log('WebSocket: Sending startConversation action:', payload);
+      
+      // Validate user IDs before sending
+      if (payload.otherUserId) {
+        const validation = validateUserId(payload.otherUserId);
+        if (!validation.isValid) {
+          const error = new Error(`Invalid other user ID: ${validation.error}`);
+          console.error('WebSocket: User ID validation failed:', error.message);
+          throw error;
+        }
+      }
+      
+      await wsClient.send({ action: 'startConversation', data: payload });
+      console.log('WebSocket: startConversation action sent successfully');
+    } catch (error) {
+      console.error('WebSocket: Failed to send startConversation action:', error);
+      throw error;
+    }
   },
 
   fetchChatHistory: async (payload) => {
@@ -50,7 +69,25 @@ export const createWebSocketActions = (wsClient) => ({
   },
 
   syncConversation: async (payload) => {
-    await wsClient.send({ action: 'syncConversation', data: payload });
+    try {
+      console.log('WebSocket: Sending syncConversation action:', payload);
+      
+      // Validate chat ID before sending
+      if (payload.chatId) {
+        const validation = validateChatIdFormat(payload.chatId);
+        if (!validation.isValid) {
+          const error = new Error(`Invalid chat ID format: ${validation.error}`);
+          console.error('WebSocket: Chat ID validation failed:', error.message);
+          throw error;
+        }
+      }
+      
+      await wsClient.send({ action: 'syncConversation', data: payload });
+      console.log('WebSocket: syncConversation action sent successfully');
+    } catch (error) {
+      console.error('WebSocket: Failed to send syncConversation action:', error);
+      throw error;
+    }
   },
 
   /**

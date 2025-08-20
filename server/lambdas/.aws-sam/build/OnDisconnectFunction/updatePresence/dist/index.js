@@ -80,8 +80,7 @@ const handler = async (event) => {
                         }
                     })
                 }).promise();
-            }
-            catch (error) {
+            } catch (error) {
                 // If the connection is stale, we can ignore the error
                 if (error.statusCode === 410) {
                     return {
@@ -96,8 +95,7 @@ const handler = async (event) => {
             statusCode: 200,
             body: JSON.stringify({ message: 'Presence updated successfully' })
         };
-    }
-    catch (error) {
+    } catch (error) {
         console.error('Error updating presence:', error);
         return {
             statusCode: 500,
