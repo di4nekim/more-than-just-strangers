@@ -18,11 +18,6 @@ jest.mock('firebase-admin/app', () => ({
 }));
 
 // Mock AWS SDK
-const mockSend = jest.fn();
-const mockDynamoGet = jest.fn();
-const mockDynamoPut = jest.fn();
-const mockDynamoUpdate = jest.fn();
-
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn().mockImplementation(() => ({}))
 }));
@@ -30,7 +25,7 @@ jest.mock('@aws-sdk/client-dynamodb', () => ({
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn().mockReturnValue({
-      send: mockSend
+      send: jest.fn()
     })
   },
   GetCommand: jest.fn().mockImplementation((params) => ({ commandType: 'GetCommand', ...params })),
@@ -43,6 +38,25 @@ describe('onConnect Lambda with Firebase Authentication', () => {
   const mockUserId = 'user-123-456';
   const mockUserEmail = 'test@example.com';
   const mockToken = 'mock-firebase-token';
+  
+  let mockDynamoSend;
+  let mockDynamoGet;
+  let mockDynamoPut;
+  let mockDynamoUpdate;
+  
+  beforeEach(() => {
+    // Set up environment variables
+    process.env.USER_METADATA_TABLE = 'test-user-metadata-table';
+    process.env.AWS_REGION = 'us-east-1';
+    
+    // Get the mocked send function
+    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+    const client = DynamoDBDocumentClient.from();
+    mockDynamoSend = client.send;
+    
+    // Clear all mocks
+    jest.clearAllMocks();
+  });
   
   const mockDecodedToken = {
     uid: mockUserId,
@@ -73,7 +87,7 @@ describe('onConnect Lambda with Firebase Authentication', () => {
     jest.clearAllMocks();
     
     // Setup mock send function to route to appropriate handlers
-    mockSend.mockImplementation((command) => {
+    mockDynamoSend.mockImplementation((command) => {
       if (command.commandType === 'GetCommand') {
         return mockDynamoGet();
       } else if (command.commandType === 'PutCommand') {

@@ -3,16 +3,6 @@ const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb"
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
 
-
-const { 
-    createErrorResponse, 
-    createSuccessResponse, 
-    extractAction, 
-    extractRequestId,
-    handleDynamoDBError,
-    handleApiGatewayError,
-    handleValidationError
-} = require("../shared/errorHandler");
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1'
@@ -124,7 +114,7 @@ const handlerLogic = async (event, context) => {
         return { statusCode: 200 };
         
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error in fetchChatHistory:', error);
         try {
             await apiGateway.send(new PostToConnectionCommand({
                 ConnectionId: connectionId,

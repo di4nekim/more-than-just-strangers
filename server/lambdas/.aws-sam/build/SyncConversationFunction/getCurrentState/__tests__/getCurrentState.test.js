@@ -13,6 +13,7 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
 process.env.USER_METADATA_TABLE = testTableName;
 process.env.DYNAMODB_ENDPOINT = process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000';
 process.env.AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+process.env.WEBSOCKET_API_URL = 'https://test-websocket-api.execute-api.us-east-1.amazonaws.com/test';
 
 // Ensure the table exists before running tests
 beforeAll(async () => {

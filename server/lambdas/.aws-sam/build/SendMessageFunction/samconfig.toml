@@ -7,10 +7,14 @@ region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
+parameter_overrides = [
+    "Environment=Development"
+]
 
 # NOTE: Real Firebase credentials should be set via environment variables before deployment
 # Example parameter overrides (replace with actual environment variable values):
 # parameter_overrides = [
+#     "Environment=Dev",
 #     "FirebaseProjectId=${FIREBASE_PROJECT_ID}",
 #     "FirebasePrivateKey=${FIREBASE_PRIVATE_KEY}",
 #     "FirebaseClientEmail=${FIREBASE_CLIENT_EMAIL}"

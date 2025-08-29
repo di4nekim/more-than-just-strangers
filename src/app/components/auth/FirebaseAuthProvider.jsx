@@ -78,7 +78,7 @@ export function FirebaseAuthProvider({ children }) {
     }
   };
 
-  const signOut = async () => {
+  const handleSignOut = async () => {
     try {
       setError(null);
       await signOut(auth);
@@ -98,7 +98,7 @@ export function FirebaseAuthProvider({ children }) {
     }
   };
 
-  const updateProfile = async (updates) => {
+  const handleUpdateProfile = async (updates) => {
     try {
       setError(null);
       if (!user) throw new Error('No user signed in');
@@ -188,9 +188,9 @@ export function FirebaseAuthProvider({ children }) {
     signUp: signUp,
     signIn: signIn,
     signInWithGoogle: googleSignIn,
-    signOut: signOut,
+    signOut: handleSignOut,
     passwordReset: passwordReset,
-    updateProfile: updateProfile,
+    updateProfile: handleUpdateProfile,
     changePassword: changePassword,
     resendVerification: resendVerification,
     

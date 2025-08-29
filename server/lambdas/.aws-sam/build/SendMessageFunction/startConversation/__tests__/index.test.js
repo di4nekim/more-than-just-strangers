@@ -1,6 +1,14 @@
 const AWS = require('aws-sdk');
 const { handler } = require('../index');
 
+// Mock the shared auth module at the top level
+jest.mock('../../shared/auth', () => ({
+    authenticateWebSocketEvent: jest.fn(() => Promise.resolve({
+        userId: 'test-user-123',
+        email: 'test@example.com',
+    })),
+}));
+
 // Mock AWS SDK v3
 jest.mock('@aws-sdk/client-dynamodb', () => ({
     DynamoDBClient: jest.fn().mockImplementation(() => ({

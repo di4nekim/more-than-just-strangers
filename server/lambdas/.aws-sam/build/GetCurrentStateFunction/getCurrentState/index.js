@@ -2,16 +2,10 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
-
-
 const { 
     createErrorResponse, 
-    createSuccessResponse, 
     extractAction, 
-    extractRequestId,
-    handleDynamoDBError,
-    handleApiGatewayError,
-    handleValidationError
+    extractRequestId
 } = require("../shared/errorHandler");
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
@@ -27,18 +21,6 @@ if (!websocketApiUrl) {
 const apiGateway = new ApiGatewayManagementApiClient({
     endpoint: websocketApiUrl
 });
-
-const validateInput = (body) => {
-    if (!body || typeof body !== 'object') {
-        throw new Error('Invalid request body');
-    }
-    if (body.action !== 'getCurrentState') {
-        throw new Error('Invalid action');
-    }
-    if (!body.data || !body.data.userId) {
-        throw new Error('Missing userId');
-    }
-};
 
 // Main handler logic with authentication
 const handlerLogic = async (event) => {
@@ -61,30 +43,30 @@ const handlerLogic = async (event) => {
             payload = JSON.parse(event.body);
         } catch (error) {
             const action = extractAction(event);
-        const requestId = extractRequestId(event);
-        return createErrorResponse(400, 'Invalid JSON in request body', action, {
-            operation: 'lambda_execution'
-        }, requestId);;
+            const requestId = extractRequestId(event);
+            return createErrorResponse(400, 'Invalid JSON in request body', action, {
+                operation: 'lambda_execution'
+            }, requestId);
         }
 
         // Validate required fields - extract userId from payload.data to match frontend message format
         const { userId: requestUserId } = payload.data || {};
         if (!requestUserId) {
             const action = extractAction(event);
-        const requestId = extractRequestId(event);
-        return createErrorResponse(400, 'Missing userId in request', action, {
-            operation: 'lambda_execution'
-        }, requestId);;
+            const requestId = extractRequestId(event);
+            return createErrorResponse(400, 'Missing userId in request', action, {
+                operation: 'lambda_execution'
+            }, requestId);
         }
 
         // Verify the authenticated user is requesting their own state
         if (requestUserId !== userId) {
             console.log('User ID mismatch. Authenticated:', userId, 'Requested:', requestUserId);
             const action = extractAction(event);
-        const requestId = extractRequestId(event);
-        return createErrorResponse(403, 'Unauthorized - can only request own state', action, {
-            operation: 'lambda_execution'
-        }, requestId);;
+            const requestId = extractRequestId(event);
+            return createErrorResponse(403, 'Unauthorized - can only request own state', action, {
+                operation: 'lambda_execution'
+            }, requestId);
         }
 
         // Get user metadata from DynamoDB

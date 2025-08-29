@@ -1,6 +1,27 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: WebSocket API Backend with Lambda Functions
+Parameters:
+  Environment:
+    Type: String
+    Default: Development
+    Description: Environment name (Development, Staging, Prod)
+    AllowedValues:
+    - Development
+    - Staging
+    - Prod
+  FirebaseProjectId:
+    Type: String
+    Description: Firebase Project ID for authentication
+    Default: ''
+  FirebasePrivateKey:
+    Type: String
+    Description: Firebase Private Key for service account authentication
+    Default: ''
+  FirebaseClientEmail:
+    Type: String
+    Description: Firebase Client Email for service account authentication
+    Default: ''
 Globals:
   Function:
     Runtime: nodejs20.x
@@ -9,7 +30,8 @@ Resources:
   UserMetadataTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: UserMetadataV2
+      TableName:
+        Fn::Sub: UserMetadataV2-${Environment}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
@@ -29,7 +51,8 @@ Resources:
   MessagesTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: MessagesV2
+      TableName:
+        Fn::Sub: MessagesV2-${Environment}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
@@ -44,7 +67,8 @@ Resources:
   ConversationsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: ConversationsV3
+      TableName:
+        Fn::Sub: ConversationsV3-${Environment}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
@@ -55,7 +79,8 @@ Resources:
   MatchmakingQueueTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: MatchmakingQueue-Dev
+      TableName:
+        Fn::Sub: MatchmakingQueue-${Environment}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
       - AttributeName: PK
@@ -79,6 +104,12 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+      Tags:
+      - Key: Environment
+        Value:
+          Ref: Environment
+      - Key: Purpose
+        Value: MatchmakingQueue
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -90,7 +121,8 @@ Resources:
     Properties:
       ApiId:
         Ref: WebSocketApi
-      StageName: Dev
+      StageName:
+        Ref: Environment
       AutoDeploy: true
   SharedLambdaRole:
     Type: AWS::IAM::Role
@@ -119,9 +151,14 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -174,9 +211,14 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -216,7 +258,7 @@ Resources:
         Ref: OnDisconnectFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/$disconnect
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/$disconnect
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -228,11 +270,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -272,7 +319,7 @@ Resources:
         Ref: SendMessageFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/sendMessage
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/sendMessage
   TypingStatusRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -289,7 +336,7 @@ Resources:
         Ref: SendMessageFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/typingStatus
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/typingStatus
   SetReadyFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -301,12 +348,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
-          MATCHMAKING_QUEUE_TABLE: MatchmakingQueue-Dev
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -346,7 +397,7 @@ Resources:
         Ref: SetReadyFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/setReady
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/setReady
   StartConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -358,12 +409,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
-          MATCHMAKING_QUEUE_TABLE: MatchmakingQueue-Dev
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -403,7 +458,7 @@ Resources:
         Ref: StartConversationFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/startConversation
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/startConversation
   EndConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -415,11 +470,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -459,7 +519,7 @@ Resources:
         Ref: EndConversationFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/endConversation
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/endConversation
   FetchChatHistoryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -471,11 +531,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -515,7 +580,7 @@ Resources:
         Ref: FetchChatHistoryFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/fetchChatHistory
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/fetchChatHistory
   GetCurrentStateFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -527,11 +592,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -571,7 +641,7 @@ Resources:
         Ref: GetCurrentStateFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/getCurrentState
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/getCurrentState
   UpdatePresenceFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -583,11 +653,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -627,7 +702,7 @@ Resources:
         Ref: UpdatePresenceFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/updatePresence
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/updatePresence
   SyncConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -639,11 +714,16 @@ Resources:
         - Arn
       Environment:
         Variables:
-          USER_METADATA_TABLE: UserMetadataV2
-          CONVERSATIONS_TABLE: ConversationsV3
-          MESSAGES_TABLE: MessagesV2
+          USER_METADATA_TABLE:
+            Fn::Sub: UserMetadataV2-${Environment}
+          CONVERSATIONS_TABLE:
+            Fn::Sub: ConversationsV3-${Environment}
+          MESSAGES_TABLE:
+            Fn::Sub: MessagesV2-${Environment}
+          MATCHMAKING_QUEUE_TABLE:
+            Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
-            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
           FIREBASE_PROJECT_ID:
             Ref: FirebaseProjectId
           FIREBASE_PRIVATE_KEY:
@@ -683,26 +763,29 @@ Resources:
         Ref: SyncConversationFunction
       Principal: apigateway.amazonaws.com
       SourceArn:
-        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/Dev/syncConversation
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/syncConversation
 Outputs:
   WebSocketUrl:
     Description: mtjs websocket url
     Value:
-      Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/Dev
+      Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
   WebSocketApiId:
     Description: WebSocket API ID for E2E testing
     Value:
       Ref: WebSocketApi
-Parameters:
-  FirebaseProjectId:
-    Type: String
-    Description: Firebase Project ID for authentication
-    Default: ''
-  FirebasePrivateKey:
-    Type: String
-    Description: Firebase Private Key for service account authentication
-    Default: ''
-  FirebaseClientEmail:
-    Type: String
-    Description: Firebase Client Email for service account authentication
-    Default: ''
+  MatchmakingQueueTableName:
+    Description: Name of the Matchmaking Queue table
+    Value:
+      Ref: MatchmakingQueueTable
+    Export:
+      Name:
+        Fn::Sub: ${Environment}-MatchmakingQueueTableName
+  MatchmakingQueueTableArn:
+    Description: ARN of the Matchmaking Queue table
+    Value:
+      Fn::GetAtt:
+      - MatchmakingQueueTable
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${Environment}-MatchmakingQueueTableArn

@@ -1,6 +1,6 @@
 /**
- * Lambda function to handle setting a user's ready status and advancing the conversation
- * when both users are ready.
+ * Lambda function to handle setting a user's ready status for question advancement
+ * and advancing the conversation when both users are ready.
  * 
  * @param {Object} event - The event object containing the WebSocket connection details and request body
  * @returns {Object} Response object with status code and body
@@ -24,12 +24,32 @@ const dynamoDbClient = new DynamoDBClient({
 });
 const dynamoDB = DynamoDBDocumentClient.from(dynamoDbClient);
 
+// Initialize API Gateway client
+let apiGateway;
+try {
+    const websocketApiUrl = process.env.WEBSOCKET_API_URL;
+    if (!websocketApiUrl) {
+        throw new Error('WEBSOCKET_API_URL environment variable is required');
+    }
+    apiGateway = new ApiGatewayManagementApiClient({
+        endpoint: websocketApiUrl
+    });
+    console.log('✓ API Gateway client created successfully');
+    console.log('API Gateway endpoint configured:', websocketApiUrl);
+} catch (error) {
+    console.error('CRITICAL: Failed to create API Gateway client:', error);
+    throw new Error(`API Gateway client creation failed: ${error.message}`);
+}
+
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('setReady: Function started');
     console.log('setReady: Event received:', JSON.stringify(event, null, 2));
     console.log('setReady: Event body:', event.body);
+    console.log('setReady: Event body type:', typeof event.body);
     console.log('setReady: Event requestContext:', event.requestContext);
+    console.log('setReady: Event headers:', event.headers);
+    console.log('setReady: Event queryStringParameters:', event.queryStringParameters);
     
     // Get authenticated user info
     const { userId } = event.userInfo;
@@ -40,6 +60,10 @@ const handlerLogic = async (event) => {
         let payload;
         try {
             payload = JSON.parse(event.body);
+            console.log('setReady: Parsed payload:', JSON.stringify(payload, null, 2));
+            console.log('setReady: Payload keys:', Object.keys(payload));
+            console.log('setReady: Payload.data:', payload.data);
+            console.log('setReady: Payload.data keys:', payload.data ? Object.keys(payload.data) : 'No data field');
         } catch (error) {
             const action = extractAction(event);
             const requestId = extractRequestId(event);
@@ -50,16 +74,18 @@ const handlerLogic = async (event) => {
         }
 
         // Validate required fields
-        const { ready } = payload;
+        const { ready } = payload.data || payload;
         if (typeof ready !== 'boolean') {
             console.log('setReady: Invalid ready value:', ready);
+            console.log('setReady: Full payload:', JSON.stringify(payload, null, 2));
             const action = extractAction(event);
             const requestId = extractRequestId(event);
             return createErrorResponse(400, 'Invalid ready value. Must be a boolean.', action, {
                 operation: 'request_validation',
                 requiredField: 'ready',
                 providedValue: ready,
-                expectedType: 'boolean'
+                expectedType: 'boolean',
+                payloadStructure: payload
             }, requestId);
         }
 
@@ -115,6 +141,22 @@ const handlerLogic = async (event) => {
                     }
                 }));
                 console.log('setReady: User metadata updated successfully in DynamoDB');
+                
+                // If user is setting ready to false, remove them from matchmaking queue
+                if (ready === false) {
+                    console.log('setReady: User setting ready to false, removing from matchmaking queue...');
+                    try {
+                        await dynamoDB.send(new DeleteCommand({
+                            TableName: process.env.MATCHMAKING_QUEUE_TABLE,
+                            Key: { PK: `USER#${userId}` }
+                        }));
+                        console.log('setReady: User removed from matchmaking queue successfully');
+                    } catch (error) {
+                        console.warn('setReady: Failed to remove user from matchmaking queue (user may not have been in queue):', error);
+                        // Don't fail the entire operation if queue removal fails
+                        // The user might not have been in the queue to begin with
+                    }
+                }
             } catch (error) {
                 console.error('setReady: Error updating user metadata:', error);
                 return handleDynamoDBError(error, extractAction(event), {
@@ -123,56 +165,6 @@ const handlerLogic = async (event) => {
                     tableName: process.env.USER_METADATA_TABLE,
                     userId
                 });
-            }
-        }
-
-        // If user is setting ready to true, add them to matchmaking queue
-        if (ready) {
-            try {
-                // Check if user is already in a conversation
-                if (currentUserMetadata.Item?.chatId) {
-                    console.log('setReady: User already in conversation, removing from matchmaking queue');
-                    // Remove from matchmaking queue if they exist
-                    try {
-                        await dynamoDB.send(new DeleteCommand({
-                            TableName: process.env.MATCHMAKING_QUEUE_TABLE || 'MatchmakingQueue-Dev',
-                            Key: { PK: `USER#${userId}` }
-                        }));
-                    } catch (error) {
-                        // Ignore error if user wasn't in queue
-                        console.log('setReady: User was not in matchmaking queue');
-                    }
-                } else {
-                    // Add to matchmaking queue
-                    const queueItem = {
-                        PK: `USER#${userId}`,
-                        userId: userId,
-                        status: 'waiting',
-                        joinedAt: new Date().toISOString()
-                    };
-
-                    await dynamoDB.send(new PutCommand({
-                        TableName: process.env.MATCHMAKING_QUEUE_TABLE || 'MatchmakingQueue-Dev',
-                        Item: queueItem
-                    }));
-
-                    console.log('setReady: User added to matchmaking queue');
-                }
-            } catch (error) {
-                console.error('setReady: Error managing matchmaking queue:', error);
-                // Continue execution even if queue management fails
-            }
-        } else {
-            // If user is setting ready to false, remove them from matchmaking queue
-            try {
-                await dynamoDB.send(new DeleteCommand({
-                    TableName: process.env.MATCHMAKING_QUEUE_TABLE || 'MatchmakingQueue-Dev',
-                    Key: { PK: `USER#${userId}` }
-                }));
-                console.log('setReady: User removed from matchmaking queue');
-            } catch (error) {
-                // Ignore error if user wasn't in queue
-                console.log('setReady: User was not in matchmaking queue');
             }
         }
 
@@ -211,6 +203,139 @@ const handlerLogic = async (event) => {
                 console.error('setReady: Connection is stale, user probably disconnected');
             } else {
                 console.error('setReady: Error in WebSocket response logic:', error);
+            }
+        }
+
+        // Check if both users are ready and advance question if they are
+        if (ready && currentUserMetadata.Item?.chatId) {
+            try {
+                console.log('setReady: User is ready and in conversation, checking if both users are ready');
+                
+                // Get conversation details to find the other user
+                const conversationResult = await dynamoDB.send(new GetCommand({
+                    TableName: process.env.CONVERSATIONS_TABLE || 'Conversations-Dev',
+                    Key: { PK: `CHAT#${currentUserMetadata.Item.chatId}` }
+                }));
+
+                if (conversationResult.Item) {
+                    const { userAId, userBId } = conversationResult.Item;
+                    const otherUserId = userId === userAId ? userBId : userAId;
+                    
+                    console.log('setReady: Found other user in conversation:', otherUserId);
+                    
+                    // Get the other user's metadata to check if they're also ready
+                    const otherUserResult = await dynamoDB.send(new GetCommand({
+                        TableName: process.env.USER_METADATA_TABLE,
+                        Key: { PK: `USER#${otherUserId}` }
+                    }));
+
+                    if (otherUserResult.Item && otherUserResult.Item.ready) {
+                        console.log('setReady: Both users are ready, advancing question');
+                        
+                        // Both users are ready, advance the question
+                        const currentQuestionIndex = currentUserMetadata.Item.questionIndex || 1;
+                        const newQuestionIndex = currentQuestionIndex + 1;
+                        
+                        // Update question index for current user
+                        const currentUserUpdateResult = await dynamoDB.send(new UpdateCommand({
+                            TableName: process.env.USER_METADATA_TABLE,
+                            Key: { PK: `USER#${userId}` },
+                            UpdateExpression: 'SET questionIndex = :questionIndex, ready = :ready',
+                            ExpressionAttributeValues: {
+                                ':questionIndex': newQuestionIndex,
+                                ':ready': false
+                            },
+                            ReturnValues: 'ALL_NEW'
+                        }));
+
+                        // Update question index for other user
+                        const otherUserUpdateResult = await dynamoDB.send(new UpdateCommand({
+                            TableName: process.env.USER_METADATA_TABLE,
+                            Key: { PK: `USER#${otherUserId}` },
+                            UpdateExpression: 'SET questionIndex = :questionIndex, ready = :ready',
+                            ExpressionAttributeValues: {
+                                ':questionIndex': newQuestionIndex,
+                                ':ready': false
+                            },
+                            ReturnValues: 'ALL_NEW'
+                        }));
+
+                        console.log('setReady: Question advanced to index:', newQuestionIndex);
+                        console.log('setReady: Note: Users will see the new question on their next page refresh or when they reconnect');
+
+                        // Send advanceQuestion message to both users
+                        const advanceQuestionMessage = {
+                            action: 'advanceQuestion',
+                            data: {
+                                questionIndex: newQuestionIndex,
+                                ready: false
+                            }
+                        };
+
+                        // Send to current user
+                        if (currentUserMetadata.Item.connectionId) {
+                            try {
+                                await apiGateway.send(new PostToConnectionCommand({
+                                    ConnectionId: currentUserMetadata.Item.connectionId,
+                                    Data: JSON.stringify(advanceQuestionMessage)
+                                }));
+                                console.log(`setReady: Sent advanceQuestion to current user ${userId}`);
+                            } catch (error) {
+                                if (error.name === 'GoneException') {
+                                    console.log(`setReady: Connection is stale for current user ${userId}, they will need to refresh to see the question advancement`);
+                                    // Clean up stale connection ID
+                                    try {
+                                        await dynamoDB.send(new UpdateCommand({
+                                            TableName: process.env.USER_METADATA_TABLE,
+                                            Key: { PK: `USER#${userId}` },
+                                            UpdateExpression: 'REMOVE connectionId'
+                                        }));
+                                        console.log(`setReady: Removed stale connectionId for user ${userId}`);
+                                    } catch (cleanupError) {
+                                        console.warn(`setReady: Failed to cleanup stale connectionId for user ${userId}:`, cleanupError);
+                                    }
+                                } else {
+                                    console.error(`setReady: Error sending advanceQuestion to current user ${userId}:`, error);
+                                }
+                            }
+                        }
+
+                        // Send to other user
+                        if (otherUserResult.Item.connectionId) {
+                            try {
+                                await apiGateway.send(new PostToConnectionCommand({
+                                    ConnectionId: otherUserResult.Item.connectionId,
+                                    Data: JSON.stringify(advanceQuestionMessage)
+                                }));
+                                console.log(`setReady: Sent advanceQuestion to other user ${otherUserId}`);
+                            } catch (error) {
+                                if (error.name === 'GoneException') {
+                                    console.log(`setReady: Connection is stale for other user ${otherUserId}, they will need to refresh to see the question advancement`);
+                                    // Clean up stale connection ID
+                                    try {
+                                        await dynamoDB.send(new UpdateCommand({
+                                            TableName: process.env.USER_METADATA_TABLE,
+                                            Key: { PK: `USER#${otherUserId}` },
+                                            UpdateExpression: 'REMOVE connectionId'
+                                        }));
+                                        console.log(`setReady: Removed stale connectionId for user ${otherUserId}`);
+                                    } catch (cleanupError) {
+                                        console.warn(`setReady: Failed to cleanup stale connectionId for user ${otherUserId}:`, cleanupError);
+                                    }
+                                } else {
+                                    console.error(`setReady: Error sending advanceQuestion to other user ${otherUserId}:`, error);
+                                }
+                            }
+                        }
+                    } else {
+                        console.log('setReady: Other user is not ready yet, waiting for them');
+                    }
+                } else {
+                    console.log('setReady: No conversation found for chatId:', currentUserMetadata.Item.chatId);
+                }
+            } catch (error) {
+                console.error('setReady: Error checking if both users are ready:', error);
+                // Continue execution even if question advancement fails
             }
         }
 

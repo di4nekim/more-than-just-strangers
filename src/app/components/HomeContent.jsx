@@ -149,7 +149,8 @@ export default function HomeContent() {
     if (userMetadata.ready && !userMetadata.chatId && !hasActiveChat) {
       console.log('HomeContent: Detected user in matchmaking queue from WebSocket state');
       setIsInMatchmakingQueue(true);
-    } else if (userMetadata.chatId || hasActiveChat) {
+    } else if (userMetadata.chatId || hasActiveChat || !userMetadata.ready) {
+      console.log('HomeContent: User not in matchmaking queue - ready:', userMetadata.ready, 'chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat);
       setIsInMatchmakingQueue(false);
     }
   }, [userMetadata.chatId, hasActiveChat, userMetadata.connectionId, userMetadata.ready]);
@@ -186,16 +187,14 @@ export default function HomeContent() {
       const profile = await apiClient.getCurrentUserProfile();
       setUserProfile(profile);
 
+      // Initialize user - the WebSocket connection will be established automatically
+      // by the WebSocketProvider when it's ready
+      console.log('Initializing user...');
       await initializeUser(userId);
 
-      const chatStatus = await apiClient.hasActiveChat();
-      if (chatStatus.hasActiveChat && chatStatus.chatId) {
-        const chatContext = await apiClient.getInitialChatContext(userId);
-        setCurrentChatId(chatContext.currentChatId);
-        setIsConversationActive(!!chatContext.currentChatId);
-      }
-
-      console.log('User data loaded successfully:', { profile, userId, chatStatus });
+      // Remove the hardcoded hasActiveChat call since initializeUser already fetches this data via WebSocket
+      // The WebSocket getCurrentState provides the correct user metadata from DynamoDB
+      console.log('User data loaded successfully:', { profile, userId });
     } catch (error) {
       console.error('Failed to load user data:', error);
       setError('Failed to load user data. Please try refreshing the page.');
@@ -436,8 +435,15 @@ export default function HomeContent() {
               </div>
             </div>
 
+            {/* Loading indicator for matchmaking */}
+            {(isInMatchmakingQueue || initState.isInitializing) && (
+                <div className="flex justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal"></div>
+                </div>
+              )}
+
             {/* Current Status */}
-            <div className="mb-6 text-center text-teal text-lg">
+            <div className="mb-6 mt-4 text-center text-teal text-lg">
               {getCurrentStatus()}
             </div>
 
@@ -484,12 +490,7 @@ export default function HomeContent() {
                 </button>
               )}
 
-              {/* Loading indicator for matchmaking */}
-              {(isInMatchmakingQueue || initState.isInitializing) && (
-                <div className="flex justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal"></div>
-                </div>
-              )}
+              
             </div>
           </div>
         </main>

@@ -12,7 +12,8 @@ import { WebSocketClient } from './websocketHandler';
 import { WebSocketActions, createWebSocketActions } from './websocketActions';
 import { UserMetadata, ConversationMetadata, PresenceStatusPayload } from './websocketTypes';
 import { apiClient, authenticatedFetch } from '../app/lib/api-client';
-import { getAuth } from 'firebase/auth';
+
+import { useFirebaseAuth } from '../app/components/auth/FirebaseAuthProvider';
 
 /**
  * @typedef {Object} Message
@@ -159,6 +160,9 @@ const mergeOptimisticMessages = (previousMessages, fetchedMessages) => {
 };
 
 export const WebSocketProvider = ({ children }) => {
+  // Get Firebase auth state from the FirebaseAuthProvider
+  const { user: firebaseUser, isInitialized: firebaseInitialized } = useFirebaseAuth();
+  
   const [wsClient, setWsClient] = useState(null);
   const [wsActions, setWsActions] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -268,10 +272,14 @@ export const WebSocketProvider = ({ children }) => {
    */
   const setupMessageHandlers = useCallback((wsClient) => {
     console.log('WebSocket: Setting up message handlers...');
+    console.log('WebSocket: wsClient available:', !!wsClient);
+    console.log('WebSocket: Setting up currentState handler...');
     
     // Handle current state response (for reconnection/refresh)
     wsClient.onMessage('currentState', (data) => {
       console.log('WebSocket: Received currentState response:', data);
+      console.log('WebSocket: Setting user metadata with chatId:', data.chatId);
+      console.log('WebSocket: Setting hasActiveChat to:', !!data.chatId);
       
       setUserMetadata(prev => ({
         ...prev,
@@ -285,6 +293,7 @@ export const WebSocketProvider = ({ children }) => {
       }));
       
       setHasActiveChat(!!data.chatId);
+      console.log('WebSocket: User metadata and hasActiveChat updated');
       
       // If user has an active chat, load the messages
       if (data.chatId && wsActions) {
@@ -337,6 +346,12 @@ export const WebSocketProvider = ({ children }) => {
           });
         } else if (data.queued) {
           // User was added to queue (no match found yet)
+          // Update user metadata to reflect ready status
+          setUserMetadata(prev => ({
+            ...prev,
+            ready: true
+          }));
+          
           matchmakingPromiseRef.current.resolve({
             queued: true,
             message: data.message || 'Added to matchmaking queue'
@@ -347,6 +362,7 @@ export const WebSocketProvider = ({ children }) => {
         }
         
         setMatchmakingPromise(null);
+        matchmakingPromiseRef.current = null;
       }
     });
 
@@ -362,6 +378,7 @@ export const WebSocketProvider = ({ children }) => {
         }
         matchmakingPromiseRef.current.reject(new Error(data.error || 'WebSocket error'));
         setMatchmakingPromise(null);
+        matchmakingPromiseRef.current = null;
       }
     });
 
@@ -616,62 +633,34 @@ export const WebSocketProvider = ({ children }) => {
     });
     
     console.log('WebSocket: Message handlers set up successfully');
+    console.log('WebSocket: All message handlers configured');
   }, [loadInitialMessages, wsActions]); // Remove handlePresenceUpdate from dependencies
 
-  // Check for Firebase readiness
+  // Check for Firebase readiness - now based on FirebaseAuthProvider state
   useEffect(() => {
-    const checkFirebaseReady = async () => {
-      try {
-        // Wait for Firebase auth to be initialized
-        const auth = getAuth();
-        
-        if (!auth) {
-          console.log('WebSocketProvider: Firebase auth not available, using demo mode');
-          setFirebaseReady(true);
-          return;
-        }
-        
-        // Wait for auth to be ready
-        await new Promise((resolve) => {
-          const checkReady = () => {
-            if (auth) {
-              resolve();
-            } else {
-              setTimeout(checkReady, 100);
-            }
-          };
-          checkReady();
-        });
-        
-        console.log('WebSocketProvider: Firebase is ready');
-        setFirebaseReady(true);
-      } catch (error) {
-        console.error('WebSocketProvider: Error waiting for Firebase:', error);
-        // Set Firebase as ready even if there's an error to prevent blocking
-        console.log('WebSocketProvider: Setting Firebase as ready despite error');
-        setFirebaseReady(true);
-      }
-    };
+    if (firebaseInitialized) {
+      console.log('WebSocketProvider: Firebase is initialized via FirebaseAuthProvider');
+      setFirebaseReady(true);
+    }
+  }, [firebaseInitialized]);
 
-    checkFirebaseReady();
-  }, []);
-
-  // Initialize WebSocket client and actions when Firebase is ready
+  // Initialize WebSocket client and actions when Firebase is ready AND user is authenticated
   useEffect(() => {
-    console.log('WebSocketProvider: firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
+    console.log('WebSocketProvider: firebaseReady:', firebaseReady, 'wsClient:', !!wsClient, 'firebaseUser:', !!firebaseUser);
     
-    if (firebaseReady && !wsClient) {
+    // Only initialize WebSocket when Firebase is ready AND user is authenticated
+    if (firebaseReady && !wsClient && firebaseUser) {
       try {
         console.log('WebSocketProvider: Initializing WebSocket client...');
         
         // Validate environment variables
         const wsApiUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL;
         if (!wsApiUrl) {
-          console.warn('WebSocketProvider: NEXT_PUBLIC_WEBSOCKET_API_URL is not configured');
-          console.warn('WebSocket will not be available. Please set NEXT_PUBLIC_WEBSOCKET_API_URL in your environment variables');
+          console.error('WebSocketProvider: NEXT_PUBLIC_WEBSOCKET_API_URL is not configured');
+          console.error('WebSocket will not be available. Please set NEXT_PUBLIC_WEBSOCKET_API_URL in your environment variables');
           setInitState(prev => ({ 
             ...prev, 
-            error: 'WebSocket API URL not configured - WebSocket features will be disabled' 
+            error: 'WebSocket API URL not configured - WebSocket features will be disabled. Please set NEXT_PUBLIC_WEBSOCKET_API_URL in your .env.local file.' 
           }));
           return;
         }
@@ -682,7 +671,10 @@ export const WebSocketProvider = ({ children }) => {
         const onConnectionStateChange = (connected) => {
           console.log('WebSocket connection state changed:', connected);
           console.log('WebSocket: Connection details - wsClient:', !!client, 'wsActions:', !!actions);
+          console.log('WebSocket: Connection state change callback called with connected:', connected);
+          console.log('WebSocket: Setting isConnected to:', connected);
           setIsConnected(connected);
+          console.log('WebSocket: isConnected state updated');
         };
         
         const client = new WebSocketClient(wsApiUrl, onConnectionStateChange);
@@ -699,6 +691,14 @@ export const WebSocketProvider = ({ children }) => {
         setWsActions(actions);
         
         console.log('WebSocketProvider: WebSocket client and actions initialized and set in state');
+        
+        // Automatically establish the WebSocket connection
+        console.log('WebSocketProvider: Automatically establishing WebSocket connection...');
+        actions.connect().then(() => {
+          console.log('WebSocketProvider: WebSocket connection established automatically');
+        }).catch(error => {
+          console.error('WebSocketProvider: Failed to establish WebSocket connection:', error);
+        });
       } catch (error) {
         console.error('WebSocketProvider: Failed to initialize WebSocket client:', error);
         setInitState(prev => ({ 
@@ -707,7 +707,7 @@ export const WebSocketProvider = ({ children }) => {
         }));
       }
     }
-  }, [firebaseReady, wsClient]);
+  }, [firebaseReady, wsClient, firebaseUser]);
 
   // Update messages ref when messages change
   useEffect(() => {
@@ -734,6 +734,17 @@ export const WebSocketProvider = ({ children }) => {
     // Wait for Firebase to be ready before proceeding
     if (!firebaseReady) {
       console.log('WebSocketProvider: Waiting for Firebase to be ready before initializing user...');
+      return;
+    }
+    
+    // Wait for WebSocket actions to be available
+    if (!wsActions) {
+      console.log('WebSocketProvider: WebSocket actions not yet available, will retry when ready');
+      // Instead of returning, wait a bit and try again
+      setTimeout(() => {
+        console.log('WebSocketProvider: Retrying user initialization...');
+        initializeUser(userId);
+      }, 1000);
       return;
     }
     
@@ -794,8 +805,18 @@ export const WebSocketProvider = ({ children }) => {
         // Step 3: Get current state from backend via WebSocket
         if (!signal.aborted && wsActions) {
           console.log('Getting current state from backend via WebSocket...');
-          await wsActions.getCurrentState({ userId });
-          console.log('getCurrentState request sent');
+          console.log('WebSocket actions available:', !!wsActions);
+          console.log('User ID being sent:', userId);
+          
+          try {
+            await wsActions.getCurrentState({ userId });
+            console.log('getCurrentState request sent successfully');
+          } catch (error) {
+            console.error('Failed to send getCurrentState request:', error);
+            throw error;
+          }
+        } else {
+          console.log('Cannot send getCurrentState - signal aborted:', signal.aborted, 'wsActions available:', !!wsActions);
         }
 
         // Step 4: Mark initialization as complete
@@ -886,70 +907,44 @@ export const WebSocketProvider = ({ children }) => {
     return () => clearInterval(heartbeatInterval);
   }, [wsActions, isConnected, userMetadata.userId]);
 
-  // Auto-retry initializeUser when Firebase becomes ready
+  // Auto-retry initializeUser when Firebase becomes ready and user is authenticated
+  // Commented out to prevent race conditions with HomeContent's initialization
+  // useEffect(() => {
+  //   const checkAndInitialize = async () => {
+  //     if (firebaseReady && userMetadata.userId && !initState.isInitializing && !initState.profileLoaded && !initState.error && firebaseUser) {
+  //       try {
+  //         // Verify the user is fully authenticated by getting a token
+  //         try {
+  //           const token = await firebaseUser.getIdToken();
+  //           if (token) {
+  //             console.log('User is authenticated, initializing user session...');
+  //             initializeUser(userMetadata.userId);
+  //           } else {
+  //             console.log('User not fully authenticated yet, waiting...');
+  //           }
+  //         } catch (tokenError) {
+  //           console.log('User authentication not ready yet, waiting...');
+  //         }
+  //       } catch (error) {
+  //         console.log('Firebase auth check failed, waiting...');
+  //         }
+  //     }
+  //   };
+
+  //   checkAndInitialize();
+  // }, [firebaseReady, userMetadata.userId, initState.isInitializing, initState.profileLoaded, initState.error, initializeUser, firebaseUser]);
+
+  // Handle user sign-out - disconnect WebSocket and reset state
   useEffect(() => {
-    const checkAndInitialize = async () => {
-      if (firebaseReady && userMetadata.userId && !initState.isInitializing && !initState.profileLoaded && !initState.error) {
-        try {
-          // Check if user is actually authenticated before initializing
-          const auth = getAuth();
-          if (auth && auth.currentUser) {
-            // Verify the user is fully authenticated by getting a token
-            try {
-              const token = await auth.currentUser.getIdToken();
-              if (token) {
-                console.log('User is authenticated, initializing user session...');
-                initializeUser(userMetadata.userId);
-              } else {
-                console.log('User not fully authenticated yet, waiting...');
-              }
-            } catch (tokenError) {
-              console.log('User authentication not ready yet, waiting...');
-            }
-          } else {
-            console.log('No authenticated user yet, waiting for sign-in...');
-          }
-        } catch (error) {
-          console.log('Firebase auth check failed, waiting...');
-        }
-      }
-    };
-
-    checkAndInitialize();
-  }, [firebaseReady, userMetadata.userId, initState.isInitializing, initState.profileLoaded, initState.error, initializeUser]);
-
-  // Listen for authentication state changes
-  useEffect(() => {
-    const auth = getAuth();
-    if (!auth) return;
-
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      console.log('Auth state changed:', user ? 'User signed in' : 'User signed out');
-      
-      if (user && firebaseReady && userMetadata.userId && !initState.isInitializing && !initState.profileLoaded) {
-        try {
-          // Verify the user is fully authenticated
-          const token = await user.getIdToken();
-          if (token) {
-            console.log('User authenticated via auth state change, initializing...');
-            initializeUser(userMetadata.userId);
-          }
-        } catch (error) {
-          console.log('User not fully authenticated yet:', error.message);
-        }
-      } else if (!user) {
-        // User signed out, reset initialization state
-        setInitState(prev => ({ 
-          ...prev, 
-          isInitializing: false, 
-          profileLoaded: false, 
-          error: null 
-        }));
-      }
-    });
-
-    return () => unsubscribe();
-  }, [firebaseReady, userMetadata.userId, initState.isInitializing, initState.profileLoaded, initializeUser]);
+    if (!firebaseUser && wsClient) {
+      console.log('User signed out, disconnecting WebSocket and resetting state');
+      wsClient.disconnect();
+      setWsClient(null);
+      setWsActions(null);
+      setIsConnected(false);
+      resetInitialization();
+    }
+  }, [firebaseUser, wsClient, resetInitialization]);
 
   // Load more messages (pagination)
   const loadMoreMessages = useCallback(async () => {
@@ -1073,10 +1068,41 @@ export const WebSocketProvider = ({ children }) => {
     }
 
     try {
+      // Create a promise that will be resolved by the WebSocket message handlers
+      const matchmakingPromise = new Promise((resolve, reject) => {
+        // Set up timeout for initial WebSocket response (not for matching)
+        // This timeout is only for the backend to respond that the user was added to queue
+        const timeout = setTimeout(() => {
+          console.error('WebSocket: Initial matchmaking response timeout');
+          setMatchmakingPromise(null);
+          reject(new Error('Failed to connect to matchmaking service'));
+        }, 10000); // 10 second timeout for initial response only
+
+        // Store the promise with resolve/reject functions
+        const promiseData = {
+          resolve,
+          reject,
+          timeout
+        };
+        
+        setMatchmakingPromise(promiseData);
+        matchmakingPromiseRef.current = promiseData;
+      });
+
+      // Send the WebSocket message
       await wsActions.startConversation({ userId: userProfile.userId });
-      return { success: true };
+      
+      // Wait for the WebSocket response (either "queued" or "matched")
+      const result = await matchmakingPromise;
+      return result;
     } catch (error) {
       console.error('Failed to start new chat:', error);
+      // Clean up the promise if it exists
+      if (matchmakingPromiseRef.current?.timeout) {
+        clearTimeout(matchmakingPromiseRef.current.timeout);
+      }
+      setMatchmakingPromise(null);
+      matchmakingPromiseRef.current = null;
       throw error;
     }
   }, [wsActions, userProfile?.userId]);
@@ -1126,41 +1152,48 @@ export const WebSocketProvider = ({ children }) => {
       console.log('Current connection state - wsActions:', !!wsActions, 'isConnected:', isConnected);
       console.log('firebaseReady:', firebaseReady, 'wsClient:', !!wsClient);
       
-      // Check if Firebase is configured before making API calls
-      const auth = getAuth();
-      if (!auth.currentUser) {
+      // Check if we have an authenticated user from FirebaseAuthProvider
+      if (!firebaseUser) {
         console.error('initializeWebSocketConnection: No authenticated user found');
         throw new Error('No authenticated user');
       }
 
-      console.log('initializeWebSocketConnection: Firebase user found:', auth.currentUser.uid);
+      console.log('initializeWebSocketConnection: Firebase user found:', firebaseUser.uid);
 
       console.log('Initializing WebSocket connection...');
       console.log('wsActions available:', !!wsActions);
       
-      // Initialize WebSocket connection
+      // The WebSocket connection is now established automatically by WebSocketProvider
+      // We just need to ensure it's connected and then get the current state
       if (wsActions) {
-        console.log('Calling wsActions.connect...');
-        // Let the WebSocketClient handle authentication automatically
-        await wsActions.connect();
-        console.log('wsActions.connect completed');
+        console.log('WebSocket actions available, checking connection status...');
+        
+        // Wait for connection to be established if not already connected
+        let attempts = 0;
+        const maxAttempts = 30; // 30 * 100ms = 3 seconds
+        
+        while (!isConnected && attempts < maxAttempts) {
+          console.log(`Waiting for WebSocket connection... (attempt ${attempts + 1}/${maxAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        
+        if (!isConnected) {
+          console.warn('WebSocket connection not established after waiting');
+          // Try to connect explicitly
+          console.log('Attempting explicit connection...');
+          await wsActions.connect();
+        }
         
         // After connection is established, get current state from backend
         console.log('Getting current state from backend...');
         await wsActions.getCurrentState({ userId });
         console.log('getCurrentState request sent');
         
-        // The connection state is now handled by the onConnectionStateChange callback
-        // No need to manually check isConnected here since it's updated via the callback
-        console.log('WebSocket connection established successfully');
-        
-        // Set up connection heartbeat to ensure we stay connected
-        console.log('Setting up connection heartbeat...');
-        setupConnectionHeartbeat();
+        console.log('WebSocket connection and state retrieval completed');
         
       } else {
         console.warn('wsActions not available for WebSocket connection');
-        console.warn('This might be a timing issue - waiting for initialization...');
         throw new Error('WebSocket actions not initialized');
       }
       
@@ -1175,7 +1208,7 @@ export const WebSocketProvider = ({ children }) => {
       }));
       throw error;
     }
-  }, [wsActions, isConnected, firebaseReady, wsClient]);
+  }, [wsActions, isConnected, firebaseReady, wsClient, firebaseUser]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -11,10 +11,9 @@ const { createErrorResponse, extractAction, extractRequestId } = require('./erro
  * @returns {Promise<Object>} Decoded token payload
  */
 const validateFirebaseToken = async (token) => {
-
     try {
-        console.log('🔥 FIREBASE: Starting token validation');
-        console.log('🔥 FIREBASE: Token length:', token ? token.length : 'no token');
+        console.log('FIREBASE: Starting token validation');
+        console.log('FIREBASE: Token length:', token ? token.length : 'no token');
         
         const decodedToken = await verifyIdToken(token);
         
@@ -23,18 +22,18 @@ const validateFirebaseToken = async (token) => {
         const exp = decodedToken.exp;
         const iat = decodedToken.iat;
         
-        console.log('🔥 FIREBASE: Token validation successful');
-        console.log('🔥 FIREBASE: Token issued at:', new Date(iat * 1000).toISOString());
-        console.log('🔥 FIREBASE: Token expires at:', new Date(exp * 1000).toISOString());
-        console.log('🔥 FIREBASE: Current time:', new Date(now * 1000).toISOString());
-        console.log('🔥 FIREBASE: Time until expiration:', Math.max(0, exp - now), 'seconds');
-        console.log('🔥 FIREBASE: User ID:', decodedToken.uid);
-        console.log('🔥 FIREBASE: Email:', decodedToken.email);
+        console.log('FIREBASE: Token validation successful');
+        console.log('FIREBASE: Token issued at:', new Date(iat * 1000).toISOString());
+        console.log('FIREBASE: Token expires at:', new Date(exp * 1000).toISOString());
+        console.log('FIREBASE: Current time:', new Date(now * 1000).toISOString());
+        console.log('FIREBASE: Time until expiration:', Math.max(0, exp - now), 'seconds');
+        console.log('FIREBASE: User ID:', decodedToken.uid);
+        console.log('FIREBASE: Email:', decodedToken.email);
         
         return decodedToken;
     } catch (error) {
-        console.error('🔥 FIREBASE: Token validation failed:', error.message);
-        console.error('🔥 FIREBASE: Error code:', error.code);
+        console.error('FIREBASE: Token validation failed:', error.message);
+        console.error('FIREBASE: Error code:', error.code);
         
         // Provide more specific error messages
         if (error.code === 'auth/id-token-expired') {

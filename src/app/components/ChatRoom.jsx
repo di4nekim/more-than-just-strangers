@@ -68,6 +68,7 @@ export default function ChatRoom({ chatId: propChatId }) {
   const [isFindingMatch, setIsFindingMatch] = useState(true);
   const [isEndingChat, setIsEndingChat] = useState(false);
   const [localReadyState, setLocalReadyState] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
   const getParticipantsAsArray = (participants) => {
     if (!participants) return [];
@@ -96,9 +97,14 @@ export default function ChatRoom({ chatId: propChatId }) {
         }
         setQuestionIndex(newQuestionIndex);
         prevQuestionIndexRef.current = newQuestionIndex;
+        
+        // Reset localReadyState when question advances (fallback mechanism)
+        if (localReadyState) {
+          setLocalReadyState(false);
+        }
       }
     }
-  }, [userMetadata.questionIndex, userId]);
+  }, [userMetadata.questionIndex, userId, localReadyState]);
 
   const prevReadyRef = useRef(userMetadata.ready);
   useLayoutEffect(() => {
@@ -371,6 +377,37 @@ export default function ChatRoom({ chatId: propChatId }) {
     }
   }, [messages.length, scrollToBottom]);
 
+  // Initial sync and periodic sync to ensure we have the latest question index
+  useEffect(() => {
+    if (!isConnected || !wsActions || !userId) return;
+
+    // Initial sync
+    const initialSync = async () => {
+      try {
+        console.log('ChatRoom: Initial sync - getting current state');
+        await wsActions.getCurrentState({ userId });
+        setLastSyncTime(new Date());
+      } catch (error) {
+        console.warn('ChatRoom: Initial sync failed:', error);
+      }
+    };
+
+    initialSync();
+
+    // Periodic sync every 30 seconds
+    const syncInterval = setInterval(async () => {
+      try {
+        console.log('ChatRoom: Periodic sync - getting current state');
+        await wsActions.getCurrentState({ userId });
+        setLastSyncTime(new Date());
+      } catch (error) {
+        console.warn('ChatRoom: Periodic sync failed:', error);
+      }
+    }, 30000);
+
+    return () => clearInterval(syncInterval);
+  }, [isConnected, wsActions, userId]);
+
   useEffect(() => {
     const chatContainer = chatContainerRef.current;
     if (chatContainer) {
@@ -431,7 +468,7 @@ export default function ChatRoom({ chatId: propChatId }) {
 
   if (initState.isInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-beige">
+      <div className="min-h-screen flex items-center justify-center bg-beige font-mono">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal mx-auto mb-4"></div>
           <p className="text-teal dark:text-teal ">
@@ -519,31 +556,51 @@ export default function ChatRoom({ chatId: propChatId }) {
           <div className="flex-1 text-center text-lg font-semibold uppercase">
             {questionText || 'LOADING QUESTION...'}
           </div>
-          <button 
-            onClick={handleReady}
-            disabled={!isConnected}
-            className={`bg-transparent p-1 rounded-full transition-all duration-200 border-2 border-transparent ${
-              localReadyState 
-                ? 'text-green-300 hover:border-beige hover:text-beige' 
-                : 'hover:border-beige hover:text-beige text-beige'
-            }`}
-            title={localReadyState ? 'Click to unready' : 'Ready for next question'}
-          >
-            {localReadyState ? (
-              <div className="flex items-center space-x-1">
-                <div className="animate-pulse">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-                <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
-              </div>
-            ) : (
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={async () => {
+                try {
+                  console.log('ChatRoom: Manual refresh - getting current state');
+                  await wsActions.getCurrentState({ userId });
+                  setLastSyncTime(new Date());
+                } catch (error) {
+                  console.warn('ChatRoom: Manual refresh failed:', error);
+                }
+              }}
+              disabled={!isConnected}
+              className="bg-transparent p-1 rounded-full transition-all duration-200 border-2 border-transparent hover:border-beige hover:text-beige text-beige"
+              title="Refresh question (in case WebSocket messages failed)"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-            )}
-          </button>
+            </button>
+            <button 
+              onClick={handleReady}
+              disabled={!isConnected}
+              className={`bg-transparent p-1 rounded-full transition-all duration-200 border-2 border-transparent ${
+                localReadyState 
+                  ? 'text-green-300 hover:border-beige hover:text-beige' 
+                  : 'hover:border-beige hover:text-beige text-beige'
+              }`}
+              title={localReadyState ? 'Click to unready' : 'Ready for next question'}
+            >
+              {localReadyState ? (
+                <div className="flex items-center space-x-1">
+                  <div className="animate-pulse">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
+                </div>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Show waiting indicator when user is ready but waiting for other user */}
@@ -555,6 +612,7 @@ export default function ChatRoom({ chatId: propChatId }) {
             </div>
           </div>
         )}
+
 
         {error && (
           <div className="mx-4 mb-4 p-2 bg-red-100 text-red-700 rounded-lg">

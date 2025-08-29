@@ -1,27 +1,36 @@
-const AWS = require('aws-sdk');
 const { handler } = require('../index');
-const AWSMock = require('aws-sdk-mock');
 
-// Mock AWS SDK
-jest.mock('aws-sdk', () => {
-    const mockDynamoDB = {
-        get: jest.fn().mockReturnThis(),
-        update: jest.fn().mockReturnThis(),
-        promise: jest.fn()
-    };
+// Mock the shared auth module
+jest.mock('../../shared/auth', () => ({
+    authenticateWebSocketEvent: jest.fn(() => Promise.resolve({
+        userId: 'test-user-123',
+        email: 'test@example.com',
+    })),
+}));
 
-    const mockApiGateway = {
-        postToConnection: jest.fn().mockReturnThis(),
-        promise: jest.fn()
-    };
+// Mock AWS SDK v3
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+    DynamoDBClient: jest.fn(() => ({
+        send: jest.fn(),
+    })),
+}));
 
-    return {
-        DynamoDB: {
-            DocumentClient: jest.fn(() => mockDynamoDB)
-        },
-        ApiGatewayManagementApi: jest.fn(() => mockApiGateway)
-    };
-});
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+    DynamoDBDocumentClient: {
+        from: jest.fn((client) => ({
+            send: jest.fn(),
+        })),
+    },
+    GetCommand: jest.fn(),
+    UpdateCommand: jest.fn(),
+}));
+
+jest.mock('@aws-sdk/client-apigatewaymanagementapi', () => ({
+    ApiGatewayManagementApiClient: jest.fn(() => ({
+        send: jest.fn(),
+    })),
+    PostToConnectionCommand: jest.fn(),
+}));
 
 describe('setReady Lambda', () => {
     let mockEvent;
@@ -33,9 +42,19 @@ describe('setReady Lambda', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        AWSMock.restore();
-        dynamoDB = new AWS.DynamoDB.DocumentClient();
-        apiGateway = new AWS.ApiGatewayManagementApi();
+        
+        // Set up environment variables
+        process.env.USER_METADATA_TABLE = 'user-metadata-table';
+        process.env.CONVERSATIONS_TABLE = 'conversations-table';
+        process.env.WEBSOCKET_API_URL = 'wss://test-api.execute-api.region.amazonaws.com/prod';
+        process.env.AWS_REGION = 'us-east-1';
+        
+        // Get the mocked clients
+        const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+        const { ApiGatewayManagementApiClient } = require('@aws-sdk/client-apigatewaymanagementapi');
+        
+        dynamoDB = DynamoDBDocumentClient.from();
+        apiGateway = new ApiGatewayManagementApiClient();
         mockEvent = {
             requestContext: {
                 connectionId: mockConnectionId
@@ -80,11 +99,13 @@ describe('setReady Lambda', () => {
     });
 
     test('should return 404 when user not found', async () => {
-        AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
-            callback(null, { Item: null });
-        });
+        // Mock DynamoDB to return no user
+        dynamoDB.send.mockResolvedValueOnce({ Item: null });
 
         const event = {
+            requestContext: {
+                connectionId: mockConnectionId
+            },
             body: JSON.stringify({
                 chatId: 'test-chat-id',
                 userId: 'test-user-id',
@@ -100,12 +121,14 @@ describe('setReady Lambda', () => {
     });
 
     test('should return 403 when connection ID does not match', async () => {
-        dynamoDB.promise.mockResolvedValueOnce({
+        // Mock DynamoDB to return user with different connection ID
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockUserId}`,
                 connectionId: 'different-connection-id'
             }
         });
+        
         const response = await handler(mockEvent);
         expect(response.statusCode).toBe(403);
         expect(response.body).toBe('User connection does not match');
@@ -113,16 +136,16 @@ describe('setReady Lambda', () => {
 
     test('should successfully set ready status when other user is not ready', async () => {
         // 1. get user metadata
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockUserId}`,
                 connectionId: mockConnectionId
             }
         });
         // 2. update ready status
-        dynamoDB.promise.mockResolvedValueOnce({});
+        dynamoDB.send.mockResolvedValueOnce({});
         // 3. get conversation
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `CHAT#${mockChatId}`,
                 userAId: mockUserId,
@@ -130,7 +153,7 @@ describe('setReady Lambda', () => {
             }
         });
         // 4. get other user metadata (not ready)
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockOtherUserId}`,
                 isReady: false
@@ -138,7 +161,7 @@ describe('setReady Lambda', () => {
         });
         const response = await handler(mockEvent);
         expect(response.statusCode).toBe(200);
-        expect(dynamoDB.update).toHaveBeenCalledWith(expect.objectContaining({
+        expect(dynamoDB.send).toHaveBeenCalledWith(expect.objectContaining({
             TableName: process.env.USER_METADATA_TABLE,
             Key: { PK: `USER#${mockUserId}` },
             UpdateExpression: 'SET isReady = :ready',
@@ -150,16 +173,16 @@ describe('setReady Lambda', () => {
 
     test('should advance question index and notify both users when both are ready', async () => {
         // 1. get user metadata
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockUserId}`,
                 connectionId: mockConnectionId
             }
         });
         // 2. update ready status
-        dynamoDB.promise.mockResolvedValueOnce({});
+        dynamoDB.send.mockResolvedValueOnce({});
         // 3. get conversation
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `CHAT#${mockChatId}`,
                 userAId: mockUserId,
@@ -167,7 +190,7 @@ describe('setReady Lambda', () => {
             }
         });
         // 4. get other user metadata (ready)
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockOtherUserId}`,
                 isReady: true,
@@ -175,34 +198,34 @@ describe('setReady Lambda', () => {
             }
         });
         // 5. update question index for userA
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Attributes: { questionIndex: 1 }
         });
         // 6. update question index for userB
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Attributes: { questionIndex: 1 }
         });
         // 7. get userA metadata for WebSocket
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockUserId}`,
                 connectionId: mockConnectionId
             }
         });
         // 8. get userB metadata for WebSocket
-        dynamoDB.promise.mockResolvedValueOnce({
+        dynamoDB.send.mockResolvedValueOnce({
             Item: {
                 PK: `USER#${mockOtherUserId}`,
                 connectionId: 'other-connection-id'
             }
         });
         // 9. WebSocket postToConnection resolves
-        apiGateway.promise.mockResolvedValue({});
+        apiGateway.send.mockResolvedValue({});
         const response = await handler(mockEvent);
         expect(response.statusCode).toBe(200);
-        expect(dynamoDB.update).toHaveBeenCalledTimes(3); // ready status + 2 question indices
-        expect(apiGateway.postToConnection).toHaveBeenCalledTimes(2);
-        expect(apiGateway.postToConnection).toHaveBeenCalledWith(expect.objectContaining({
+        expect(dynamoDB.send).toHaveBeenCalledTimes(3); // ready status + 2 question indices
+        expect(apiGateway.send).toHaveBeenCalledTimes(2);
+        expect(apiGateway.send).toHaveBeenCalledWith(expect.objectContaining({
             ConnectionId: mockConnectionId,
             Data: JSON.stringify({
                 action: 'advanceQuestion',
@@ -215,11 +238,13 @@ describe('setReady Lambda', () => {
     });
 
     test('should handle errors gracefully', async () => {
-        AWSMock.mock('DynamoDB.DocumentClient', 'get', (params, callback) => {
-            callback(new Error('Database error'));
-        });
+        // Mock DynamoDB to throw an error
+        dynamoDB.send.mockRejectedValueOnce(new Error('Database error'));
 
         const event = {
+            requestContext: {
+                connectionId: mockConnectionId
+            },
             body: JSON.stringify({
                 chatId: 'test-chat-id',
                 userId: 'test-user-id',
