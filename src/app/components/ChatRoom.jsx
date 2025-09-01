@@ -52,6 +52,7 @@ export default function ChatRoom({ chatId: propChatId }) {
   const messageEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
 
   const { chatId: encodedChatId } = useParams();
   const chatId = propChatId || (encodedChatId ? decodeURIComponent(Array.isArray(encodedChatId) ? encodedChatId[0] : encodedChatId) : '');
@@ -418,6 +419,46 @@ export default function ChatRoom({ chatId: propChatId }) {
     }
   }, [debouncedScrollHandler]);
 
+  // Auto-focus input when user starts typing anywhere
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // Don't focus if we're in certain states
+      if (isFindingMatch || isEndingChat || authLoading || !isAuthenticated() || !userId) {
+        return;
+      }
+      
+      // Don't focus if already focused on the input or if it's a special key
+      if (document.activeElement === inputRef.current) {
+        return;
+      }
+      
+      // Don't focus for modifier keys, function keys, or navigation keys
+      const specialKeys = [
+        'Alt', 'Control', 'Meta', 'Shift', 'Tab', 'Escape', 'F1', 'F2', 'F3', 'F4', 
+        'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'ArrowUp', 'ArrowDown', 
+        'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 
+        'Delete', 'CapsLock', 'ScrollLock', 'NumLock', 'Pause', 'ContextMenu'
+      ];
+      
+      if (specialKeys.includes(e.key)) {
+        return;
+      }
+      
+      // Focus the input field
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [isFindingMatch, isEndingChat, authLoading, isAuthenticated, userId]);
+
   useEffect(() => {
     return () => {
       cleanup();
@@ -677,6 +718,7 @@ export default function ChatRoom({ chatId: propChatId }) {
         <div className="p-4 mb-8 mx-auto w-[90%] border-teal text-teal">
           <form onSubmit={handleSendMessage} className="relative">
             <input
+              ref={inputRef}
               type="text"
               value={newMessage}
               onChange={handleTyping}

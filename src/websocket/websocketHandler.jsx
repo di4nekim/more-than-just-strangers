@@ -513,7 +513,9 @@ export class WebSocketClient {
       'firebase_token_missing',
       'forbidden',
       'access denied',
-      'policy violation'
+      'policy violation',
+      'firebase_token_expired',
+      'firebase_token_revoked'
     ];
     
     return authErrorKeywords.some(keyword => 
@@ -562,6 +564,24 @@ export class WebSocketClient {
       } else {
         this.handleAuthenticationFailure();
       }
+      return;
+    }
+
+    // Handle "Forbidden" messages specifically
+    if (message.message === 'Forbidden' || message.error === 'Forbidden') {
+      console.error('WebSocket: Forbidden error received - authentication may have failed');
+      console.error('WebSocket: Forbidden message details:', {
+        message: message,
+        connectionId: message.connectionId,
+        requestId: message.requestId,
+        lastSentAction: this.lastSentAction
+      });
+      
+      // Try to refresh token and reconnect
+      this.reconnectWithFreshToken().catch(error => {
+        console.error('WebSocket: Failed to reconnect after forbidden error:', error);
+        this.handleAuthenticationFailure();
+      });
       return;
     }
 

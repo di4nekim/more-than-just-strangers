@@ -212,6 +212,15 @@ export default function HomeContent() {
   const handleStartNewConversation = async () => {
     try {
       console.log('Starting new conversation...');
+      console.log('Current state check - hasActiveChat:', hasActiveChat, 'userMetadata.chatId:', userMetadata.chatId, 'currentChatId:', currentChatId);
+      
+      // Check if user already has an active conversation
+      if (hasActiveChat || userMetadata.chatId || currentChatId) {
+        console.log('User already has an active conversation, preventing new start');
+        setError('You already have an active conversation. Please end your current conversation before starting a new one.');
+        return;
+      }
+      
       setIsInMatchmakingQueue(true);
       setError(null);
       
@@ -230,7 +239,13 @@ export default function HomeContent() {
       }
     } catch (error) {
       console.error('Failed to start matchmaking:', error);
-      setError('Failed to start new conversation. Please try again.');
+      
+      // Check if the error is about user already being in a conversation
+      if (error.message && error.message.includes('already in a conversation')) {
+        setError('You already have an active conversation. Please end your current conversation before starting a new one.');
+      } else {
+        setError('Failed to start new conversation. Please try again.');
+      }
       setIsInMatchmakingQueue(false);
     }
   };
@@ -308,6 +323,20 @@ export default function HomeContent() {
 
   const getCurrentStatus = () => {
     console.log('getCurrentStatus - loading:', loading, 'initState.isInitializing:', initState.isInitializing, 'wsConnected:', wsConnected, 'isInMatchmakingQueue:', isInMatchmakingQueue, 'isConversationActive:', isConversationActive);
+    console.log('getCurrentStatus - userMetadata.chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat, 'currentChatId:', currentChatId);
+    
+    // If WebSocket is connected but we don't have user metadata, try to get it
+    if (wsConnected && !userMetadata.chatId && !hasActiveChat && !loading && !initState.isInitializing && user?.uid) {
+      console.log('getCurrentStatus: WebSocket connected but no user metadata, triggering getCurrentState...');
+      // Trigger getCurrentState as a fallback
+      setTimeout(() => {
+        if (wsActions && user?.uid) {
+          wsActions.getCurrentState({ userId: user.uid }).catch(err => {
+            console.error('getCurrentStatus: Failed to trigger getCurrentState fallback:', err);
+          });
+        }
+      }, 1000);
+    }
     
     if (loading || initState.isInitializing) {
       return "LOADING YOUR DATA...";
@@ -318,7 +347,8 @@ export default function HomeContent() {
     if (isInMatchmakingQueue) {
       return "LOOKING FOR YOUR NEXT PARTNER…";
     }
-    if (!isConversationActive) {
+    // Use hasActiveChat from WebSocket context instead of local isConversationActive to avoid sync issues
+    if (!hasActiveChat && !userMetadata.chatId && !currentChatId) {
       return "You're not in a conversation yet. Start a new conversation to find your next partner.";
     }
   };
@@ -393,7 +423,7 @@ export default function HomeContent() {
                         handleSignOut();
                       }}
                       disabled={isSigningOut}
-                      className={`block w-full text-right px-2 py-2 text-lg text-teal font-medium hover:bg-light-blue ${
+                      className={`block w-full text-right pr-2 py-2 text-lg text-teal font-medium hover:font-bold hover:text-sky-blue ${
                         isSigningOut ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
@@ -464,8 +494,8 @@ export default function HomeContent() {
                   {currentChatId ? 'YOU HAVE 5* NEW MESSAGES →' : 'NO NEW MESSAGES'}
                 </button>
 
-                {/* End Conversation Button */}
-                {isConversationActive && wsConnected && (
+                {/* End Conversation Button - use WebSocket state to determine if conversation is active */}
+                {(hasActiveChat || userMetadata.chatId || currentChatId) && wsConnected && (
                   <button
                     onClick={handleLeaveConversation}
                     className="absolute top-full left-0 right-0 mt-2 w-full py-3 px-6 rounded-lg font-semibold text-beige bg-teal hover:bg-beige hover:text-teal hover:font-semibold hover:border-beige transition-colors opacity-0 group-hover:opacity-80"
@@ -475,8 +505,8 @@ export default function HomeContent() {
                 )}
               </div>
 
-              {/* Start New Conversation Button */}
-              {!isConversationActive && (
+              {/* Start New Conversation Button - only show if user doesn't have active chat */}
+              {!hasActiveChat && !userMetadata.chatId && !currentChatId && (
                 <button
                   onClick={handleToggleMatchmaking}
                   disabled={initState.isInitializing}

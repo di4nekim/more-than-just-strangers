@@ -280,6 +280,7 @@ export const WebSocketProvider = ({ children }) => {
       console.log('WebSocket: Received currentState response:', data);
       console.log('WebSocket: Setting user metadata with chatId:', data.chatId);
       console.log('WebSocket: Setting hasActiveChat to:', !!data.chatId);
+      console.log('WebSocket: Full currentState data received:', JSON.stringify(data, null, 2));
       
       setUserMetadata(prev => ({
         ...prev,
@@ -292,8 +293,10 @@ export const WebSocketProvider = ({ children }) => {
         createdAt: data.createdAt
       }));
       
-      setHasActiveChat(!!data.chatId);
-      console.log('WebSocket: User metadata and hasActiveChat updated');
+      // Set hasActiveChat based on whether user has a chatId
+      const hasChat = !!data.chatId;
+      setHasActiveChat(hasChat);
+      console.log('WebSocket: User metadata and hasActiveChat updated to:', hasChat);
       
       // If user has an active chat, load the messages
       if (data.chatId && wsActions) {
@@ -376,7 +379,23 @@ export const WebSocketProvider = ({ children }) => {
         if (matchmakingPromiseRef.current.timeout) {
           clearTimeout(matchmakingPromiseRef.current.timeout);
         }
-        matchmakingPromiseRef.current.reject(new Error(data.error || 'WebSocket error'));
+        
+        // Create a more specific error message for common cases
+        const errorMessage = data.error || 'WebSocket error';
+        const enhancedError = new Error(errorMessage);
+        
+        // Add specific handling for "already in conversation" errors
+        if (errorMessage.includes('already in a conversation')) {
+          console.log('WebSocket: User attempted to start conversation while already in one, triggering state refresh');
+          // Refresh user state to ensure frontend is synchronized with backend
+          if (wsActions && userMetadata.userId) {
+            wsActions.getCurrentState({ userId: userMetadata.userId }).catch(err => {
+              console.error('Failed to refresh user state after conversation error:', err);
+            });
+          }
+        }
+        
+        matchmakingPromiseRef.current.reject(enhancedError);
         setMatchmakingPromise(null);
         matchmakingPromiseRef.current = null;
       }
@@ -772,7 +791,7 @@ export const WebSocketProvider = ({ children }) => {
 
       // Check if Firebase is configured before making API calls
       try {
-        // Step 1: Load user profile (this one works with Firebase)
+        // Load user profile
         const profile = await apiClient.getCurrentUserProfile();
         if (signal.aborted) throw new Error('Initialization cancelled');
         
@@ -782,7 +801,7 @@ export const WebSocketProvider = ({ children }) => {
           setInitState(prev => ({ ...prev, profileLoaded: true }));
         }, 0);
 
-        // Step 2: Establish WebSocket connection first
+        // Establish WebSocket connection first
         if (!signal.aborted) {
           // Wait for WebSocket actions to be available
           if (!wsActions) {
@@ -802,15 +821,22 @@ export const WebSocketProvider = ({ children }) => {
           await initializeWebSocketConnection(userId);
         }
 
-        // Step 3: Get current state from backend via WebSocket
+        // Get current state from backend via WebSocket
         if (!signal.aborted && wsActions) {
           console.log('Getting current state from backend via WebSocket...');
           console.log('WebSocket actions available:', !!wsActions);
           console.log('User ID being sent:', userId);
+          console.log('WebSocket connection state - isConnected:', isConnected, 'wsClient readyState:', wsClient?.ws?.readyState);
           
           try {
             await wsActions.getCurrentState({ userId });
             console.log('getCurrentState request sent successfully');
+            
+            // Wait a bit for the response to come back
+            console.log('Waiting for currentState response...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('Finished waiting for currentState response');
+            
           } catch (error) {
             console.error('Failed to send getCurrentState request:', error);
             throw error;
@@ -819,7 +845,7 @@ export const WebSocketProvider = ({ children }) => {
           console.log('Cannot send getCurrentState - signal aborted:', signal.aborted, 'wsActions available:', !!wsActions);
         }
 
-        // Step 4: Mark initialization as complete
+        // Mark initialization as complete
         setTimeout(() => {
           setInitState(prev => ({ 
             ...prev, 
