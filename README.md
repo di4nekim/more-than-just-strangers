@@ -106,7 +106,7 @@ AWS Serverless Architecture
 - **Scalable Architecture** supporting concurrent users through serverless design
 - **Environment Management** with dev/staging/prod deployment pipelines
 
-  ## User Experience Features
+## User Experience Features
 
 - **Intuitive Onboarding**: Seamless Firebase authentication flow
 - **Smart Matchmaking**: Queue-based system with real-time status updates
