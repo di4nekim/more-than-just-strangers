@@ -1,8 +1,8 @@
 # More Than Just Strangers
 
-**A scalable real-time chat application implementing the "36 Questions for Falling in Love" experiment through modern cloud-native architecture.**
+**A scalable real-time chat application implementing the "36 Questions for Falling in Love" through modern cloud-native architecture.**
 
-[![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#) [![Test Coverage](https://img.shields.io/badge/Coverage-70%25+-brightgreen.svg)](#) [![AWS](https://img.shields.io/badge/AWS-Deployed-orange.svg)](#)
+[![Test Coverage](https://img.shields.io/badge/Coverage-70%25+-brightgreen.svg)](#) ![Deployment Status](https://img.shields.io/badge/AWS-deploying-orange?style=flat&logo=amazon-aws)
 
 ## Project Overview
 
