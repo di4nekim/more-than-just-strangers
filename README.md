@@ -185,13 +185,13 @@ npm run test:websocket      # Real-time communication tests
 
 This project demonstrates proficiency in:
 
-**Full-stack development** with modern React and serverless backend  
-**Real-time systems** design and WebSocket implementation  
-**Cloud architecture** with AWS serverless services  
-**Database design** with NoSQL optimization patterns  
-**Test-driven development** with comprehensive coverage  
-**DevOps practices** with Infrastructure as Code  
-**Performance engineering** with sub-100ms latency targets  
-**Security implementation** with authentication and authorization  
+- **Full-stack development** with modern React and serverless backend  
+- **Real-time systems** design and WebSocket implementation  
+- **Cloud architecture** with AWS serverless services  
+- **Database design** with NoSQL optimization patterns  
+- **Test-driven development** with comprehensive coverage  
+- **DevOps practices** with Infrastructure as Code  
+- **Performance engineering** with sub-100ms latency targets  
+- **Security implementation** with authentication and authorization  
 
 *Built to showcase enterprise-grade development practices and modern cloud-native architecture patterns.*
