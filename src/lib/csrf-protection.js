@@ -1,4 +1,34 @@
-import { randomBytes } from 'crypto';
+// Browser-compatible crypto functions
+const generateRandomBytes = (length) => {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    // Use Web Crypto API in browser
+    const array = new Uint8Array(length);
+    window.crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  } else if (typeof globalThis !== 'undefined' && globalThis.crypto) {
+    // Use Node.js crypto in server environment
+    try {
+      const { randomBytes } = require('crypto');
+      return randomBytes(length).toString('hex');
+    } catch (error) {
+      // Fallback if crypto module not available
+      return generateFallbackToken(length);
+    }
+  } else {
+    // Fallback for environments without crypto
+    return generateFallbackToken(length);
+  }
+};
+
+const generateFallbackToken = (length) => {
+  // Simple fallback using Math.random (less secure but prevents errors)
+  const chars = '0123456789abcdef';
+  let result = '';
+  for (let i = 0; i < length * 2; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+};
 
 class CSRFProtection {
   constructor() {
@@ -7,10 +37,19 @@ class CSRFProtection {
   }
 
   generateToken() {
-    const token = randomBytes(32).toString('hex');
-    this.tokenCache.set(token, Date.now());
-    this.cleanupExpiredTokens();
-    return token;
+    try {
+      const token = generateRandomBytes(32);
+      this.tokenCache.set(token, Date.now());
+      this.cleanupExpiredTokens();
+      return token;
+    } catch (error) {
+      console.warn('CSRF token generation failed, using fallback:', error.message);
+      // Fallback token generation
+      const token = generateFallbackToken(32);
+      this.tokenCache.set(token, Date.now());
+      this.cleanupExpiredTokens();
+      return token;
+    }
   }
 
   validateToken(token) {
@@ -43,10 +82,24 @@ class CSRFProtection {
     const metaToken = document.querySelector('meta[name="csrf-token"]');
     if (metaToken) return metaToken.getAttribute('content');
     
-    let token = localStorage.getItem('csrf-token');
+    let token = null;
+    try {
+      // Safely access localStorage with error handling
+      token = localStorage.getItem('csrf-token');
+    } catch (error) {
+      console.warn('Failed to access localStorage for CSRF token:', error.message);
+      // Generate a session token without storing it
+      return this.generateToken();
+    }
+    
     if (!token) {
-      token = this.generateToken();
-      localStorage.setItem('csrf-token', token);
+      try {
+        token = this.generateToken();
+        localStorage.setItem('csrf-token', token);
+      } catch (error) {
+        console.warn('Failed to store CSRF token in localStorage:', error.message);
+        // Return the token even if we can't store it
+      }
     }
     return token;
   }

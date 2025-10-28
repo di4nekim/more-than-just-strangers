@@ -776,6 +776,25 @@ const handlerLogic = async (event) => {
                     errorCode: error.code,
                     errorName: error.name
                 });
+                
+                // Handle stale connection by clearing it from user metadata
+                if (error.code === 'GoneException' || error.statusCode === 410) {
+                    console.log('Sender connection is stale, clearing connection ID...');
+                    try {
+                        await dynamoDbClient.send(new UpdateCommand({
+                            TableName: process.env.USER_METADATA_TABLE,
+                            Key: { PK: `USER#${userId}` },
+                            UpdateExpression: 'REMOVE connectionId',
+                            ConditionExpression: 'connectionId = :staleConnectionId',
+                            ExpressionAttributeValues: {
+                                ':staleConnectionId': connectionId
+                            }
+                        }));
+                        console.log('Stale sender connection ID cleared from user metadata');
+                    } catch (clearError) {
+                        console.error('Error clearing stale sender connection ID:', clearError);
+                    }
+                }
                 // Don't fail the entire operation if confirmation fails
             }
 

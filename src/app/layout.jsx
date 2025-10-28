@@ -5,6 +5,7 @@ import './globals.css';
 import { FirebaseAuthProvider } from './components/auth/FirebaseAuthProvider';
 import { WebSocketProvider } from '../websocket/WebSocketContext';
 import { useEffect } from 'react';
+import browserIOHandler from '../lib/browser-io-handler';
 
 const inter = Inter({ subsets: ['latin'] });
 const jetbrainsMono = JetBrains_Mono({ 
@@ -18,13 +19,22 @@ const instrumentSans = Instrument_Sans({
 
 export default function RootLayout({ children }) {
   useEffect(() => {
+    // Initialize the browser I/O error handler
+    // This will automatically suppress Chrome's internal .ldb file errors
+    if (typeof window !== 'undefined') {
+      browserIOHandler.init();
+    }
+    
+    // Keep existing handlers for other types of errors
     const handleUnhandledRejection = e => {
       console.warn('Unhandled promise rejection:', e.reason);
+      // Browser I/O handler will automatically suppress .ldb errors
       e.preventDefault();
     };
     
     const handleError = e => {
       console.warn('Global error:', e.error);
+      // Browser I/O handler will automatically suppress .ldb errors
     };
     
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
@@ -33,6 +43,8 @@ export default function RootLayout({ children }) {
     return () => {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       window.removeEventListener('error', handleError);
+      // Cleanup browser I/O handler
+      browserIOHandler.destroy();
     };
   }, []);
 

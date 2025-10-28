@@ -40,7 +40,7 @@ const handlerLogic = async (event) => {
         }
 
         const connectionId = event.requestContext.connectionId;
-        const userMetadataTableName = process.env.USER_METADATA_TABLE || 'UserMetadata';
+        const userMetadataTableName = process.env.USER_METADATA_TABLE;
         console.log(`New WebSocket connection established: ${connectionId} for user: ${userId}`);
 
         const dynamoDbClient = new DynamoDBClient({

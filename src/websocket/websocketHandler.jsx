@@ -480,6 +480,11 @@ export class WebSocketClient {
       console.log('WebSocket: Message sent successfully');
     } catch (error) {
       console.error('WebSocket: Failed to get token for message:', error);
+      // Check if WebSocket is still connected before attempting to send
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        console.error('WebSocket: Cannot send fallback message - WebSocket is not connected');
+        throw new Error('WebSocket is not connected');
+      }
       // Fallback to sending without token if token retrieval fails (reverted for compatibility)
       console.log('WebSocket: Sending message without token:', message);
       this.ws.send(JSON.stringify(message));

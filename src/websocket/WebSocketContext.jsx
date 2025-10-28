@@ -189,34 +189,41 @@ export const WebSocketProvider = ({ children }) => {
 
   const messagesRef = useRef(messages);
   const lastMessageTimestamp = useRef(null);
+  const lastSentActionRef = useRef(null);
+  const loadedChatsRef = useRef(new Set()); // Track which chats have had messages loaded
+  const wsActionsRef = useRef(wsActions);
 
   useEffect(() => {
     matchmakingPromiseRef.current = matchmakingPromise;
     userMetadataRef.current = userMetadata;
-  }, [matchmakingPromise, userMetadata]);
+    wsActionsRef.current = wsActions;
+  }, [matchmakingPromise, userMetadata, wsActions]);
 
   // Load initial message history via WebSocket
   const loadInitialMessages = useCallback(async (chatId, limit = 50) => {
-    if (!wsActions) {
-      console.log('WebSocket actions not available, falling back to REST API');
-      try {
-        setIsLoadingMessages(true);
-        const response = await authenticatedFetch(`/api/chat/${chatId}/messages?limit=${limit}`);
-        
-        const fetchedMessages = response.messages || [];
-        
-        setMessages(prev => mergeOptimisticMessages(prev, fetchedMessages));
-        
-        setHasMoreMessages(response.hasMore || false);
-        
-        if (fetchedMessages.length > 0) {
-          lastMessageTimestamp.current = fetchedMessages[0]?.timestamp;
-        }
-      } catch (error) {
-        console.error('Failed to load initial messages via REST API:', error);
-      } finally {
-        setIsLoadingMessages(false);
-      }
+    // Prevent duplicate requests for the same chat
+    if (isLoadingMessages) {
+      console.log('Already loading messages, skipping duplicate request');
+      return;
+    }
+
+    // Check if we've already loaded messages for this chat
+    if (loadedChatsRef.current.has(chatId)) {
+      console.log('Messages already loaded for chat:', chatId, 'skipping duplicate load');
+      return;
+    }
+
+    const currentWsActions = wsActionsRef.current;
+    console.log('loadInitialMessages: wsActions available:', !!currentWsActions);
+    console.log('loadInitialMessages: isConnected:', isConnected);
+    
+    // If WebSocket actions are not available, wait a bit and retry
+    if (!currentWsActions) {
+      console.log('WebSocket actions not available, scheduling retry in 1 second...');
+      setTimeout(() => {
+        console.log('Retrying loadInitialMessages after WebSocket actions delay');
+        loadInitialMessages(chatId, limit);
+      }, 1000);
       return;
     }
 
@@ -225,15 +232,25 @@ export const WebSocketProvider = ({ children }) => {
       console.log('Loading initial messages via WebSocket for chatId:', chatId);
       
       // Use WebSocket to fetch chat history
-      await wsActions.fetchChatHistory({
+      lastSentActionRef.current = 'fetchChatHistory';
+      await currentWsActions.fetchChatHistory({
         chatId,
         limit
       });
+      
+      // Clear the action ref after a timeout to prevent stale error detection
+      setTimeout(() => {
+        if (lastSentActionRef.current === 'fetchChatHistory') {
+          lastSentActionRef.current = null;
+        }
+      }, 10000); // 10 seconds timeout
       
       // The messages will be received via the 'chatHistory' message handler
       // which will update the messages state
     } catch (error) {
       console.error('Failed to load initial messages via WebSocket:', error);
+      // Remove from loaded chats on WebSocket error so REST API can be tried
+      loadedChatsRef.current.delete(chatId);
       
       // Fallback to REST API if WebSocket fails
       try {
@@ -248,13 +265,16 @@ export const WebSocketProvider = ({ children }) => {
         if (fetchedMessages.length > 0) {
           lastMessageTimestamp.current = fetchedMessages[0]?.timestamp;
         }
+        
+        // Mark this chat as loaded only on successful REST API fallback
+        loadedChatsRef.current.add(chatId);
       } catch (restError) {
         console.error('Failed to load initial messages via REST API fallback:', restError);
       }
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [wsActions]);
+  }, [isLoadingMessages]); // Remove wsActions from dependencies to prevent recreation
 
   // Load messages when userMetadata.chatId changes (for page refresh scenarios)
   useEffect(() => {
@@ -265,6 +285,38 @@ export const WebSocketProvider = ({ children }) => {
       });
     }
   }, [userMetadata.chatId, messages.length, isLoadingMessages, loadInitialMessages]);
+
+  // Fallback: If initialization completes but we have no messages and there's a chat ID from URL, try to load messages
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      // Only run this fallback if:
+      // 1. We're not currently initializing
+      // 2. We have no messages loaded
+      // 3. We're not currently loading messages
+      // 4. We have user profile loaded
+      // 5. There's a chat ID available (either from metadata or URL)
+      if (!initState.isInitializing && 
+          messages.length === 0 && 
+          !isLoadingMessages && 
+          userProfile?.userId) {
+        
+        const chatIdFromUrl = typeof window !== 'undefined' ? 
+          decodeURIComponent(window.location.pathname.split('/').pop()) : null;
+        
+        const chatIdToUse = userMetadata.chatId || 
+                           (chatIdFromUrl && chatIdFromUrl.includes('#') ? chatIdFromUrl : null);
+        
+        if (chatIdToUse && !loadedChatsRef.current.has(chatIdToUse)) {
+          console.log('Fallback: Attempting to load messages for chat:', chatIdToUse);
+          loadInitialMessages(chatIdToUse).catch(error => {
+            console.error('Fallback message loading failed:', error);
+          });
+        }
+      }
+    }, 5000); // Wait 5 seconds after initialization completes
+
+    return () => clearTimeout(timeoutId);
+  }, [initState.isInitializing, messages.length, isLoadingMessages, userProfile?.userId, userMetadata.chatId, loadInitialMessages]);
 
   /**
    * Set up WebSocket message handlers
@@ -282,34 +334,69 @@ export const WebSocketProvider = ({ children }) => {
       console.log('WebSocket: Setting hasActiveChat to:', !!data.chatId);
       console.log('WebSocket: Full currentState data received:', JSON.stringify(data, null, 2));
       
-      setUserMetadata(prev => ({
-        ...prev,
-        userId: data.userId,
-        connectionId: data.connectionId,
-        chatId: data.chatId,
-        ready: data.ready,
-        questionIndex: data.questionIndex,
-        lastSeen: data.lastSeen,
-        createdAt: data.createdAt
-      }));
+      setUserMetadata(prev => {
+        // Only update if something actually changed
+        if (prev.userId === data.userId &&
+            prev.connectionId === data.connectionId &&
+            prev.chatId === data.chatId &&
+            prev.ready === data.ready &&
+            prev.questionIndex === data.questionIndex &&
+            prev.lastSeen === data.lastSeen &&
+            prev.createdAt === data.createdAt) {
+          return prev; // No change, return same reference
+        }
+        
+        // If chatId is changing, clear the loaded chats cache
+        if (prev.chatId !== data.chatId) {
+          console.log('Chat ID changing from', prev.chatId, 'to', data.chatId, 'clearing loaded chats cache');
+          loadedChatsRef.current.clear();
+          setMessages([]); // Clear messages for the new chat
+        }
+        
+        return {
+          ...prev,
+          userId: data.userId,
+          connectionId: data.connectionId,
+          chatId: data.chatId,
+          ready: data.ready,
+          questionIndex: data.questionIndex,
+          lastSeen: data.lastSeen,
+          createdAt: data.createdAt
+        };
+      });
       
       // Set hasActiveChat based on whether user has a chatId
       const hasChat = !!data.chatId;
-      setHasActiveChat(hasChat);
+      setHasActiveChat(prev => prev === hasChat ? prev : hasChat);
       console.log('WebSocket: User metadata and hasActiveChat updated to:', hasChat);
       
-      // If user has an active chat, load the messages
-      if (data.chatId && wsActions) {
-        console.log('WebSocket: Loading messages for active chat:', data.chatId);
-        loadInitialMessages(data.chatId).catch(error => {
-          console.error('Failed to load messages for active chat:', error);
-        });
-      } else if (data.chatId && !wsActions) {
-        console.log('WebSocket: WebSocket not available, loading messages via REST API for chat:', data.chatId);
-        // Fallback to REST API if WebSocket is not available
-        loadInitialMessages(data.chatId).catch(error => {
-          console.error('Failed to load messages for active chat via REST API:', error);
-        });
+      // If user has an active chat, load the messages (only if not already loaded for this specific chat)
+      if (data.chatId) {
+        console.log('WebSocket: Chat ID found in currentState:', data.chatId);
+        console.log('WebSocket: Loaded chats cache:', Array.from(loadedChatsRef.current));
+        console.log('WebSocket: Current messages count:', messages.length);
+        console.log('WebSocket: Is loading messages:', isLoadingMessages);
+        
+        if (!loadedChatsRef.current.has(data.chatId)) {
+          console.log('WebSocket: Loading messages for active chat:', data.chatId);
+          loadInitialMessages(data.chatId).catch(error => {
+            console.error('Failed to load messages for active chat:', error);
+            // Clear from loaded cache on error to allow retry
+            loadedChatsRef.current.delete(data.chatId);
+          });
+        } else {
+          console.log('WebSocket: Messages already loaded for chat:', data.chatId, 'skipping duplicate load');
+          // But if we have no messages somehow, force reload
+          if (messages.length === 0) {
+            console.log('WebSocket: No messages in state despite being marked as loaded - forcing reload');
+            loadedChatsRef.current.delete(data.chatId);
+            loadInitialMessages(data.chatId).catch(error => {
+              console.error('Failed to force reload messages:', error);
+            });
+          }
+        }
+      } else {
+        console.log('WebSocket: No chat ID in currentState response');
       }
       
       // If user is in matchmaking queue (no chatId but ready is true), restore queue state
@@ -409,6 +496,10 @@ export const WebSocketProvider = ({ children }) => {
       
       // Update user metadata with new ready status immediately
       setUserMetadata(prev => {
+        if (prev.ready === data.ready) {
+          return prev; // No change, return same reference
+        }
+        
         const updated = {
           ...prev,
           ready: data.ready
@@ -428,10 +519,16 @@ export const WebSocketProvider = ({ children }) => {
       
       // Update user metadata with new question index and reset ready status
       setUserMetadata(prev => {
+        const newReady = data.ready !== undefined ? data.ready : false;
+        
+        if (prev.questionIndex === data.questionIndex && prev.ready === newReady) {
+          return prev; // No change, return same reference
+        }
+        
         const updated = {
           ...prev,
           questionIndex: data.questionIndex,
-          ready: data.ready !== undefined ? data.ready : false
+          ready: newReady
         };
         console.log('WebSocket: Updated questionIndex from', prev.questionIndex, 'to', data.questionIndex);
         console.log('WebSocket: Reset ready status to:', updated.ready);
@@ -514,10 +611,22 @@ export const WebSocketProvider = ({ children }) => {
 
     wsClient.onMessage('messageConfirmed', (data) => {
       console.log('WebSocket: Received messageConfirmed:', data);
+      console.log('WebSocket: Current userMetadata:', userMetadataRef.current);
+      console.log('WebSocket: Data chatId:', data?.chatId);
+      console.log('WebSocket: Current chatId:', userMetadataRef.current?.chatId);
+      console.log('WebSocket: ChatId match:', data?.chatId === userMetadataRef.current?.chatId);
+      
       // Handle message confirmation from sender's own message
-      if (data && data.chatId === userMetadataRef.current.chatId) {
+      // More robust chatId checking - also check if messageId exists in current messages
+      const hasMatchingMessage = messagesRef.current.some(msg => msg.id === data?.messageId);
+      const chatIdMatches = data && data.chatId === userMetadataRef.current?.chatId;
+      
+      console.log('WebSocket: Has matching message:', hasMatchingMessage);
+      console.log('WebSocket: ChatId matches:', chatIdMatches);
+      
+      if (data && (chatIdMatches || hasMatchingMessage)) {
         console.log('WebSocket: Confirming optimistic message:', data.messageId);
-        console.log('WebSocket: Current chatId:', userMetadataRef.current.chatId, 'Message chatId:', data.chatId);
+        console.log('WebSocket: Current chatId:', userMetadataRef.current?.chatId, 'Message chatId:', data.chatId);
         
         setMessages(prev => {
           const messageToConfirm = prev.find(msg => msg.id === data.messageId);
@@ -542,8 +651,10 @@ export const WebSocketProvider = ({ children }) => {
           console.warn('WebSocket: No timeout found for confirmed message:', data.messageId);
         }
       } else {
-        console.log('WebSocket: Ignoring messageConfirmed - chatId mismatch or missing data');
-        console.log('WebSocket: data:', data, 'current chatId:', userMetadataRef.current.chatId);
+        console.log('WebSocket: Ignoring messageConfirmed - chatId mismatch and no matching message');
+        console.log('WebSocket: data:', data);
+        console.log('WebSocket: current chatId:', userMetadataRef.current?.chatId);
+        console.log('WebSocket: current messages:', messagesRef.current.map(m => ({ id: m.id, isOptimistic: m.isOptimistic })));
       }
     });
 
@@ -593,6 +704,24 @@ export const WebSocketProvider = ({ children }) => {
         if (transformedMessages.length > 0) {
           lastMessageTimestamp.current = transformedMessages[0]?.timestamp;
         }
+        
+        // Clear retry count on successful chat history load
+        setInitState(prev => ({ ...prev, retryCount: 0 }));
+        lastSentActionRef.current = null;
+        
+        // Mark this chat as loaded on successful WebSocket response
+        if (userMetadataRef.current.chatId) {
+          loadedChatsRef.current.add(userMetadataRef.current.chatId);
+        }
+        
+        // Set loading to false on successful WebSocket response
+        setIsLoadingMessages(false);
+        
+        // Clear any previous errors since we successfully loaded messages
+        setInitState(prev => ({
+          ...prev,
+          error: null
+        }));
       }
     });
 
@@ -633,9 +762,25 @@ export const WebSocketProvider = ({ children }) => {
             
           case 'fetchChatHistory':
             console.log('WebSocket: Server error for fetchChatHistory action:', data.data?.error || data.error);
-            // Set loading state to false and show error
+            // Set loading state to false
             setIsLoadingMessages(false);
-            // You could also set an error state here if you want to show it to the user
+            
+            // Only set error state if we haven't successfully loaded messages
+            if (messagesRef.current.length === 0) {
+              console.log('WebSocket: No messages loaded, setting error state');
+              setInitState(prev => ({
+                ...prev,
+                error: 'Failed to load chat history. Please try refreshing the page.'
+              }));
+            } else {
+              console.log('WebSocket: Messages already loaded, ignoring fetchChatHistory error');
+            }
+            break;
+            
+          case 'getCurrentState':
+            console.log('WebSocket: Server error for getCurrentState action:', data.data?.error || data.error);
+            // Don't set a global error state for getCurrentState failures - they're recoverable
+            console.log('WebSocket: getCurrentState failed, but continuing with initialization');
             break;
             
           default:
@@ -648,6 +793,102 @@ export const WebSocketProvider = ({ children }) => {
         console.log('WebSocket: Received error without action field:', data);
         // Set loading state to false for any error
         setIsLoadingMessages(false);
+        
+        // Check if this is a fetchChatHistory error based on recent actions
+        const isFetchChatHistoryError = lastSentActionRef.current === 'fetchChatHistory';
+        
+        if (isFetchChatHistoryError) {
+          console.log('WebSocket: Detected fetchChatHistory error from malformed response');
+          
+          // Try to retry the fetchChatHistory action once
+          if (wsActions && userMetadata.chatId && !initState.retryCount) {
+            console.log('WebSocket: Attempting to retry fetchChatHistory...');
+            setInitState(prev => ({ ...prev, retryCount: 1 }));
+            
+            // Retry after a short delay
+            setTimeout(async () => {
+              try {
+                await wsActions.fetchChatHistory({
+                  chatId: userMetadata.chatId,
+                  limit: 50
+                });
+              } catch (retryError) {
+                console.error('WebSocket: Retry failed:', retryError);
+                // Only set error if no messages were loaded
+                if (messagesRef.current.length === 0) {
+                  setInitState(prev => ({
+                    ...prev,
+                    error: 'Failed to load chat history after retry. Please try refreshing the page.'
+                  }));
+                }
+              }
+            }, 2000);
+          } else {
+            // Fallback to REST API if WebSocket retry fails
+            if (userMetadata.chatId) {
+              console.log('WebSocket: Falling back to REST API for chat history');
+              loadInitialMessages(userMetadata.chatId).catch(fallbackError => {
+                console.error('WebSocket: REST API fallback also failed:', fallbackError);
+                // Only set error if no messages were loaded
+                if (messagesRef.current.length === 0) {
+                  setInitState(prev => ({
+                    ...prev,
+                    error: 'Failed to load chat history. Please try refreshing the page.'
+                  }));
+                }
+              });
+            } else {
+              // Only set error if no messages were loaded
+              if (messagesRef.current.length === 0) {
+                setInitState(prev => ({
+                  ...prev,
+                  error: 'Failed to load chat history. Please try refreshing the page.'
+                }));
+              }
+            }
+          }
+        } else {
+          // Improved browser I/O error detection and handling
+          const detectIOError = () => {
+            if (typeof window === 'undefined') return false;
+            
+            // Check for browser storage quota issues
+            try {
+              // Test localStorage availability
+              const testKey = '__storage_test__';
+              localStorage.setItem(testKey, 'test');
+              localStorage.removeItem(testKey);
+            } catch (storageError) {
+              console.warn('Browser storage error detected:', storageError.message);
+              return storageError.message.includes('QuotaExceededError') || 
+                     storageError.message.includes('storage quota') ||
+                     storageError.message.includes('Unable to create') ||
+                     storageError.message.includes('IO error');
+            }
+            
+            // Check error message content
+            const errorText = data?.error || data?.message || '';
+            return errorText.includes('IO error') || 
+                   errorText.includes('Unable to create writable file') ||
+                   errorText.includes('storage quota') ||
+                   errorText.includes('QuotaExceededError');
+          };
+          
+          const hasIOError = detectIOError();
+          
+          // Only set error state if we haven't successfully loaded messages or if it's a critical IO error
+          if (messagesRef.current.length === 0 || hasIOError) {
+            console.log('WebSocket: Setting error state - messages loaded:', messagesRef.current.length, 'hasIOError:', hasIOError);
+            setInitState(prev => ({
+              ...prev,
+              error: hasIOError 
+                ? 'Browser storage issue detected. This may be due to:\n• Low disk space\n• Browser cache full\n• Private browsing restrictions\n\nTry clearing browser data or using incognito mode.'
+                : 'Connection error occurred. Please try refreshing the page.'
+            }));
+          } else {
+            console.log('WebSocket: Messages already loaded, ignoring generic error');
+          }
+        }
       }
     });
     
@@ -744,6 +985,7 @@ export const WebSocketProvider = ({ children }) => {
     setOtherUserPresence(null);
     setTypingStatus({});
     lastMessageTimestamp.current = null;
+    loadedChatsRef.current.clear(); // Clear loaded chats tracking
   }, []);
 
   // Initialize complete user session
@@ -828,18 +1070,25 @@ export const WebSocketProvider = ({ children }) => {
           console.log('User ID being sent:', userId);
           console.log('WebSocket connection state - isConnected:', isConnected, 'wsClient readyState:', wsClient?.ws?.readyState);
           
-          try {
-            await wsActions.getCurrentState({ userId });
-            console.log('getCurrentState request sent successfully');
-            
-            // Wait a bit for the response to come back
-            console.log('Waiting for currentState response...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            console.log('Finished waiting for currentState response');
-            
-          } catch (error) {
-            console.error('Failed to send getCurrentState request:', error);
-            throw error;
+          // Only try to get current state if WebSocket is actually connected
+          if (isConnected && wsClient && wsClient.ws && wsClient.ws.readyState === WebSocket.OPEN) {
+            try {
+              await wsActions.getCurrentState({ userId });
+              console.log('getCurrentState request sent successfully');
+              
+              // Wait a bit for the response to come back
+              console.log('Waiting for currentState response...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log('Finished waiting for currentState response');
+              
+            } catch (error) {
+              console.error('Failed to send getCurrentState request:', error);
+              // Don't throw here - continue with initialization even if getCurrentState fails
+              console.log('Continuing initialization despite getCurrentState failure');
+            }
+          } else {
+            console.log('WebSocket not connected yet, skipping getCurrentState for now');
+            console.log('Connection will be established by initializeWebSocketConnection');
           }
         } else {
           console.log('Cannot send getCurrentState - signal aborted:', signal.aborted, 'wsActions available:', !!wsActions);
@@ -1001,9 +1250,14 @@ export const WebSocketProvider = ({ children }) => {
   const sendMessageOptimistic = useCallback(async (content) => {
     console.log('sendMessageOptimistic: Starting with content:', content);
     console.log('sendMessageOptimistic: wsActions:', !!wsActions, 'userMetadata.chatId:', userMetadata.chatId);
+    console.log('sendMessageOptimistic: userProfile:', userProfile);
     
     if (!wsActions || !userMetadata.chatId) {
       throw new Error('WebSocket not ready or no active chat');
+    }
+
+    if (!userProfile || !userProfile.userId) {
+      throw new Error('User profile not loaded - cannot send message');
     }
 
     const messageId = generateOptimisticId();
@@ -1031,7 +1285,7 @@ export const WebSocketProvider = ({ children }) => {
       return updated;
     });
 
-    // Set up timeout to remove optimistic message if not confirmed within 10 seconds
+    // Set up timeout to remove optimistic message if not confirmed within 15 seconds (increased from 10)
     const timeoutId = setTimeout(() => {
       console.warn('sendMessageOptimistic: Timeout reached for message:', messageId);
       console.warn('sendMessageOptimistic: Checking if message still exists and is optimistic...');
@@ -1051,7 +1305,7 @@ export const WebSocketProvider = ({ children }) => {
       // Clean up timeout reference
       optimisticTimeouts.current.delete(messageId);
       console.warn('sendMessageOptimistic: Timeout cleanup completed for message:', messageId);
-    }, 10000); // 10 second timeout
+    }, 15000); // 15 second timeout (increased to give more time for confirmation)
 
     // Store timeout reference
     optimisticTimeouts.current.set(messageId, timeoutId);
@@ -1213,8 +1467,18 @@ export const WebSocketProvider = ({ children }) => {
         
         // After connection is established, get current state from backend
         console.log('Getting current state from backend...');
-        await wsActions.getCurrentState({ userId });
-        console.log('getCurrentState request sent');
+        
+        // Wait a bit more to ensure connection is fully established
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Double-check connection is still open before sending
+        if (wsClient && wsClient.ws && wsClient.ws.readyState === WebSocket.OPEN) {
+          await wsActions.getCurrentState({ userId });
+          console.log('getCurrentState request sent');
+        } else {
+          console.warn('WebSocket connection not ready for getCurrentState');
+          throw new Error('WebSocket connection not ready');
+        }
         
         console.log('WebSocket connection and state retrieval completed');
         
@@ -1269,6 +1533,36 @@ export const WebSocketProvider = ({ children }) => {
     }
   }, [userMetadata.chatId, wsActions, loadInitialMessages]);
 
+  // Debug function to manually trigger message loading
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.debugForceLoadMessages = (chatId) => {
+        console.log('DEBUG: Force loading messages for chat:', chatId);
+        loadedChatsRef.current.clear();
+        setMessages([]);
+        return loadInitialMessages(chatId || userMetadata.chatId);
+      };
+
+      window.debugGetState = () => ({
+        userMetadata,
+        messages: messages.length,
+        loadedChats: Array.from(loadedChatsRef.current),
+        isLoadingMessages,
+        hasMoreMessages,
+        initState,
+        isConnected,
+        hasActiveChat
+      });
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.debugForceLoadMessages;
+        delete window.debugGetState;
+      }
+    };
+  }, [loadInitialMessages, userMetadata, messages.length, isLoadingMessages, hasMoreMessages, initState, isConnected, hasActiveChat]);
+
   // Network status monitoring
   useEffect(() => {
     const handleOnline = () => {
@@ -1311,7 +1605,7 @@ export const WebSocketProvider = ({ children }) => {
     };
   }, []);
 
-  return (
+    return (
     <WebSocketContext.Provider value={{ 
       wsClient, 
       wsActions, 
@@ -1335,7 +1629,8 @@ export const WebSocketProvider = ({ children }) => {
       sendMessageOptimistic,
       validateChatAccess,
       resetInitialization,
-      invalidateCache
+      invalidateCache,
+      loadInitialMessages
     }}>
       {children}
     </WebSocketContext.Provider>

@@ -1,7 +1,8 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation'; 
 import Image from 'next/image';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,9 +14,66 @@ import { useTypingIndicator } from '../../websocket/typingIndicator';
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
 
-export default function ChatRoom({ chatId: propChatId }) {
+// Completely isolated input component with its own state management
+const IsolatedInput = memo(({ 
+  inputRef, 
+  onSendMessage,
+  placeholder, 
+  disabled, 
+  className 
+}) => {
+  const [localValue, setLocalValue] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const handleChange = useCallback((e) => {
+    setLocalValue(e.target.value);
+  }, []);
+  
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+  
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
+  
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (localValue.trim() && !disabled) {
+        onSendMessage(localValue.trim());
+        setLocalValue('');
+      }
+    }
+  }, [localValue, disabled, onSendMessage]);
+  
+  // Update ref value for external access
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.value = localValue;
+    }
+  }, [localValue, inputRef]);
+  
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={localValue}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={className}
+    />
+  );
+});
+
+IsolatedInput.displayName = 'IsolatedInput';
+
+const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   const [error, setError] = useState(null);
-  const [newMessage, setNewMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [chatAccessValidated, setChatAccessValidated] = useState(false);
   const [showEndDialog, setShowEndDialog] = useState(false);
@@ -51,7 +109,6 @@ export default function ChatRoom({ chatId: propChatId }) {
   const hasInitializedRef = useRef(false);
   const messageEndRef = useRef(null);
   const chatContainerRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
   const { chatId: encodedChatId } = useParams();
@@ -229,35 +286,33 @@ export default function ChatRoom({ chatId: propChatId }) {
 
   const debouncedScrollHandler = useDebounce(handleScroll, 200);
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !isConnected || isSendingMessage) return;
+  const handleSendMessage = useCallback(async (messageText) => {
+    if (!messageText || !isConnected || isSendingMessage || !userProfile) return;
 
     setIsSendingMessage(true);
+    setError(null); // Clear any previous errors
     try {
-      await sendMessageOptimistic(newMessage);
-      setNewMessage('');
+      await sendMessageOptimistic(messageText);
       scrollToBottom();
     } catch (error) {
-      setError('Failed to send message');
       console.error('Error sending message:', error);
+      
+      // Provide more specific error messages based on the error type
+      if (error.message.includes('User profile not loaded')) {
+        setError('User profile not ready. Please wait a moment and try again.');
+      } else if (error.message.includes('WebSocket not ready')) {
+        setError('Connection not ready. Please check your connection and try again.');
+      } else if (error.message.includes('no active chat')) {
+        setError('No active chat found. Please refresh the page.');
+      } else {
+        setError('Failed to send message. Please try again.');
+      }
     } finally {
       setIsSendingMessage(false);
     }
-  };
+  }, [isConnected, isSendingMessage, userProfile, sendMessageOptimistic, scrollToBottom]);
 
-  const handleTyping = (e) => {
-    setNewMessage(e.target.value);
-    sendTypingStatus(true);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      sendTypingStatus(false);
-    }, 2000);
-  };
+  // Removed old typing and focus handlers - now handled by IsolatedInput
 
   const handleReady = async () => {
     if (!isConnected || !wsActions) {
@@ -357,9 +412,7 @@ export default function ChatRoom({ chatId: propChatId }) {
   };
 
   const cleanup = () => {
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    // Cleanup function reserved for future typing indicator implementation
   };
 
   useEffect(() => {
@@ -419,45 +472,48 @@ export default function ChatRoom({ chatId: propChatId }) {
     }
   }, [debouncedScrollHandler]);
 
-  // Auto-focus input when user starts typing anywhere
-  useEffect(() => {
-    const handleGlobalKeyDown = (e) => {
-      // Don't focus if we're in certain states
-      if (isFindingMatch || isEndingChat || authLoading || !isAuthenticated() || !userId) {
-        return;
-      }
-      
-      // Don't focus if already focused on the input or if it's a special key
-      if (document.activeElement === inputRef.current) {
-        return;
-      }
-      
-      // Don't focus for modifier keys, function keys, or navigation keys
-      const specialKeys = [
-        'Alt', 'Control', 'Meta', 'Shift', 'Tab', 'Escape', 'F1', 'F2', 'F3', 'F4', 
-        'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'ArrowUp', 'ArrowDown', 
-        'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 
-        'Delete', 'CapsLock', 'ScrollLock', 'NumLock', 'Pause', 'ContextMenu'
-      ];
-      
-      if (specialKeys.includes(e.key)) {
-        return;
-      }
-      
-      // Focus the input field
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    };
+  // DISABLED: Auto-focus input when user starts typing anywhere
+  // This was causing focus issues - completely disabled
+  // useEffect(() => {
+  //   const handleGlobalKeyDown = (e) => {
+  //     // Don't focus if we're in certain states
+  //     if (isFindingMatch || isEndingChat || authLoading || !isAuthenticated() || !userId) {
+  //       return;
+  //     }
+  //     
+  //     // Don't focus if already focused on the input or if it's a special key
+  //     if (document.activeElement === inputRef.current) {
+  //       return;
+  //     }
+  //     
+  //     // Don't focus for modifier keys, function keys, or navigation keys
+  //     const specialKeys = [
+  //       'Alt', 'Control', 'Meta', 'Shift', 'Tab', 'Escape', 'F1', 'F2', 'F3', 'F4', 
+  //       'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'ArrowUp', 'ArrowDown', 
+  //       'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 
+  //       'Delete', 'CapsLock', 'ScrollLock', 'NumLock', 'Pause', 'ContextMenu'
+  //     ];
+  //     
+  //     if (specialKeys.includes(e.key)) {
+  //       return;
+  //     }
+  //     
+  //     // Focus the input field
+  //     if (inputRef.current) {
+  //       inputRef.current.focus();
+  //     }
+  //   };
 
-    // Add event listener
-    document.addEventListener('keydown', handleGlobalKeyDown);
-    
-    // Cleanup
-    return () => {
-      document.removeEventListener('keydown', handleGlobalKeyDown);
-    };
-  }, [isFindingMatch, isEndingChat, authLoading, isAuthenticated, userId]);
+  //   // Add event listener
+  //   document.addEventListener('keydown', handleGlobalKeyDown);
+  //   
+  //   // Cleanup
+  //   return () => {
+  //     document.removeEventListener('keydown', handleGlobalKeyDown);
+  //   };
+  // }, [isFindingMatch, isEndingChat, authLoading, isAuthenticated, userId]);
+
+  // Focus preservation no longer needed - handled by IsolatedInput
 
   useEffect(() => {
     return () => {
@@ -524,17 +580,52 @@ export default function ChatRoom({ chatId: propChatId }) {
   }
 
   if (initState.error) {
+    const isIOError = initState.error.includes('IO error') || initState.error.includes('Unable to create writable file');
+    
     return (
-      <div className="min-h-screen flex items-center justify-center bg-teal dark:bg-teal ">
-        <div className="text-center">
-          <div className="text-red-600 mb-4">Failed to initialize chat</div>
-          <p className="text-teal  dark:text-teal ">{initState.error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 px-4 py-2 bg-blue-teal text-beige rounded-lg"
-          >
-            Retry
-          </button>
+      <div className="min-h-screen flex items-center justify-center bg-beige font-mono">
+        <div className="text-center max-w-md">
+          <div className="text-teal mb-4 text-xl font-bold">FAILED TO INITIALIZE CHAT</div>
+          
+          {isIOError ? (
+            <div className="text-teal mb-6">
+              <p className="mb-4">Browser storage error detected. This is usually caused by:</p>
+              <ul className="text-left text-sm space-y-2 mb-4">
+                <li>• Low disk space on your device</li>
+                <li>• Browser cache/storage corruption</li>
+                <li>• Chrome extension conflicts</li>
+                <li>• File system permissions</li>
+              </ul>
+              <p className="text-sm">Try clearing your browser cache or using an incognito window.</p>
+            </div>
+          ) : (
+            <p className="text-teal mb-6">{initState.error}</p>
+          )}
+          
+          <div className="space-y-3">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full px-4 py-2 bg-teal text-beige rounded-lg hover:bg-blue-teal transition-colors"
+            >
+              Retry
+            </button>
+            
+            {isIOError && (
+              <button 
+                onClick={() => {
+                  // Clear browser storage
+                  if (typeof window !== 'undefined') {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.reload();
+                  }
+                }} 
+                className="w-full px-4 py-2 bg-light-blue text-teal rounded-lg border-2 border-teal hover:bg-teal hover:text-beige transition-colors"
+              >
+                Clear Storage & Retry
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -571,7 +662,7 @@ export default function ChatRoom({ chatId: propChatId }) {
         </button>
         <button 
           onClick={() => router.push('/home')}
-          className="text-blue-400 hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
+          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -579,7 +670,7 @@ export default function ChatRoom({ chatId: propChatId }) {
         </button>
         <button 
           onClick={() => setShowEndDialog(true)}
-          className="text-blue-400 hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
+          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -716,27 +807,33 @@ export default function ChatRoom({ chatId: propChatId }) {
 
         {/* Bottom Input Area */}
         <div className="p-4 mb-8 mx-auto w-[90%] border-teal text-teal">
-          <form onSubmit={handleSendMessage} className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={newMessage}
-              onChange={handleTyping}
-              onBlur={() => sendTypingStatus(false)}
+          <div className="relative">
+            <IsolatedInput
+              inputRef={inputRef}
+              onSendMessage={handleSendMessage}
               placeholder="TYPE YOUR REPLY HERE"
-              disabled={!isConnected || isSendingMessage}
+              disabled={!isConnected || isSendingMessage || !userProfile}
               className="w-full p-3 pr-12 border border-teal rounded-lg disabled:opacity-50 bg-beige placeholder:text-teal focus:outline-none"
             />
             <button
-              type="submit"
-              disabled={!isConnected || isSendingMessage || !newMessage.trim()}
+              type="button"
+              onClick={() => {
+                const message = inputRef.current?.value?.trim();
+                if (message) {
+                  handleSendMessage(message);
+                  if (inputRef.current) {
+                    inputRef.current.value = '';
+                  }
+                }
+              }}
+              disabled={!isConnected || isSendingMessage || !userProfile}
               className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-teal hover:bg-teal text-white p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -774,4 +871,8 @@ export default function ChatRoom({ chatId: propChatId }) {
       )}
     </div>
   );
-}
+});
+
+ChatRoom.displayName = 'ChatRoom';
+
+export default ChatRoom;

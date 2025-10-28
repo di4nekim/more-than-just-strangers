@@ -17,7 +17,8 @@ const createErrorResponse = (statusCode, error, action, details = null, requestI
         statusCode,
         body: JSON.stringify({
             error,
-            action,
+            action: action || 'unknown',
+            message: error,
             timestamp: new Date().toISOString(),
             ...(requestId && { requestId }),
             ...(details && { details })
@@ -28,7 +29,7 @@ const createErrorResponse = (statusCode, error, action, details = null, requestI
     console.error('Error Response:', {
         statusCode,
         error,
-        action,
+        action: action || 'unknown',
         requestId,
         details
     });

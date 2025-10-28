@@ -1,24 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { useFirebaseAuth } from '../components/auth/FirebaseAuthProvider';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import SignInBg from '../../../public/SIGNUP_BG.svg';
 
-export default function FirebaseSignIn() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    displayName: '',
-    resetEmail: ''
-  });
+const FirebaseSignIn = memo(function FirebaseSignIn() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  
+  // Use refs for form data to prevent re-renders on every keystroke
+  const emailRef = useRef('');
+  const passwordRef = useRef('');
+  const displayNameRef = useRef('');
+  const resetEmailRef = useRef('');
   
   const {
     user,
     loading,
+    authLoading,
     error,
     signIn,
     signUp,
@@ -38,51 +39,53 @@ export default function FirebaseSignIn() {
     }
   }, [user, loading, router]);
 
-  const handleInputChange = (field) => (e) => {
-    setFormData(prev => ({ ...prev, [field]: e.target.value }));
-  };
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     clearError();
     
     try {
       if (isSignUp) {
-        await signUp(formData.email, formData.password, formData.displayName);
+        await signUp(emailRef.current.value, passwordRef.current.value, displayNameRef.current.value);
         alert('Account created! Please check your email for verification.');
+        // Clear form fields
+        if (emailRef.current) emailRef.current.value = '';
+        if (passwordRef.current) passwordRef.current.value = '';
+        if (displayNameRef.current) displayNameRef.current.value = '';
       } else {
-        await signIn(formData.email, formData.password);
+        await signIn(emailRef.current.value, passwordRef.current.value);
         router.push('/');
       }
     } catch (err) {
       console.error('Auth error:', err);
     }
-  };
+  }, [isSignUp, signUp, signIn, clearError, router]);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = useCallback(async () => {
     clearError();
     try {
       await signInWithGoogle();
     } catch (err) {
       console.error('Google sign in error:', err);
     }
-  };
+  }, [clearError, signInWithGoogle]);
 
-  const handlePasswordReset = async (e) => {
+  const handlePasswordReset = useCallback(async (e) => {
     e.preventDefault();
     clearError();
     
     try {
-      await passwordReset(formData.resetEmail);
+      await passwordReset(resetEmailRef.current.value);
       alert('Password reset email sent! Check your inbox.');
       setShowReset(false);
-      setFormData(prev => ({ ...prev, resetEmail: '' }));
+      if (resetEmailRef.current) {
+        resetEmailRef.current.value = '';
+      }
     } catch (err) {
       console.error('Password reset error:', err);
     }
-  };
+  }, [passwordReset, clearError]);
 
-  const handleResendVerification = async () => {
+  const handleResendVerification = useCallback(async () => {
     clearError();
     try {
       await resendVerification();
@@ -90,33 +93,46 @@ export default function FirebaseSignIn() {
     } catch (err) {
       console.error('Resend verification error:', err);
     }
-  };
+  }, [clearError, resendVerification]);
+
+  const handleToggleSignUp = useCallback(() => {
+    setIsSignUp(prev => !prev);
+  }, []);
+
+  const handleShowReset = useCallback(() => {
+    setShowReset(true);
+  }, []);
+
+  const handleHideReset = useCallback(() => {
+    setShowReset(false);
+  }, []);
 
   const buttonBase = "w-full flex justify-center py-2 px-4 border rounded-md shadow-sm text-sm font-medium disabled:opacity-50";
   const buttonPrimary = `${buttonBase} border-transparent text-white bg-teal hover:bg-sky-blue`;
   const buttonSecondary = `${buttonBase} border-teal text-teal bg-white hover:bg-light-blue`;
   const inputBase = "mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500";
 
-  const ErrorDisplay = ({ error }) => error && (
+  const ErrorDisplay = memo(({ error }) => error && (
     <div className="bg-red-50 border border-red-200 rounded-md p-4">
       <p className="text-sm text-red-800">{error}</p>
     </div>
-  );
+  ));
+  ErrorDisplay.displayName = 'ErrorDisplay';
 
-  const FormInput = ({ id, label, type, value, onChange, placeholder, required = false }) => (
+  const FormInput = memo(({ id, label, type, inputRef, placeholder, required = false }) => (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-teal">{label}</label>
       <input
         id={id}
         type={type}
         required={required}
-        value={value}
-        onChange={onChange}
+        ref={inputRef}
         className={inputBase}
         placeholder={placeholder}
       />
     </div>
-  );
+  ));
+  FormInput.displayName = 'FormInput';
 
   if (user) {
     return (
@@ -184,8 +200,7 @@ export default function FirebaseSignIn() {
               id="reset-email"
               label="Email address"
               type="email"
-              value={formData.resetEmail}
-              onChange={handleInputChange('resetEmail')}
+              inputRef={resetEmailRef}
               placeholder="Enter your email"
               required
             />
@@ -193,15 +208,15 @@ export default function FirebaseSignIn() {
             <div className="flex space-x-4">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={authLoading}
                 className="flex-1 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? 'Sending...' : 'Send Reset Email'}
+                {authLoading ? 'Sending...' : 'Send Reset Email'}
               </button>
               
               <button
                 type="button"
-                onClick={() => setShowReset(false)}
+                onClick={handleHideReset}
                 className="flex-1 flex justify-center py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 Cancel
@@ -242,8 +257,7 @@ export default function FirebaseSignIn() {
                   id="displayName"
                   label="DISPLAY NAME (optional)"
                   type="text"
-                  value={formData.displayName}
-                  onChange={handleInputChange('displayName')}
+                  inputRef={displayNameRef}
                   placeholder="Your name"
                 />
               )}
@@ -252,8 +266,7 @@ export default function FirebaseSignIn() {
                 id="email"
                 label="EMAIL ADDRESS"
                 type="email"
-                value={formData.email}
-                onChange={handleInputChange('email')}
+                inputRef={emailRef}
                 placeholder="your@email.com"
                 required
               />
@@ -262,24 +275,23 @@ export default function FirebaseSignIn() {
                 id="password"
                 label="PASSWORD"
                 type="password"
-                value={formData.password}
-                onChange={handleInputChange('password')}
+                inputRef={passwordRef}
                 placeholder="Password"
                 required
               />
               
               <button
                 type="submit"
-                disabled={loading}
+                disabled={authLoading}
                 className={buttonPrimary}
               >
-                {loading ? 'Loading...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                {authLoading ? 'LOADING...' : (isSignUp ? 'CREATE ACCOUNT' : 'SIGN IN')}
               </button>
               
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={loading}
+                disabled={authLoading}
                 className={buttonSecondary}
               >
                 CONTINUE WITH GOOGLE
@@ -289,7 +301,7 @@ export default function FirebaseSignIn() {
             <div className="text-center space-y-2">
               <button
                 type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
+                onClick={handleToggleSignUp}
                 className="text-sm text-teal hover:underline"
               >
                 {isSignUp ? 'ALREADY HAVE AN ACCOUNT? SIGN IN' : 'NEED AN ACCOUNT? SIGN UP'}
@@ -298,7 +310,7 @@ export default function FirebaseSignIn() {
               {!isSignUp && (
                 <button
                   type="button"
-                  onClick={() => setShowReset(true)}
+                  onClick={handleShowReset}
                   className="block text-sm text-sky-blue hover:underline mx-auto"
                 >
                   FORGOT YOUR PASSWORD?
@@ -310,4 +322,8 @@ export default function FirebaseSignIn() {
       </div>
     </div>
   );
-} 
+});
+
+FirebaseSignIn.displayName = 'FirebaseSignIn';
+
+export default FirebaseSignIn; 

@@ -12,7 +12,7 @@ export default function Error({
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-beige font-jetbrains-mono">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg border-2 border-teal p-8">
+      <div className="max-w-md w-full bg-beige rounded-lg border-2 border-teal p-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-teal mb-4 uppercase">
             Something went wrong!
