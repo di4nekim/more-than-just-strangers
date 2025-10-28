@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Reduce Chrome DevTools internal errors
+  compiler: {
+    // Remove console statements in production
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
+  },
+  
   // Allow JSON imports
   webpack: (config, { isServer, webpack }) => {
     config.module.rules.push({
@@ -26,6 +32,8 @@ const nextConfig = {
         'aws-crt': false,
         // Use the process polyfill package
         process: 'process/browser',
+        // Add buffer polyfill to prevent additional errors
+        buffer: 'buffer',
       };
 
       // Add a comprehensive process polyfill
@@ -57,11 +65,36 @@ const nextConfig = {
       config.plugins.push(
         new webpack.ProvidePlugin({
           process: 'process/browser',
+          Buffer: ['buffer', 'Buffer'],
         })
       );
+      
+      // Reduce module resolution issues that can cause I/O errors
+      config.resolve.symlinks = false;
+      config.resolve.cacheWithContext = false;
+      
+      // Optimize chunk splitting to reduce file I/O operations
+      config.optimization.splitChunks = {
+        ...config.optimization.splitChunks,
+        cacheGroups: {
+          ...config.optimization.splitChunks?.cacheGroups,
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all',
+            enforce: true,
+          },
+        },
+      };
     }
 
     return config;
+  },
+  
+  // Additional optimizations to reduce I/O operations
+  experimental: {
+    // Reduce file system operations
+    optimizePackageImports: ['react', 'react-dom'],
   },
   
   // Ensure server-only packages are not included in client bundle

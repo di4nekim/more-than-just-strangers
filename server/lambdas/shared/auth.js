@@ -11,10 +11,9 @@ const { createErrorResponse, extractAction, extractRequestId } = require('./erro
  * @returns {Promise<Object>} Decoded token payload
  */
 const validateFirebaseToken = async (token) => {
-
     try {
-        console.log('🔥 FIREBASE: Starting token validation');
-        console.log('🔥 FIREBASE: Token length:', token ? token.length : 'no token');
+        console.log('FIREBASE: Starting token validation');
+        console.log('FIREBASE: Token length:', token ? token.length : 'no token');
         
         const decodedToken = await verifyIdToken(token);
         
@@ -23,18 +22,18 @@ const validateFirebaseToken = async (token) => {
         const exp = decodedToken.exp;
         const iat = decodedToken.iat;
         
-        console.log('🔥 FIREBASE: Token validation successful');
-        console.log('🔥 FIREBASE: Token issued at:', new Date(iat * 1000).toISOString());
-        console.log('🔥 FIREBASE: Token expires at:', new Date(exp * 1000).toISOString());
-        console.log('🔥 FIREBASE: Current time:', new Date(now * 1000).toISOString());
-        console.log('🔥 FIREBASE: Time until expiration:', Math.max(0, exp - now), 'seconds');
-        console.log('🔥 FIREBASE: User ID:', decodedToken.uid);
-        console.log('🔥 FIREBASE: Email:', decodedToken.email);
+        console.log('FIREBASE: Token validation successful');
+        console.log('FIREBASE: Token issued at:', new Date(iat * 1000).toISOString());
+        console.log('FIREBASE: Token expires at:', new Date(exp * 1000).toISOString());
+        console.log('FIREBASE: Current time:', new Date(now * 1000).toISOString());
+        console.log('FIREBASE: Time until expiration:', Math.max(0, exp - now), 'seconds');
+        console.log('FIREBASE: User ID:', decodedToken.uid);
+        console.log('FIREBASE: Email:', decodedToken.email);
         
         return decodedToken;
     } catch (error) {
-        console.error('🔥 FIREBASE: Token validation failed:', error.message);
-        console.error('🔥 FIREBASE: Error code:', error.code);
+        console.error('FIREBASE: Token validation failed:', error.message);
+        console.error('FIREBASE: Error code:', error.code);
         
         // Provide more specific error messages
         if (error.code === 'auth/id-token-expired') {
@@ -79,10 +78,12 @@ const extractTokenFromEvent = (event) => {
  * @returns {string|null} Firebase ID token or null if not found
  */
 const extractTokenFromBody = (body) => {
+    // Check root level first (where WebSocket handler puts it)
     if (body && body.token) {
         return body.token;
     }
     
+    // Fallback to data.token for backward compatibility
     if (body && body.data && body.data.token) {
         return body.data.token;
     }
@@ -100,24 +101,44 @@ const authenticateWebSocketEvent = async (event) => {
     try {
         let token = null;
         
+        console.log('AUTH: Starting WebSocket authentication');
+        console.log('AUTH: Event has queryStringParameters:', !!event.queryStringParameters);
+        console.log('AUTH: Event has body:', !!event.body);
+        
         // First try to get token from query string parameters
         if (event.queryStringParameters && event.queryStringParameters.token) {
             token = event.queryStringParameters.token;
+            console.log('AUTH: Token found in query parameters');
         }
         
         // If not found, try to get from event body
         if (!token && event.body) {
             try {
                 const body = JSON.parse(event.body);
+                console.log('AUTH: Parsed body structure:', Object.keys(body));
+                
+                // Check root level first (where WebSocket handler puts it)
                 token = body.token;
+                if (token) {
+                    console.log('AUTH: Token found at root level of body');
+                } else {
+                    // Fallback to data.token if not found at root level
+                    if (body.data && body.data.token) {
+                        token = body.data.token;
+                        console.log('AUTH: Token found in body.data.token');
+                    }
+                }
             } catch (e) {
-                // Body is not valid JSON, ignore
+                console.log('AUTH: Body is not valid JSON, ignoring');
             }
         }
         
         if (!token) {
+            console.error('AUTH: No token found in query parameters or body');
             throw new Error('FIREBASE_TOKEN_MISSING');
         }
+        
+        console.log('AUTH: Token found, proceeding with validation');
         
         const decodedToken = await validateFirebaseToken(token);
         

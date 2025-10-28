@@ -7,9 +7,13 @@
  * @param {Object} event - The event object containing the WebSocket connection details and request body
  * @returns {Object} Response object with status code and body
  */
+
+// AWS SDK imports
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
+
+// Shared module imports
 const { authenticateWebSocketEvent } = require("../shared/auth");
 const { 
     createErrorResponse, 
@@ -17,7 +21,6 @@ const {
     extractAction, 
     extractRequestId,
     handleDynamoDBError,
-    handleApiGatewayError,
     handleValidationError
 } = require("../shared/errorHandler");
 
@@ -27,11 +30,10 @@ const handlerLogic = async (event) => {
     console.log('Lambda invoked');
     console.log('Event received:', JSON.stringify(event, null, 2));
     
-    // Declare variables that will be used throughout the function
-    let userId, email, dynamoDB, apiGateway, connectionId;
+            // Declare variables that will be used throughout the function
+        let userId, email, dynamoDbClient, apiGatewayClient, connectionId;
     
     try {
-        // Debug: Check if userInfo exists (should be added by auth middleware)
         if (!event.userInfo) {
             console.error('CRITICAL: userInfo missing from event - authentication middleware may have failed');
             throw new Error('Authentication middleware did not set userInfo');
@@ -62,10 +64,10 @@ const handlerLogic = async (event) => {
         console.log('=== INITIALIZING AWS CLIENTS ===');
         
         try {
-            dynamoDB = DynamoDBDocumentClient.from(new DynamoDBClient({
+            dynamoDbClient = DynamoDBDocumentClient.from(new DynamoDBClient({
                 region: process.env.AWS_REGION || 'us-east-1'
             }));
-            console.log('✓ DynamoDB client created successfully');
+            console.log('DynamoDB client created successfully');
         } catch (error) {
             console.error('CRITICAL: Failed to create DynamoDB client:', error);
             throw new Error(`DynamoDB client creation failed: ${error.message}`);
@@ -77,10 +79,10 @@ const handlerLogic = async (event) => {
             if (!websocketApiUrl) {
                 throw new Error('WEBSOCKET_API_URL environment variable is required');
             }
-            apiGateway = new ApiGatewayManagementApiClient({
+            apiGatewayClient = new ApiGatewayManagementApiClient({
                 endpoint: websocketApiUrl
             });
-            console.log('✓ API Gateway client created successfully');
+            console.log('API Gateway client created successfully');
             console.log('API Gateway endpoint configured:', websocketApiUrl);
         } catch (error) {
             console.error('CRITICAL: Failed to create API Gateway client:', error);
@@ -165,7 +167,7 @@ const handlerLogic = async (event) => {
             let isNewUser = false;
             console.log('Checking if user exists in database...');
             try {
-                const userResult = await dynamoDB.send(new GetCommand({
+                const userResult = await dynamoDbClient.send(new GetCommand({
                     TableName: process.env.USER_METADATA_TABLE,
                     Key: { PK: `USER#${userId}` }
                 }));
@@ -182,7 +184,7 @@ const handlerLogic = async (event) => {
                 });
             }
             
-            // if user exists, get their active chat using GSI1
+            // Get active chat using GSI1 if user exists
             let activeChatId = null;
             if (!isNewUser) {
                 console.log('Looking for active chat for existing user...');
@@ -200,7 +202,7 @@ const handlerLogic = async (event) => {
                 console.log('Conversations query params:', JSON.stringify(conversationsParams, null, 2));
 
                 try {
-                    const conversationsResult = await dynamoDB.send(new QueryCommand(conversationsParams));
+                    const conversationsResult = await dynamoDbClient.send(new QueryCommand(conversationsParams));
                     console.log('Conversations query result:', JSON.stringify(conversationsResult, null, 2));
                     if (conversationsResult.Items && conversationsResult.Items.length > 0) {
                         activeChatId = conversationsResult.Items[0].PK.replace('CHAT#', '');
@@ -238,10 +240,10 @@ const handlerLogic = async (event) => {
             console.log('User update params:', JSON.stringify(params, null, 2));
 
             try {
-                await dynamoDB.send(new UpdateCommand(params));
+                await dynamoDbClient.send(new UpdateCommand(params));
                 console.log('User connection mapping stored successfully');
 
-                // if user has an active chat, check for queued messages
+                // Check for queued messages if user has an active chat
                 if (activeChatId) {
                     console.log('Checking for queued messages in chat:', activeChatId);
                     const queuedMessagesParams = {
@@ -257,14 +259,14 @@ const handlerLogic = async (event) => {
                     console.log('Queued messages query params:', JSON.stringify(queuedMessagesParams, null, 2));
 
                     try {
-                        const queuedMessages = await dynamoDB.send(new QueryCommand(queuedMessagesParams));
+                        const queuedMessages = await dynamoDbClient.send(new QueryCommand(queuedMessagesParams));
                         console.log('Queued messages result:', JSON.stringify(queuedMessages, null, 2));
                         
                         // send queued messages to the user
                         if (queuedMessages.Items && queuedMessages.Items.length > 0) {
                             console.log(`Found ${queuedMessages.Items.length} queued messages, sending to user...`);
                             for (const message of queuedMessages.Items) {
-                                if (message.senderId !== userId) { // only send messages from other user
+                                if (message.senderId !== userId) { // Only send messages from other user
                                     console.log('Sending queued message:', message.messageId, 'from sender:', message.senderId);
                                     const messagePayload = {
                                         action: 'message',
@@ -279,7 +281,7 @@ const handlerLogic = async (event) => {
 
                                     console.log('Message payload:', JSON.stringify(messagePayload, null, 2));
 
-                                    await apiGateway.send(new PostToConnectionCommand({
+                                    await apiGatewayClient.send(new PostToConnectionCommand({
                                         ConnectionId: connectionId,
                                         Data: JSON.stringify(messagePayload)
                                     }));
@@ -318,10 +320,10 @@ const handlerLogic = async (event) => {
             console.log('Processing sendMessage action for authenticated user:', userId);
             console.log('Message data:', JSON.stringify(data, null, 2));
             
-            // Use authenticated userId instead of data.senderId
+            // Extract message data (using authenticated userId as sender)
             const { chatId, sentAt, content, messageId } = data;
 
-            // validate required fields and their formats
+            // Validate required fields and their formats
             const validations = {
                 chatId: (val) => val && typeof val === 'string',
                 content: (val) => val && typeof val === 'string' && val.trim().length > 0,
@@ -345,10 +347,10 @@ const handlerLogic = async (event) => {
             }
 
             console.log('Validation passed. Retrieving sender metadata...');
-            // verify sender's connection
+            // Verify sender's connection
             let senderMetadata;
             try {
-                senderMetadata = await dynamoDB.send(new GetCommand({
+                senderMetadata = await dynamoDbClient.send(new GetCommand({
                     TableName: process.env.USER_METADATA_TABLE,
                     Key: { PK: `USER#${userId}` }
                 }));
@@ -377,7 +379,7 @@ const handlerLogic = async (event) => {
             if (senderMetadata.Item.connectionId !== connectionId) {
                 console.log('Updating sender connection ID. Old:', senderMetadata.Item.connectionId, 'New:', connectionId);
                 try {
-                    await dynamoDB.send(new UpdateCommand({
+                    await dynamoDbClient.send(new UpdateCommand({
                         TableName: process.env.USER_METADATA_TABLE,
                         Key: { PK: `USER#${userId}` },
                         UpdateExpression: 'SET connectionId = :connectionId, lastSeen = :lastSeen',
@@ -394,7 +396,7 @@ const handlerLogic = async (event) => {
             }
 
             console.log('Getting conversation...');
-            // get conversation to find receiver
+            // Get conversation to find receiver
             let conversation;
             try {
                 console.log('Querying conversation with chatId:', chatId);
@@ -406,7 +408,7 @@ const handlerLogic = async (event) => {
                     }
                 });
                 
-                const conversationResult = await dynamoDB.send(new QueryCommand({
+                const conversationResult = await dynamoDbClient.send(new QueryCommand({
                     TableName: process.env.CONVERSATIONS_TABLE,
                     KeyConditionExpression: 'PK = :pk',
                     ExpressionAttributeValues: {
@@ -475,7 +477,7 @@ const handlerLogic = async (event) => {
                 }, requestId);
             }
 
-            // get receiver's metadata - determine receiver from participants (Array or Set)
+            // Get receiver's metadata - determine receiver from participants (Array or Set)
             let receiverId;
             console.log('Looking up receiver from participants...');
             console.log('  - conversation.participants:', conversation.participants);
@@ -531,7 +533,7 @@ const handlerLogic = async (event) => {
             let receiverMetadata;
             try {
                 console.log('Looking up receiver metadata for userId:', receiverId);
-                receiverMetadata = await dynamoDB.send(new GetCommand({
+                receiverMetadata = await dynamoDbClient.send(new GetCommand({
                     TableName: process.env.USER_METADATA_TABLE,
                     Key: { PK: `USER#${receiverId}` }
                 }));
@@ -569,7 +571,7 @@ const handlerLogic = async (event) => {
                 }, requestId);
             }
 
-            // store message in DynamoDB
+            // Store message in DynamoDB
             const messageParams = {
                 TableName: process.env.MESSAGES_TABLE,
                 Item: {
@@ -586,12 +588,12 @@ const handlerLogic = async (event) => {
 
             console.log('Storing message in DynamoDB with params:', JSON.stringify(messageParams, null, 2));
             try {
-                await dynamoDB.send(new PutCommand(messageParams));
+                await dynamoDbClient.send(new PutCommand(messageParams));
                 console.log('Message stored successfully in DynamoDB');
 
                 // Update conversation with last message details
                 console.log('Updating conversation with last message details...');
-                await dynamoDB.send(new UpdateCommand({
+                await dynamoDbClient.send(new UpdateCommand({
                     TableName: process.env.CONVERSATIONS_TABLE,
                     Key: {
                         PK: `CHAT#${chatId}`
@@ -626,7 +628,7 @@ const handlerLogic = async (event) => {
                 });
             }
 
-            // if receiver is connected, send message immediately
+            // Send message immediately if receiver is connected
             if (receiverMetadata.Item.connectionId) {
                 console.log('Receiver is connected, sending message immediately...');
                 console.log('Receiver connection details:', {
@@ -648,27 +650,27 @@ const handlerLogic = async (event) => {
                     };
                     console.log('Message payload to receiver:', JSON.stringify(messagePayload, null, 2));
                     
-                    await apiGateway.send(new PostToConnectionCommand({
+                    await apiGatewayClient.send(new PostToConnectionCommand({
                         ConnectionId: receiverMetadata.Item.connectionId,
                         Data: JSON.stringify(messagePayload)
                     }));
                     console.log('Message sent to receiver successfully');
                     
-                    // Mark message as delivered (not queued)
+                    // Mark message as delivered
                     console.log('Updating message delivery status...');
-                    try {
-                        await dynamoDB.send(new UpdateCommand({
-                            TableName: process.env.MESSAGES_TABLE,
-                            Key: {
-                                PK: `CHAT#${chatId}`,
-                                SK: `MSG#${messageId}`
-                            },
-                            UpdateExpression: 'SET queued = :queued, deliveredAt = :deliveredAt',
-                            ExpressionAttributeValues: {
-                                ':queued': false,
-                                ':deliveredAt': new Date().toISOString()
-                            }
-                        }));
+                                            try {
+                            await dynamoDbClient.send(new UpdateCommand({
+                                TableName: process.env.MESSAGES_TABLE,
+                                Key: {
+                                    PK: `CHAT#${chatId}`,
+                                    SK: `MSG#${messageId}`
+                                },
+                                UpdateExpression: 'SET queued = :queued, deliveredAt = :deliveredAt',
+                                ExpressionAttributeValues: {
+                                    ':queued': false,
+                                    ':deliveredAt': new Date().toISOString()
+                                }
+                            }));
                         console.log('Message marked as delivered');
                     } catch (updateError) {
                         console.error('Error updating message delivery status:', updateError);
@@ -685,11 +687,11 @@ const handlerLogic = async (event) => {
                         errorName: error.name
                     });
                     
-                    // Check if this is a stale connection ID (common error codes for disconnected clients)
+                    // Check if this is a stale connection ID
                     if (error.code === 'GoneException' || error.statusCode === 410) {
                         console.log('Receiver connection is stale, clearing connection ID...');
                         try {
-                            await dynamoDB.send(new UpdateCommand({
+                            await dynamoDbClient.send(new UpdateCommand({
                                 TableName: process.env.USER_METADATA_TABLE,
                                 Key: { PK: `USER#${receiverId}` },
                                 UpdateExpression: 'REMOVE connectionId',
@@ -704,25 +706,25 @@ const handlerLogic = async (event) => {
                         }
                     }
                     
-                    // If we can't send to the receiver, mark the message as queued
+                    // Mark message as queued if delivery fails
                     console.log('Marking message as queued due to delivery failure...');
-                    try {
-                        await dynamoDB.send(new UpdateCommand({
-                            TableName: process.env.MESSAGES_TABLE,
-                            Key: {
-                                PK: `CHAT#${chatId}`,
-                                SK: `MSG#${messageId}`
-                            },
-                            UpdateExpression: 'SET queued = :queued, deliveryError = :error',
-                            ExpressionAttributeValues: {
-                                ':queued': true,
-                                ':error': {
-                                    code: error.code || 'UNKNOWN',
-                                    message: error.message || 'Unknown error',
-                                    timestamp: new Date().toISOString()
-                                }
-                            }
-                        }));
+                                            try {
+                            await dynamoDbClient.send(new UpdateCommand({
+                                TableName: process.env.MESSAGES_TABLE,
+                                Key: {
+                                    PK: `CHAT#${chatId}`,
+                                    SK: `MSG#${messageId}`
+                                },
+                                UpdateExpression: 'SET queued = :queued, deliveryError = :error',
+                                ExpressionAttributeValues: {
+                                    ':queued': true,
+                                    ':error': {
+                                        code: error.code || 'UNKNOWN',
+                                        message: error.message || 'Unknown error',
+                                        timestamp: new Date().toISOString()
+                    }
+                }
+            }));
                         console.log('Message marked as queued with error details');
                     } catch (updateError) {
                         console.error('Error updating message queued status:', updateError);
@@ -746,7 +748,7 @@ const handlerLogic = async (event) => {
             console.log('content =', content);
             console.log('sentAt =', sentAt);
             
-            // Send confirmation back to sender
+            // Send confirmation to sender
             console.log('Sending confirmation back to sender...');
             try {
                 const confirmationPayload = {
@@ -759,7 +761,7 @@ const handlerLogic = async (event) => {
                 };
                 console.log('Confirmation payload to sender:', JSON.stringify(confirmationPayload, null, 2));
                 
-                await apiGateway.send(new PostToConnectionCommand({
+                await apiGatewayClient.send(new PostToConnectionCommand({
                     ConnectionId: connectionId,
                     Data: JSON.stringify(confirmationPayload)
                 }));
@@ -774,8 +776,26 @@ const handlerLogic = async (event) => {
                     errorCode: error.code,
                     errorName: error.name
                 });
+                
+                // Handle stale connection by clearing it from user metadata
+                if (error.code === 'GoneException' || error.statusCode === 410) {
+                    console.log('Sender connection is stale, clearing connection ID...');
+                    try {
+                        await dynamoDbClient.send(new UpdateCommand({
+                            TableName: process.env.USER_METADATA_TABLE,
+                            Key: { PK: `USER#${userId}` },
+                            UpdateExpression: 'REMOVE connectionId',
+                            ConditionExpression: 'connectionId = :staleConnectionId',
+                            ExpressionAttributeValues: {
+                                ':staleConnectionId': connectionId
+                            }
+                        }));
+                        console.log('Stale sender connection ID cleared from user metadata');
+                    } catch (clearError) {
+                        console.error('Error clearing stale sender connection ID:', clearError);
+                    }
+                }
                 // Don't fail the entire operation if confirmation fails
-                // But log it for debugging purposes
             }
 
             console.log('Send message action completed successfully');
@@ -783,12 +803,12 @@ const handlerLogic = async (event) => {
             return createSuccessResponse(200, { message: 'Message sent successfully' }, action, requestId);
         }
 
-        // Handle typingStatus action (DEPRECATED)
+        // Handle typingStatus action (deprecated)
         if (action === 'typingStatus') {
             console.log('DEPRECATED: typingStatus action received - functionality has been temporarily disabled');
             console.log('Processing DEPRECATED TYPING_STATUS action for authenticated user:', userId);
             
-            // Basic validation to maintain API compatibility
+            // Basic validation for API compatibility
             const { chatId, isTyping } = data;
             if (!chatId || typeof isTyping !== 'boolean') {
                 console.log('Invalid typing status data provided (deprecated handler)');
@@ -805,7 +825,7 @@ const handlerLogic = async (event) => {
             console.log('Typing status action completed (deprecated - no operation performed)');
             const requestId = extractRequestId(event);
             
-            // Return success to maintain API compatibility but note deprecation
+            // Return success for API compatibility with deprecation notice
             return createSuccessResponse(200, { 
                 message: 'Typing status received (deprecated)', 
                 deprecated: true,
@@ -838,7 +858,7 @@ console.log('SendMessage Lambda function loaded successfully');
 module.exports.handler = async (event, context) => {
     try {
         const userInfo = await authenticateWebSocketEvent(event);
-        // Add user info to event for handler to use
+        // Add user info to event for handler
         event.userInfo = userInfo;
         return await handlerLogic(event, context);
     } catch (error) {

@@ -2,7 +2,6 @@
  * Firebase Admin SDK Configuration for Server-side Authentication
  * 
  * This file handles Firebase Admin SDK initialization for AWS Lambda functions.
- * It supports both service account credentials and default credentials.
  */
 
 const admin = require('firebase-admin');
@@ -25,7 +24,6 @@ const initializeFirebaseAdmin = () => {
     let firebaseApp;
 
     try {
-        // Option 1: Use service account credentials from environment variables
         if (FIREBASE_PRIVATE_KEY && FIREBASE_CLIENT_EMAIL && FIREBASE_PROJECT_ID) {
             console.log('Initializing Firebase Admin with service account credentials');
             
@@ -40,28 +38,10 @@ const initializeFirebaseAdmin = () => {
                 })
             });
         }
-        // Option 2: Use default credentials (works with AWS Lambda IAM roles)
-        else if (FIREBASE_PROJECT_ID) {
-            console.log('Initializing Firebase Admin with default credentials');
-            
-            firebaseApp = admin.initializeApp({
-                projectId: FIREBASE_PROJECT_ID,
-                credential: admin.credential.applicationDefault()
-            });
-        }
-        // Option 3: Use service account file (for local development)
-        else {
-            console.log('Initializing Firebase Admin with service account file');
-            
-            firebaseApp = admin.initializeApp({
-                credential: admin.credential.applicationDefault()
-            });
-        }
-
-        console.log('✅ Firebase Admin SDK initialized successfully');
+        console.log('Firebase Admin SDK initialized successfully');
         return firebaseApp;
     } catch (error) {
-        console.error('❌ Firebase Admin SDK initialization failed:', error);
+        console.error('Firebase Admin SDK initialization failed:', error);
         throw error;
     }
 };

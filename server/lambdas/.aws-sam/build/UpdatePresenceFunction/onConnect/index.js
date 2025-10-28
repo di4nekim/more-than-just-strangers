@@ -5,8 +5,12 @@
  * @param {Object} event - The event object containing the WebSocket connection details
  * @returns {Object} Response object with status code and body
  */
+
+// AWS SDK imports
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
+
+// Shared utility imports
 const { authenticateWebSocketEvent } = require("../shared/auth");
 const { 
     createErrorResponse, 
@@ -16,19 +20,15 @@ const {
     handleDynamoDBError
 } = require("../shared/errorHandler");
 
-// AWS Region configuration
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
-// Main handler logic
 const handlerLogic = async (event) => {
     console.log('Lambda triggered with event:', JSON.stringify(event, null, 2));
     
-    // Get authenticated user info from the event (added by auth middleware)
     const { userId, email } = event.userInfo;
     console.log('Firebase token validated successfully for user:', userId);
     
     try {
-        // Validate that we have a connectionId
         if (!event.requestContext || !event.requestContext.connectionId) {
             console.error('No connectionId found in event');
             const action = extractAction(event);
@@ -40,65 +40,67 @@ const handlerLogic = async (event) => {
         }
 
         const connectionId = event.requestContext.connectionId;
-        const tableName = process.env.USER_METADATA_TABLE || 'UserMetadata';
+        const userMetadataTableName = process.env.USER_METADATA_TABLE;
         console.log(`New WebSocket connection established: ${connectionId} for user: ${userId}`);
 
-        // Configure DynamoDB DocumentClient for AWS SDK v3
-        const dynamoClient = new DynamoDBClient({
+        const dynamoDbClient = new DynamoDBClient({
             region: AWS_REGION
         });
-        const dynamoDB = DynamoDBDocumentClient.from(dynamoClient);
+        const dynamoDbDocumentClient = DynamoDBDocumentClient.from(dynamoDbClient);
 
-        // Check if user exists
-        const userKey = { PK: `USER#${userId}` };
-        console.log('Checking for user with key:', userKey);
+        const userPrimaryKey = { PK: `USER#${userId}` };
+        console.log('Checking for user with key:', userPrimaryKey);
         
-        const userExists = await dynamoDB.send(new GetCommand({
-            TableName: tableName,
-            Key: userKey
+        const existingUserResult = await dynamoDbDocumentClient.send(new GetCommand({
+            TableName: userMetadataTableName,
+            Key: userPrimaryKey
         }));
         
-        if (!userExists.Item) {
+        if (!existingUserResult.Item) {
             try {
-                const newUser = {
-                    ...userKey,
+                const newUserRecord = {
+                    ...userPrimaryKey,
                     connectionId,
                     userId,
-                    email: email,
+                    email,
                     createdAt: new Date().toISOString(),
                     lastConnected: new Date().toISOString()
                 };
-                console.log('Creating new user:', newUser);
+                console.log('Creating new user:', newUserRecord);
                 
-                await dynamoDB.send(new PutCommand({
-                    TableName: tableName,
-                    Item: newUser
+                await dynamoDbDocumentClient.send(new PutCommand({
+                    TableName: userMetadataTableName,
+                    Item: newUserRecord
                 }));
                 
                 const action = extractAction(event);
                 const requestId = extractRequestId(event);
-                return createSuccessResponse(200, { 
-                    message: 'New user connection established', 
-                    connectionId,
-                    userId 
-                }, action, requestId);
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ 
+                        message: 'New user connection established', 
+                        connectionId,
+                        userId 
+                    })
+                };
             } catch (error) {
                 console.error('Error creating user:', error);
-                return handleDynamoDBError(error, extractAction(event), {
-                    operation: 'user_creation',
-                    resource: 'user_metadata',
-                    tableName: tableName,
-                    userId
-                });
+                return {
+                    statusCode: 500,
+                    body: JSON.stringify({
+                        error: 'Failed to create user',
+                        message: error.message,
+                        timestamp: new Date().toISOString()
+                    })
+                };
             }
         } else {
-            // Update existing user metadata with connectionId   
             try {
-                console.log('Updating existing user:', userKey);
+                console.log('Updating existing user:', userPrimaryKey);
                 
-                await dynamoDB.send(new UpdateCommand({
-                    TableName: tableName,
-                    Key: userKey,
+                await dynamoDbDocumentClient.send(new UpdateCommand({
+                    TableName: userMetadataTableName,
+                    Key: userPrimaryKey,
                     UpdateExpression: 'SET connectionId = :connectionId, lastConnected = :now, email = :email',
                     ExpressionAttributeValues: {
                         ':connectionId': connectionId,
@@ -109,50 +111,52 @@ const handlerLogic = async (event) => {
 
                 const action = extractAction(event);
                 const requestId = extractRequestId(event);
-                return createSuccessResponse(200, { 
-                    message: 'User connection updated', 
-                    connectionId,
-                    userId 
-                }, action, requestId);
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify({ 
+                        message: 'User connection updated', 
+                        connectionId,
+                        userId 
+                    })
+                };
             } catch (error) {
                 console.error('Error updating user:', error);
-                return handleDynamoDBError(error, extractAction(event), {
-                    operation: 'user_update',
-                    resource: 'user_metadata',
-                    tableName: tableName,
-                    userId
-                });
+                return {
+                    statusCode: 500,
+                    body: JSON.stringify({
+                        error: 'Failed to update user',
+                        message: error.message,
+                        timestamp: new Date().toISOString()
+                    })
+                };
             }
         }
     } catch (error) {
         console.error('Error in handler logic:', error);
-        const action = extractAction(event);
-        const requestId = extractRequestId(event);
-        return createErrorResponse(500, 'Internal Server Error', action, {
-            operation: 'connection_handling',
-            errorType: error.name || 'UnknownError',
-            errorMessage: error.message || 'An unexpected error occurred'
-        }, requestId);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                error: 'Internal Server Error',
+                message: error.message,
+                timestamp: new Date().toISOString()
+            })
+        };
     }
 };
 
-// Export the handler with authentication middleware
 module.exports.handler = async (event, context) => {
     try {
-        // Authenticate the WebSocket connection using Firebase token
         const userInfo = await authenticateWebSocketEvent(event);
         event.userInfo = userInfo;
         
-        // Call the main handler logic
         const result = await handlerLogic(event);
         return result;
         
     } catch (error) {
         console.error('Authentication failed:', error);
         
-        // For WebSocket connections, always return 200 but include error in body
         return {
-            statusCode: 200,
+            statusCode: 401,
             body: JSON.stringify({
                 error: 'Authentication failed',
                 message: error.message,

@@ -3,16 +3,6 @@ const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb"
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
 
-
-const { 
-    createErrorResponse, 
-    createSuccessResponse, 
-    extractAction, 
-    extractRequestId,
-    handleDynamoDBError,
-    handleApiGatewayError,
-    handleValidationError
-} = require("../shared/errorHandler");
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
     region: process.env.AWS_REGION || 'us-east-1'
@@ -116,30 +106,51 @@ const handlerLogic = async (event, context) => {
         
         console.log('Sending chat history response:', response);
         
-        await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify(response)
-        }));
+        try {
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify(response)
+            }));
+        } catch (sendError) {
+            // Handle GoneException specifically - this is expected when connection drops
+            if (sendError.name === 'GoneException') {
+                console.log('Connection no longer available (client disconnected), skipping response send');
+                return { statusCode: 200 };
+            }
+            throw sendError; // Re-throw other send errors
+        }
         
         return { statusCode: 200 };
         
     } catch (error) {
-        console.error('Error:', error);
-        try {
-            await apiGateway.send(new PostToConnectionCommand({
-                ConnectionId: connectionId,
-                Data: JSON.stringify({
-                    action: 'error',
-                    data: { 
-                        action: 'fetchChatHistory',
-                        error: 'Internal server error', 
-                        details: error.message 
-                    }
-                })
-            }));
-        } catch (sendError) {
-            console.error('Error sending error response:', sendError);
+        console.error('Error in fetchChatHistory:', error);
+        
+        // Only try to send error response if it's not a connection issue
+        if (error.name !== 'GoneException') {
+            try {
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { 
+                            action: 'fetchChatHistory',
+                            error: 'Internal server error', 
+                            details: error.message 
+                        }
+                    })
+                }));
+            } catch (sendError) {
+                // Handle GoneException in error response too
+                if (sendError.name === 'GoneException') {
+                    console.log('Cannot send error response - connection no longer available');
+                } else {
+                    console.error('Error sending error response:', sendError);
+                }
+            }
+        } else {
+            console.log('Main error was GoneException - connection no longer available');
         }
+        
         return { statusCode: 200 };
     }
 }; 
@@ -163,9 +174,10 @@ exports.handler = async (event, context) => {
                     Data: JSON.stringify({
                         action: 'error',
                         data: { 
-                            error: error.message === 'JWT_TOKEN_MISSING' 
-                                ? 'Authentication required. JWT token missing.' 
-                                : 'Invalid or expired JWT token'
+                            action: 'fetchChatHistory',
+                            error: error.message === 'FIREBASE_TOKEN_MISSING' 
+                                ? 'Authentication required. Firebase ID token missing.' 
+                                : 'Invalid or expired Firebase ID token'
                         }
                     })
                 }));

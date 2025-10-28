@@ -25,6 +25,12 @@ try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   console.log(missingVars.length > 0 ? 'Firebase initialized with demo configuration' : 'Firebase initialized successfully');
+  console.log('Firebase config used:', {
+    apiKey: firebaseConfig.apiKey ? 'Set' : 'Missing',
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId,
+    appId: firebaseConfig.appId ? 'Set' : 'Missing'
+  });
 } catch (error) {
   console.error('Firebase initialization failed:', error);
   
