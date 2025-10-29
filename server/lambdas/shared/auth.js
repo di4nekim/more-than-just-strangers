@@ -8,14 +8,15 @@ const { createErrorResponse, extractAction, extractRequestId } = require('./erro
 /**
  * Validate Firebase ID token
  * @param {string} token - Firebase ID token to validate
+ * @param {string} environment - Environment name
  * @returns {Promise<Object>} Decoded token payload
  */
-const validateFirebaseToken = async (token) => {
+const validateFirebaseToken = async (token, environment = null) => {
     try {
         console.log('FIREBASE: Starting token validation');
         console.log('FIREBASE: Token length:', token ? token.length : 'no token');
         
-        const decodedToken = await verifyIdToken(token);
+        const decodedToken = await verifyIdToken(token, environment);
         
         // Check token expiration
         const now = Math.floor(Date.now() / 1000);
@@ -94,10 +95,11 @@ const extractTokenFromBody = (body) => {
 /**
  * Authenticate and get user information from WebSocket event using Firebase
  * @param {Object} event - WebSocket event object
+ * @param {string} environment - Environment name
  * @returns {Promise<Object>} User information from validated Firebase token
  * @throws {Error} Authentication error
  */
-const authenticateWebSocketEvent = async (event) => {
+const authenticateWebSocketEvent = async (event, environment = null) => {
     try {
         let token = null;
         
@@ -140,7 +142,7 @@ const authenticateWebSocketEvent = async (event) => {
         
         console.log('AUTH: Token found, proceeding with validation');
         
-        const decodedToken = await validateFirebaseToken(token);
+        const decodedToken = await validateFirebaseToken(token, environment);
         
         return {
             userId: decodedToken.uid,
@@ -156,11 +158,12 @@ const authenticateWebSocketEvent = async (event) => {
 /**
  * Get user information by UID using Firebase Admin
  * @param {string} uid - Firebase user UID
+ * @param {string} environment - Environment name
  * @returns {Promise<Object>} User information from Firebase
  */
-const getUserByUid = async (uid) => {
+const getUserByUid = async (uid, environment = null) => {
     try {
-        const userRecord = await firebaseGetUserByUid(uid);
+        const userRecord = await firebaseGetUserByUid(uid, environment);
         return {
             userId: userRecord.uid,
             email: userRecord.email,
@@ -183,7 +186,8 @@ const getUserByUid = async (uid) => {
 const withAuth = (handler) => {
     return async (event, context) => {
         try {
-            const userInfo = await authenticateWebSocketEvent(event);
+            const environment = process.env.ENVIRONMENT;
+            const userInfo = await authenticateWebSocketEvent(event, environment);
             // Add user info to event for handler to use
             event.userInfo = userInfo;
             return await handler(event, context);

@@ -5,24 +5,13 @@ Description: WebSocket API Backend with Lambda Functions
 Parameters:
   Environment:
     Type: String
-    Default: Development
-    Description: Environment name (Development, Staging, Prod)
-    AllowedValues: [Development, Staging, Prod]
+    Default: development
+    Description: Environment name (development, staging, production)
+    AllowedValues: [development, staging, production]
 
-  FirebaseProjectId:
-    Type: String
-    Description: Firebase Project ID for authentication
-    Default: ""
-
-  FirebasePrivateKey:
-    Type: String
-    Description: Firebase Private Key for service account authentication
-    Default: ""
-
-  FirebaseClientEmail:
-    Type: String
-    Description: Firebase Client Email for service account authentication
-    Default: ""
+Conditions:
+  IsProduction: !Equals [!Ref Environment, production]
+  IsNonProduction: !Not [!Equals [!Ref Environment, production]]
 
 Globals:
   Function:
@@ -127,8 +116,10 @@ Resources:
       StageName: !Ref Environment
       AutoDeploy: true
 
-  SharedLambdaRole:
+  # Development/Staging Lambda Role (Broader Permissions)
+  NonProductionLambdaRole:
     Type: AWS::IAM::Role
+    Condition: IsNonProduction
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -143,6 +134,88 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      Policies:
+        - PolicyName: ParameterStoreAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/mtjs/*"
+
+  # Production Lambda Role (Least Privilege)
+  ProductionLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: IsProduction
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ProductionDynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt UserMetadataTable.Arn
+                  - !GetAtt MessagesTable.Arn
+                  - !GetAtt ConversationsTable.Arn
+                  - !GetAtt MatchmakingQueueTable.Arn
+                  - !Sub "${UserMetadataTable.Arn}/index/*"
+                  - !Sub "${MatchmakingQueueTable.Arn}/index/*"
+        - PolicyName: ProductionAPIGatewayAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - execute-api:ManageConnections
+                Resource:
+                  - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/POST/@connections/*"
+        - PolicyName: ProductionParameterStoreAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/mtjs/production/*"
+        - PolicyName: ProductionCloudWatchLogsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/mtjs-*-production:*"
 
   # Lambda Functions -- Function, Integration, Route, Permission (automates lambda/api gateway lifecycle)
 
@@ -151,16 +224,15 @@ Resources:
     Properties:
       Handler: onConnect/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
           CONVERSATIONS_TABLE: !Sub "ConversationsV3-${Environment}"
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   OnConnectIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -195,16 +267,14 @@ Resources:
     Properties:
       Handler: onDisconnect/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
           CONVERSATIONS_TABLE: !Sub "ConversationsV3-${Environment}"
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
 
   OnDisconnectIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -238,7 +308,7 @@ Resources:
     Properties:
       Handler: sendMessage/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -246,9 +316,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   SendMessageIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -298,7 +367,7 @@ Resources:
     Properties:
       Handler: setReady/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -306,9 +375,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   SetReadyIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -342,7 +410,7 @@ Resources:
     Properties:
       Handler: startConversation/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -350,9 +418,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   StartConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -386,7 +453,7 @@ Resources:
     Properties:
       Handler: endConversation/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -394,9 +461,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   EndConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -430,7 +496,7 @@ Resources:
     Properties:
       Handler: fetchChatHistory/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -438,9 +504,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+         
 
   FetchChatHistoryIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -474,7 +539,7 @@ Resources:
     Properties:
       Handler: getCurrentState/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -482,9 +547,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   GetCurrentStateIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -518,7 +582,7 @@ Resources:
     Properties:
       Handler: updatePresence/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -526,9 +590,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   UpdatePresenceIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -562,7 +625,7 @@ Resources:
     Properties:
       Handler: syncConversation/index.handler
       CodeUri: ./
-      Role: !GetAtt SharedLambdaRole.Arn
+      Role: !If [IsProduction, !GetAtt ProductionLambdaRole.Arn, !GetAtt NonProductionLambdaRole.Arn]
       Environment:
         Variables:
           USER_METADATA_TABLE: !Sub "UserMetadataV2-${Environment}"
@@ -570,9 +633,8 @@ Resources:
           MESSAGES_TABLE: !Sub "MessagesV2-${Environment}"
           MATCHMAKING_QUEUE_TABLE: !Sub "MatchmakingQueue-${Environment}"
           WEBSOCKET_API_URL: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
-          FIREBASE_PROJECT_ID: !Ref FirebaseProjectId
-          FIREBASE_PRIVATE_KEY: !Ref FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL: !Ref FirebaseClientEmail
+          ENVIRONMENT: !Ref Environment
+          
 
   SyncConversationIntegration:
     Type: AWS::ApiGatewayV2::Integration

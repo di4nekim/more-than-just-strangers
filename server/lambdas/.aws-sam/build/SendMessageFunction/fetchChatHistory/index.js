@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
 
@@ -65,8 +65,70 @@ const handlerLogic = async (event, context) => {
             return { statusCode: 200 };
         }
 
-        // TODO: Verify that the authenticated user has access to this chat
-        // This would involve checking if userId is a participant in the chat
+        // Verify that the authenticated user has access to this chat
+        console.log('Verifying user access to chat:', { userId, chatId });
+        
+        try {
+            const userMetadataParams = {
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${userId}` }
+            };
+
+            console.log('Querying user metadata with params:', userMetadataParams);
+            const userMetadata = await dynamoDB.send(new GetCommand(userMetadataParams));
+            
+            if (!userMetadata.Item) {
+                console.log('User not found in database:', userId);
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { 
+                            action: 'fetchChatHistory',
+                            error: 'User not found' 
+                        }
+                    })
+                }));
+                return { statusCode: 200 };
+            }
+            
+            console.log('User metadata found:', userMetadata.Item);
+            
+            // Check if user has access to this chat
+            if (userMetadata.Item.chatId !== chatId) {
+                console.log('Access denied - user chatId mismatch:', {
+                    userChatId: userMetadata.Item.chatId,
+                    requestedChatId: chatId
+                });
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { 
+                            action: 'fetchChatHistory',
+                            error: 'Access denied to this chat' 
+                        }
+                    })
+                }));
+                return { statusCode: 200 };
+            }
+            
+            console.log('User access verified successfully');
+            
+        } catch (error) {
+            console.error('Error verifying user access:', error);
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({
+                    action: 'error',
+                    data: { 
+                        action: 'fetchChatHistory',
+                        error: 'Failed to verify access' 
+                    }
+                })
+            }));
+            return { statusCode: 200 };
+        }
 
         // Query messages for the chat
         const params = {
