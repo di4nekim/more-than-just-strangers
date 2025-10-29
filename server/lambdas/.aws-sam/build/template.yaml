@@ -4,24 +4,22 @@ Description: WebSocket API Backend with Lambda Functions
 Parameters:
   Environment:
     Type: String
-    Default: Development
-    Description: Environment name (Development, Staging, Prod)
+    Default: development
+    Description: Environment name (development, staging, production)
     AllowedValues:
-    - Development
-    - Staging
-    - Prod
-  FirebaseProjectId:
-    Type: String
-    Description: Firebase Project ID for authentication
-    Default: ''
-  FirebasePrivateKey:
-    Type: String
-    Description: Firebase Private Key for service account authentication
-    Default: ''
-  FirebaseClientEmail:
-    Type: String
-    Description: Firebase Client Email for service account authentication
-    Default: ''
+    - development
+    - staging
+    - production
+Conditions:
+  IsProduction:
+    Fn::Equals:
+    - Ref: Environment
+    - production
+  IsNonProduction:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: Environment
+      - production
 Globals:
   Function:
     Runtime: nodejs20.x
@@ -124,8 +122,9 @@ Resources:
       StageName:
         Ref: Environment
       AutoDeploy: true
-  SharedLambdaRole:
+  NonProductionLambdaRole:
     Type: AWS::IAM::Role
+    Condition: IsNonProduction
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -140,15 +139,108 @@ Resources:
       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
       - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      Policies:
+      - PolicyName: ParameterStoreAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+            - ssm:GetParametersByPath
+            Resource:
+            - Fn::Sub: arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/mtjs/*
+  ProductionLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: IsProduction
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: ProductionDynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+            Resource:
+            - Fn::GetAtt:
+              - UserMetadataTable
+              - Arn
+            - Fn::GetAtt:
+              - MessagesTable
+              - Arn
+            - Fn::GetAtt:
+              - ConversationsTable
+              - Arn
+            - Fn::GetAtt:
+              - MatchmakingQueueTable
+              - Arn
+            - Fn::Sub: ${UserMetadataTable.Arn}/index/*
+            - Fn::Sub: ${MatchmakingQueueTable.Arn}/index/*
+      - PolicyName: ProductionAPIGatewayAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - execute-api:ManageConnections
+            Resource:
+            - Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${Environment}/POST/@connections/*
+      - PolicyName: ProductionParameterStoreAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+            - ssm:GetParametersByPath
+            Resource:
+            - Fn::Sub: arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/mtjs/production/*
+      - PolicyName: ProductionCloudWatchLogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/mtjs-*-production:*
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: onConnect/index.handler
       CodeUri: OnConnectFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -159,12 +251,8 @@ Resources:
             Fn::Sub: MessagesV2-${Environment}
           MATCHMAKING_QUEUE_TABLE:
             Fn::Sub: MatchmakingQueue-${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: OnConnectFunction
   OnConnectIntegration:
@@ -206,9 +294,14 @@ Resources:
       Handler: onDisconnect/index.handler
       CodeUri: OnDisconnectFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -219,12 +312,8 @@ Resources:
             Fn::Sub: MessagesV2-${Environment}
           MATCHMAKING_QUEUE_TABLE:
             Fn::Sub: MatchmakingQueue-${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: OnDisconnectFunction
   OnDisconnectIntegration:
@@ -265,9 +354,14 @@ Resources:
       Handler: sendMessage/index.handler
       CodeUri: SendMessageFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -280,12 +374,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: SendMessageFunction
   SendMessageIntegration:
@@ -343,9 +433,14 @@ Resources:
       Handler: setReady/index.handler
       CodeUri: SetReadyFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -358,12 +453,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: SetReadyFunction
   SetReadyIntegration:
@@ -404,9 +495,14 @@ Resources:
       Handler: startConversation/index.handler
       CodeUri: StartConversationFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -419,12 +515,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: StartConversationFunction
   StartConversationIntegration:
@@ -465,9 +557,14 @@ Resources:
       Handler: endConversation/index.handler
       CodeUri: EndConversationFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -480,12 +577,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: EndConversationFunction
   EndConversationIntegration:
@@ -526,9 +619,14 @@ Resources:
       Handler: fetchChatHistory/index.handler
       CodeUri: FetchChatHistoryFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -541,12 +639,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: FetchChatHistoryFunction
   FetchChatHistoryIntegration:
@@ -587,9 +681,14 @@ Resources:
       Handler: getCurrentState/index.handler
       CodeUri: GetCurrentStateFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -602,12 +701,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: GetCurrentStateFunction
   GetCurrentStateIntegration:
@@ -648,9 +743,14 @@ Resources:
       Handler: updatePresence/index.handler
       CodeUri: UpdatePresenceFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -663,12 +763,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: UpdatePresenceFunction
   UpdatePresenceIntegration:
@@ -709,9 +805,14 @@ Resources:
       Handler: syncConversation/index.handler
       CodeUri: SyncConversationFunction
       Role:
-        Fn::GetAtt:
-        - SharedLambdaRole
-        - Arn
+        Fn::If:
+        - IsProduction
+        - Fn::GetAtt:
+          - ProductionLambdaRole
+          - Arn
+        - Fn::GetAtt:
+          - NonProductionLambdaRole
+          - Arn
       Environment:
         Variables:
           USER_METADATA_TABLE:
@@ -724,12 +825,8 @@ Resources:
             Fn::Sub: MatchmakingQueue-${Environment}
           WEBSOCKET_API_URL:
             Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-          FIREBASE_PROJECT_ID:
-            Ref: FirebaseProjectId
-          FIREBASE_PRIVATE_KEY:
-            Ref: FirebasePrivateKey
-          FIREBASE_CLIENT_EMAIL:
-            Ref: FirebaseClientEmail
+          ENVIRONMENT:
+            Ref: Environment
     Metadata:
       SamResourceId: SyncConversationFunction
   SyncConversationIntegration:
