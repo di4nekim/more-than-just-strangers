@@ -147,7 +147,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
       const newQuestionIndex = userMetadata.questionIndex || 1;
       if (newQuestionIndex !== prevQuestionIndexRef.current) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('ChatRoom: questionIndex updated from userMetadata:', { 
+//           // console.log('ChatRoom: questionIndex updated from userMetadata:', { 
             from: prevQuestionIndexRef.current,
             to: newQuestionIndex,
             userId
@@ -167,8 +167,8 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   const prevReadyRef = useRef(userMetadata.ready);
   useLayoutEffect(() => {
     if (userMetadata.ready !== prevReadyRef.current) {
-      console.log('ChatRoom: userMetadata.ready changed from', prevReadyRef.current, 'to', userMetadata.ready);
-      console.log('ChatRoom: Full userMetadata:', userMetadata);
+//       // console.log('ChatRoom: userMetadata.ready changed from', prevReadyRef.current, 'to', userMetadata.ready);
+//       // console.log('ChatRoom: Full userMetadata:', userMetadata);
       prevReadyRef.current = userMetadata.ready;
       setLocalReadyState(userMetadata.ready);
     }
@@ -242,7 +242,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
         try {
           await wsActions.syncConversation({ chatId });
         } catch (error) {
-          console.warn('Failed to sync conversation after reconnection:', error);
+//           // console.warn('Failed to sync conversation after reconnection:', error);
         }
       }
       setLocalStatus('online');
@@ -316,20 +316,20 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
 
   const handleReady = async () => {
     if (!isConnected || !wsActions) {
-      console.log('ChatRoom: handleReady - WebSocket not connected or actions not available');
+//       // console.log('ChatRoom: handleReady - WebSocket not connected or actions not available');
       return;
     }
     
     const newReadyState = !localReadyState;
     
-    console.log('ChatRoom: handleReady - Toggling ready status:', { 
+//     // console.log('ChatRoom: handleReady - Toggling ready status:', { 
       chatId, 
       userId, 
       currentReady: localReadyState,
       newReady: newReadyState 
     });
     
-    console.log('ChatRoom: handleReady - WebSocket connection status:', {
+//     // console.log('ChatRoom: handleReady - WebSocket connection status:', {
       isConnected,
       wsActions: !!wsActions,
       wsClient: !!wsClient
@@ -337,29 +337,29 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
     
     try {
       setLocalReadyState(newReadyState);
-      console.log('ChatRoom: handleReady - About to send WebSocket message...');
+//       // console.log('ChatRoom: handleReady - About to send WebSocket message...');
       await wsActions.sendReadyToAdvance({
         chatId,
         userId,
         ready: newReadyState
       });
-      console.log('ChatRoom: handleReady - Ready status toggled successfully to:', newReadyState);
+//       // console.log('ChatRoom: handleReady - Ready status toggled successfully to:', newReadyState);
     } catch (error) {
-      console.warn('Failed to send ready status:', error);
+//       // console.warn('Failed to send ready status:', error);
       setLocalReadyState(!newReadyState);
     }
   };
 
   const testWebSocket = async () => {
     if (!wsActions) {
-      console.log('ChatRoom: testWebSocket - wsActions not available');
+//       // console.log('ChatRoom: testWebSocket - wsActions not available');
       return;
     }
     
     try {
-      console.log('ChatRoom: testWebSocket - Sending test message...');
+//       // console.log('ChatRoom: testWebSocket - Sending test message...');
       await wsActions.getCurrentState({ userId });
-      console.log('ChatRoom: testWebSocket - Test message sent successfully');
+//       // console.log('ChatRoom: testWebSocket - Test message sent successfully');
     } catch (error) {
       console.error('ChatRoom: testWebSocket - Error:', error);
     }
@@ -367,18 +367,18 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
 
   const testSetReady = async () => {
     if (!wsActions) {
-      console.log('ChatRoom: testSetReady - wsActions not available');
+//       // console.log('ChatRoom: testSetReady - wsActions not available');
       return;
     }
     
     try {
-      console.log('ChatRoom: testSetReady - Sending setReady test message...');
+//       // console.log('ChatRoom: testSetReady - Sending setReady test message...');
       await wsActions.sendReadyToAdvance({
         chatId,
         userId,
         ready: false
       });
-      console.log('ChatRoom: testSetReady - Test message sent successfully');
+//       // console.log('ChatRoom: testSetReady - Test message sent successfully');
     } catch (error) {
       console.error('ChatRoom: testSetReady - Error:', error);
     }
@@ -438,11 +438,11 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
     // Initial sync
     const initialSync = async () => {
       try {
-        console.log('ChatRoom: Initial sync - getting current state');
+//         // console.log('ChatRoom: Initial sync - getting current state');
         await wsActions.getCurrentState({ userId });
         setLastSyncTime(new Date());
       } catch (error) {
-        console.warn('ChatRoom: Initial sync failed:', error);
+//         // console.warn('ChatRoom: Initial sync failed:', error);
       }
     };
 
@@ -451,11 +451,11 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
     // Periodic sync every 30 seconds
     const syncInterval = setInterval(async () => {
       try {
-        console.log('ChatRoom: Periodic sync - getting current state');
+//         // console.log('ChatRoom: Periodic sync - getting current state');
         await wsActions.getCurrentState({ userId });
         setLastSyncTime(new Date());
       } catch (error) {
-        console.warn('ChatRoom: Periodic sync failed:', error);
+//         // console.warn('ChatRoom: Periodic sync failed:', error);
       }
     }, 30000);
 
@@ -692,11 +692,11 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
             <button 
               onClick={async () => {
                 try {
-                  console.log('ChatRoom: Manual refresh - getting current state');
+//                   // console.log('ChatRoom: Manual refresh - getting current state');
                   await wsActions.getCurrentState({ userId });
                   setLastSyncTime(new Date());
                 } catch (error) {
-                  console.warn('ChatRoom: Manual refresh failed:', error);
+//                   // console.warn('ChatRoom: Manual refresh failed:', error);
                 }
               }}
               disabled={!isConnected}

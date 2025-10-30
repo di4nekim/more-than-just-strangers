@@ -16,18 +16,18 @@ import {
 export const createWebSocketActions = (wsClient) => ({
   connect: async () => {
     try {
-      console.log('WebSocket actions: connect() called');
-      console.log('WebSocket actions: wsClient available:', !!wsClient);
-      console.log('WebSocket actions: Calling wsClient.connect()...');
+//       // console.log('WebSocket actions: connect() called');
+//       // console.log('WebSocket actions: wsClient available:', !!wsClient);
+//       // console.log('WebSocket actions: Calling wsClient.connect()...');
       
       await wsClient.connect();
-      console.log('WebSocket actions: wsClient.connect() completed');
+//       // console.log('WebSocket actions: wsClient.connect() completed');
       
       await new Promise(resolve => setTimeout(resolve, 100));
-      console.log('WebSocket actions: Waited 100ms, now sending connect action...');
+//       // console.log('WebSocket actions: Waited 100ms, now sending connect action...');
       
       await wsClient.send({ action: 'connect', data: {} });
-      console.log('WebSocket actions: connect action sent successfully');
+//       // console.log('WebSocket actions: connect action sent successfully');
     } catch (error) {
       console.error('Failed to establish WebSocket connection or update connection ID:', error);
       throw error;
@@ -75,17 +75,17 @@ export const createWebSocketActions = (wsClient) => ({
   },
 
   getCurrentState: async (payload) => {
-    console.log('WebSocket actions: getCurrentState() called with payload:', payload);
-    console.log('WebSocket actions: wsClient available:', !!wsClient);
+//     // console.log('WebSocket actions: getCurrentState() called with payload:', payload);
+//     // console.log('WebSocket actions: wsClient available:', !!wsClient);
     
     if (!wsClient) {
       console.error('WebSocket actions: wsClient is null, cannot send getCurrentState');
       throw new Error('WebSocket client not available');
     }
     
-    console.log('WebSocket actions: Sending getCurrentState action...');
+//     // console.log('WebSocket actions: Sending getCurrentState action...');
     await wsClient.send({ action: 'getCurrentState', data: payload });
-    console.log('WebSocket actions: getCurrentState action sent successfully');
+//     // console.log('WebSocket actions: getCurrentState action sent successfully');
   },
 
   syncConversation: async (payload) => {
@@ -101,7 +101,7 @@ export const createWebSocketActions = (wsClient) => ({
    */
   sendTypingStatus: async (payload) => {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('sendTypingStatus WebSocket action is deprecated and has been disabled.');
+//       // console.warn('sendTypingStatus WebSocket action is deprecated and has been disabled.');
     }
 
     return Promise.resolve();

@@ -5,7 +5,7 @@ export const decodeChatId = (chatId) => {
     const decoded = decodeURIComponent(chatId);
     return decoded;
   } catch (error) {
-    console.warn(`Failed to decode chatId: ${chatId}`, error);
+//     // console.warn(`Failed to decode chatId: ${chatId}`, error);
     return chatId;
   }
 };
@@ -17,7 +17,7 @@ export const encodeChatId = (chatId) => {
   try {
     return encodeURIComponent(chatId);
   } catch (error) {
-    console.warn(`Failed to encode chatId: ${chatId}`, error);
+//     // console.warn(`Failed to encode chatId: ${chatId}`, error);
     return chatId;
   }
 };
@@ -170,7 +170,7 @@ export const generateChatId = (userId1, userId2) => {
 
 export const logChatIdInfo = (chatId, context = '') => {
   if (!chatId) {
-    console.log(`${context}: No chat ID provided`);
+//     // console.log(`${context}: No chat ID provided`);
     return;
   }
   
@@ -207,7 +207,7 @@ export const logChatIdInfo = (chatId, context = '') => {
     }
   }
   
-  console.log(`${context}: Chat ID Debug Info:`, {
+//   // console.log(`${context}: Chat ID Debug Info:`, {
     original: chatId,
     decoded,
     normalized,

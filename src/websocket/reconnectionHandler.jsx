@@ -28,7 +28,7 @@ export const useReconnectionHandler = (options = {}) => {
 
   const handleReconnect = useCallback(() => {
     if (!wsClient || isReconnectingRef.current) {
-      console.log('ReconnectionHandler: Already reconnecting or no client available');
+//       // console.log('ReconnectionHandler: Already reconnecting or no client available');
       return;
     }
 
@@ -42,7 +42,7 @@ export const useReconnectionHandler = (options = {}) => {
     }
 
     if (isConnected) {
-      console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
+//       // console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
       isReconnectingRef.current = false;
       if (onReconnect) onReconnect();
       return;
@@ -63,7 +63,7 @@ export const useReconnectionHandler = (options = {}) => {
 
       // Check if already connected before attempting reconnection
       if (isConnected) {
-        console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
+//         // console.log('ReconnectionHandler: Already connected, stopping reconnection attempts');
         isReconnectingRef.current = false;
         if (onReconnect) onReconnect();
         return;
@@ -97,7 +97,7 @@ export const useReconnectionHandler = (options = {}) => {
   useEffect(() => {
     // Only attempt reconnection if not connected and not already reconnecting
     if (!isConnected && wsClient && !isReconnectingRef.current) {
-      console.log('ReconnectionHandler: Connection lost, starting reconnection attempts');
+//       // console.log('ReconnectionHandler: Connection lost, starting reconnection attempts');
       handleReconnect();
     }
   }, [isConnected, wsClient, handleReconnect]);

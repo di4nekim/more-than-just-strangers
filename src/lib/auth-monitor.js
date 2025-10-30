@@ -35,7 +35,7 @@ class AuthMonitor {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔐 Auth Event:', logEntry);
+//       // console.log('🔐 Auth Event:', logEntry);
     }
   }
 
@@ -159,7 +159,7 @@ class AuthMonitor {
     });
 
     if (severity === 'high') {
-      console.warn('🚨 Security Alert:', suspiciousEvent);
+//       // console.warn('🚨 Security Alert:', suspiciousEvent);
     }
   }
 

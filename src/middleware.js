@@ -27,12 +27,6 @@ export async function middleware(request) {
   const clientIP = request.ip ?? request.headers.get('x-forwarded-for') ?? 'unknown';
   const origin = request.headers.get('origin');
   
-  if (process.env.NODE_ENV === 'production' && pathname.startsWith('/api/debug')) {
-    return NextResponse.json(
-      { error: 'Debug endpoints not available in production' },
-      { status: 404 }
-    );
-  }
   
   if (request.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 200 });
@@ -71,7 +65,7 @@ export async function middleware(request) {
   });
   
   if (!checkRateLimit(clientIP)) {
-    console.warn('Rate limit exceeded for IP:', clientIP);
+//     // console.warn('Rate limit exceeded for IP:', clientIP);
     return NextResponse.json(
       { error: 'Rate limit exceeded', retryAfter: 60 },
       { 

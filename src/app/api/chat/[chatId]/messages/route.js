@@ -27,7 +27,7 @@ export async function GET(request, { params }) {
       try {
         queryParams.ExclusiveStartKey = JSON.parse(decodeURIComponent(before));
       } catch (error) {
-        console.log('Invalid before parameter, ignoring:', error);
+//         // console.log('Invalid before parameter, ignoring:', error);
       }
     }
     
