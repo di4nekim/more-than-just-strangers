@@ -27,6 +27,8 @@ Globals:
 Resources:
   UserMetadataTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName:
         Fn::Sub: UserMetadataV2-${Environment}
@@ -48,6 +50,8 @@ Resources:
           ProjectionType: ALL
   MessagesTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName:
         Fn::Sub: MessagesV2-${Environment}
@@ -64,6 +68,8 @@ Resources:
         KeyType: RANGE
   ConversationsTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName:
         Fn::Sub: ConversationsV3-${Environment}
@@ -76,6 +82,8 @@ Resources:
         KeyType: HASH
   MatchmakingQueueTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName:
         Fn::Sub: MatchmakingQueue-${Environment}
@@ -230,6 +238,8 @@ Resources:
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-onconnect-${Environment}
       Handler: onConnect/index.handler
       CodeUri: OnConnectFunction
       Role:
@@ -291,6 +301,8 @@ Resources:
   OnDisconnectFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-ondisconnect-${Environment}
       Handler: onDisconnect/index.handler
       CodeUri: OnDisconnectFunction
       Role:
@@ -351,6 +363,8 @@ Resources:
   SendMessageFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-sendmessage-${Environment}
       Handler: sendMessage/index.handler
       CodeUri: SendMessageFunction
       Role:
@@ -430,6 +444,8 @@ Resources:
   SetReadyFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-setready-${Environment}
       Handler: setReady/index.handler
       CodeUri: SetReadyFunction
       Role:
@@ -492,6 +508,8 @@ Resources:
   StartConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-startconversation-${Environment}
       Handler: startConversation/index.handler
       CodeUri: StartConversationFunction
       Role:
@@ -554,6 +572,8 @@ Resources:
   EndConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-endconversation-${Environment}
       Handler: endConversation/index.handler
       CodeUri: EndConversationFunction
       Role:
@@ -616,6 +636,8 @@ Resources:
   FetchChatHistoryFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-fetchchathistory-${Environment}
       Handler: fetchChatHistory/index.handler
       CodeUri: FetchChatHistoryFunction
       Role:
@@ -678,6 +700,8 @@ Resources:
   GetCurrentStateFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-getcurrentstate-${Environment}
       Handler: getCurrentState/index.handler
       CodeUri: GetCurrentStateFunction
       Role:
@@ -740,6 +764,8 @@ Resources:
   UpdatePresenceFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-updatepresence-${Environment}
       Handler: updatePresence/index.handler
       CodeUri: UpdatePresenceFunction
       Role:
@@ -802,6 +828,8 @@ Resources:
   SyncConversationFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName:
+        Fn::Sub: mtjs-websocket-syncconversation-${Environment}
       Handler: syncConversation/index.handler
       CodeUri: SyncConversationFunction
       Role:

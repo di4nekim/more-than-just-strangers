@@ -147,11 +147,11 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
       const newQuestionIndex = userMetadata.questionIndex || 1;
       if (newQuestionIndex !== prevQuestionIndexRef.current) {
         if (process.env.NODE_ENV === 'development') {
-//           // console.log('ChatRoom: questionIndex updated from userMetadata:', { 
-            from: prevQuestionIndexRef.current,
-            to: newQuestionIndex,
-            userId
-          });
+            console.log('ChatRoom: questionIndex updated from userMetadata:', { 
+              from: prevQuestionIndexRef.current,
+              to: newQuestionIndex,
+              userId
+            });
         }
         setQuestionIndex(newQuestionIndex);
         prevQuestionIndexRef.current = newQuestionIndex;
@@ -322,18 +322,18 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
     
     const newReadyState = !localReadyState;
     
-//     // console.log('ChatRoom: handleReady - Toggling ready status:', { 
-      chatId, 
-      userId, 
-      currentReady: localReadyState,
-      newReady: newReadyState 
-    });
+      console.log('ChatRoom: handleReady - Toggling ready status:', { 
+        chatId, 
+        userId, 
+        currentReady: localReadyState,
+        newReady: newReadyState 
+      });
     
-//     // console.log('ChatRoom: handleReady - WebSocket connection status:', {
-      isConnected,
-      wsActions: !!wsActions,
-      wsClient: !!wsClient
-    });
+      console.log('ChatRoom: handleReady - WebSocket connection status:', {
+        isConnected,
+        wsActions: !!wsActions,
+        wsClient: !!wsClient
+      });
     
     try {
       setLocalReadyState(newReadyState);

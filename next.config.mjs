@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Reduce Chrome DevTools internal errors
+  // Production optimizations
   compiler: {
-    // Remove console statements in production
-    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
+    // Aggressively remove console statements in production
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
+  
+  // Production-specific optimizations
+  ...(process.env.NODE_ENV === 'production' && {
+    poweredByHeader: false,
+    compress: true,
+  }),
   
   // Allow JSON imports
   webpack: (config, { isServer, webpack }) => {
@@ -73,7 +79,7 @@ const nextConfig = {
       config.resolve.symlinks = false;
       config.resolve.cacheWithContext = false;
       
-      // Optimize chunk splitting to reduce file I/O operations
+      // Enhanced chunk splitting for production
       config.optimization.splitChunks = {
         ...config.optimization.splitChunks,
         cacheGroups: {
@@ -84,17 +90,30 @@ const nextConfig = {
             chunks: 'all',
             enforce: true,
           },
+          // Separate Firebase chunk for better caching
+          firebase: {
+            test: /[\\/]node_modules[\\/](firebase|@firebase)[\\/]/,
+            name: 'firebase',
+            chunks: 'all',
+            priority: 10,
+          },
         },
       };
+      
+      // Production-only optimizations
+      if (process.env.NODE_ENV === 'production') {
+        config.optimization.usedExports = true;
+        config.optimization.sideEffects = false;
+      }
     }
 
     return config;
   },
   
-  // Additional optimizations to reduce I/O operations
+  // Enhanced optimizations
   experimental: {
-    // Reduce file system operations
-    optimizePackageImports: ['react', 'react-dom'],
+    // Optimize package imports for better tree shaking
+    optimizePackageImports: ['react', 'react-dom', 'firebase', '@firebase/auth', '@firebase/app'],
   },
   
   // Ensure server-only packages are not included in client bundle

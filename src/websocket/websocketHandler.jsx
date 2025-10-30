@@ -89,12 +89,12 @@ export class WebSocketClient {
       
       const authenticatedUrl = `${baseUrl}?token=${token}`;
       
-//       // console.log('WebSocket: Generated authenticated URL:', {
-        baseUrl,
-        tokenLength: token.length,
-        tokenPrefix: token.substring(0, 20) + '...',
-        fullUrl: authenticatedUrl.substring(0, 100) + '...'
-      });
+        console.log('WebSocket: Generated authenticated URL:', {
+          baseUrl,
+          tokenLength: token.length,
+          tokenPrefix: token.substring(0, 20) + '...',
+          fullUrl: authenticatedUrl.substring(0, 100) + '...'
+        });
       
       // Final validation of the complete URL
       try {
@@ -226,12 +226,12 @@ export class WebSocketClient {
         const authenticatedUrl = wsUrl || await this.getAuthenticatedWebSocketUrl();
         
 //         // console.log('WebSocket: Creating WebSocket connection to:', authenticatedUrl);
-//         // console.log('WebSocket: Connection details:', {
-          url: authenticatedUrl,
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent,
-          readyState: 'CONNECTING'
-        });
+          console.log('WebSocket: Connection details:', {
+            url: authenticatedUrl,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            readyState: 'CONNECTING'
+          });
         
         this.ws = new WebSocket(authenticatedUrl);
         
@@ -270,13 +270,13 @@ export class WebSocketClient {
         this.ws.onclose = (event) => {
           clearTimeout(connectionTimeout);
 //           // console.log('WebSocket: Connection closed with code:', event.code, 'reason:', event.reason);
-//           // console.log('WebSocket: Close event details:', {
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean,
-            timestamp: new Date().toISOString(),
-            readyState: this.ws?.readyState
-          });
+            console.log('WebSocket: Close event details:', {
+              code: event.code,
+              reason: event.reason,
+              wasClean: event.wasClean,
+              timestamp: new Date().toISOString(),
+              readyState: this.ws?.readyState
+            });
 //           // console.log('WebSocket: Connection state before close - isConnected:', this.isConnected, 'isConnecting:', this.isConnecting);
           
           this.handleDisconnect(event);

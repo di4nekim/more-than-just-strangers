@@ -207,18 +207,18 @@ export const logChatIdInfo = (chatId, context = '') => {
     }
   }
   
-//   // console.log(`${context}: Chat ID Debug Info:`, {
-    original: chatId,
-    decoded,
-    normalized,
-    allFormats: formats,
-    length: chatId.length,
-    hasHash: chatId.includes('#'),
-    hasEncodedHash: chatId.includes('%23'),
-    isValid: isValidChatId(chatId),
-    formatValidation: formatValidation,
-    validationDetails: validationDetails
-  });
+    console.log(`${context}: Chat ID Debug Info:`, {
+      original: chatId,
+      decoded,
+      normalized,
+      allFormats: formats,
+      length: chatId.length,
+      hasHash: chatId.includes('#'),
+      hasEncodedHash: chatId.includes('%23'),
+      isValid: isValidChatId(chatId),
+      formatValidation: formatValidation,
+      validationDetails: validationDetails
+    });
 };
 
 
