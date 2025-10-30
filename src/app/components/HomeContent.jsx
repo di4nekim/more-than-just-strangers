@@ -54,7 +54,7 @@ export default function HomeContent() {
         try {
           await endChat(currentChatId, 'user_signed_out');
         } catch (error) {
-          console.warn('Failed to end conversation during sign out:', error);
+//           // console.warn('Failed to end conversation during sign out:', error);
         }
       }
       
@@ -62,7 +62,7 @@ export default function HomeContent() {
         try {
           await wsActions.setReady({ ready: false });
         } catch (error) {
-          console.warn('Failed to remove from matchmaking queue during sign out:', error);
+//           // console.warn('Failed to remove from matchmaking queue during sign out:', error);
         }
       }
       
@@ -70,7 +70,7 @@ export default function HomeContent() {
         try {
           wsClient.disconnect();
         } catch (error) {
-          console.warn('Failed to disconnect WebSocket during sign out:', error);
+//           // console.warn('Failed to disconnect WebSocket during sign out:', error);
         }
       }
       
@@ -147,10 +147,10 @@ export default function HomeContent() {
     setConnectionId(userMetadata.connectionId);
     
     if (userMetadata.ready && !userMetadata.chatId && !hasActiveChat) {
-      console.log('HomeContent: Detected user in matchmaking queue from WebSocket state');
+//       // console.log('HomeContent: Detected user in matchmaking queue from WebSocket state');
       setIsInMatchmakingQueue(true);
     } else if (userMetadata.chatId || hasActiveChat || !userMetadata.ready) {
-      console.log('HomeContent: User not in matchmaking queue - ready:', userMetadata.ready, 'chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat);
+//       // console.log('HomeContent: User not in matchmaking queue - ready:', userMetadata.ready, 'chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat);
       setIsInMatchmakingQueue(false);
     }
   }, [userMetadata.chatId, hasActiveChat, userMetadata.connectionId, userMetadata.ready]);
@@ -189,12 +189,12 @@ export default function HomeContent() {
 
       // Initialize user - the WebSocket connection will be established automatically
       // by the WebSocketProvider when it's ready
-      console.log('Initializing user...');
+//       // console.log('Initializing user...');
       await initializeUser(userId);
 
       // Remove the hardcoded hasActiveChat call since initializeUser already fetches this data via WebSocket
       // The WebSocket getCurrentState provides the correct user metadata from DynamoDB
-      console.log('User data loaded successfully:', { profile, userId });
+//       // console.log('User data loaded successfully:', { profile, userId });
     } catch (error) {
       console.error('Failed to load user data:', error);
       setError('Failed to load user data. Please try refreshing the page.');
@@ -211,12 +211,12 @@ export default function HomeContent() {
 
   const handleStartNewConversation = async () => {
     try {
-      console.log('Starting new conversation...');
-      console.log('Current state check - hasActiveChat:', hasActiveChat, 'userMetadata.chatId:', userMetadata.chatId, 'currentChatId:', currentChatId);
+//       // console.log('Starting new conversation...');
+//       // console.log('Current state check - hasActiveChat:', hasActiveChat, 'userMetadata.chatId:', userMetadata.chatId, 'currentChatId:', currentChatId);
       
       // Check if user already has an active conversation
       if (hasActiveChat || userMetadata.chatId || currentChatId) {
-        console.log('User already has an active conversation, preventing new start');
+//         // console.log('User already has an active conversation, preventing new start');
         setError('You already have an active conversation. Please end your current conversation before starting a new one.');
         return;
       }
@@ -224,15 +224,15 @@ export default function HomeContent() {
       setIsInMatchmakingQueue(true);
       setError(null);
       
-      console.log('Calling startNewChat...');
+//       // console.log('Calling startNewChat...');
       const matchResult = await startNewChat();
-      console.log('startNewChat result:', matchResult);
+//       // console.log('startNewChat result:', matchResult);
       
       if (matchResult.matched && matchResult.chatId) {
-        console.log('Matched! Navigating to chat:', matchResult.chatId);
+//         // console.log('Matched! Navigating to chat:', matchResult.chatId);
         router.push(`/${encodeURIComponent(matchResult.chatId)}`);
       } else if (matchResult.queued) {
-        console.log('Added to matchmaking queue');
+//         // console.log('Added to matchmaking queue');
       } else {
         console.error('Unexpected matchResult:', matchResult);
         throw new Error('Failed to start matchmaking process');
@@ -252,20 +252,20 @@ export default function HomeContent() {
 
   const handleLeaveMatchmakingQueue = async () => {
     try {
-      console.log('Leaving matchmaking queue...');
+//       // console.log('Leaving matchmaking queue...');
       setError(null);
       
       if (wsActions) {
         try {
           await wsActions.setReady({ ready: false });
         } catch (error) {
-          console.warn('Failed to remove from matchmaking queue:', error);
+//           // console.warn('Failed to remove from matchmaking queue:', error);
         }
       }
       
       setIsInMatchmakingQueue(false);
       
-      console.log('Successfully left matchmaking queue');
+//       // console.log('Successfully left matchmaking queue');
     } catch (error) {
       console.error('Failed to leave matchmaking queue:', error);
       setError('Failed to leave matchmaking queue. Please try again.');
@@ -289,7 +289,7 @@ export default function HomeContent() {
       setError(null);
       
       if (!currentChatId) {
-        console.warn('No active chat to leave');
+//         // console.warn('No active chat to leave');
         return;
       }
 
@@ -299,7 +299,7 @@ export default function HomeContent() {
       setIsConversationActive(false);
       setShowConversationDropdown(false);
       
-      console.log('Successfully left conversation');
+//       // console.log('Successfully left conversation');
     } catch (error) {
       console.error('Failed to leave conversation:', error);
       setError('Failed to leave conversation. Please try again.');
@@ -322,12 +322,12 @@ export default function HomeContent() {
   };
 
   const getCurrentStatus = () => {
-    console.log('getCurrentStatus - loading:', loading, 'initState.isInitializing:', initState.isInitializing, 'wsConnected:', wsConnected, 'isInMatchmakingQueue:', isInMatchmakingQueue, 'isConversationActive:', isConversationActive);
-    console.log('getCurrentStatus - userMetadata.chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat, 'currentChatId:', currentChatId);
+//     // console.log('getCurrentStatus - loading:', loading, 'initState.isInitializing:', initState.isInitializing, 'wsConnected:', wsConnected, 'isInMatchmakingQueue:', isInMatchmakingQueue, 'isConversationActive:', isConversationActive);
+//     // console.log('getCurrentStatus - userMetadata.chatId:', userMetadata.chatId, 'hasActiveChat:', hasActiveChat, 'currentChatId:', currentChatId);
     
     // If WebSocket is connected but we don't have user metadata, try to get it
     if (wsConnected && !userMetadata.chatId && !hasActiveChat && !loading && !initState.isInitializing && user?.uid) {
-      console.log('getCurrentStatus: WebSocket connected but no user metadata, triggering getCurrentState...');
+//       // console.log('getCurrentStatus: WebSocket connected but no user metadata, triggering getCurrentState...');
       // Trigger getCurrentState as a fallback
       setTimeout(() => {
         if (wsActions && user?.uid) {

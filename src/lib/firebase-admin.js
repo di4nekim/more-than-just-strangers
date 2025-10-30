@@ -14,7 +14,7 @@ try {
         })
       });
     } else {
-      console.warn('Firebase Admin SDK not initialized: Missing environment variables');
+//       // console.warn('Firebase Admin SDK not initialized: Missing environment variables');
     }
   }
   auth = getAuth();

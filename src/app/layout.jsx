@@ -27,13 +27,13 @@ export default function RootLayout({ children }) {
     
     // Keep existing handlers for other types of errors
     const handleUnhandledRejection = e => {
-      console.warn('Unhandled promise rejection:', e.reason);
+//       // console.warn('Unhandled promise rejection:', e.reason);
       // Browser I/O handler will automatically suppress .ldb errors
       e.preventDefault();
     };
     
     const handleError = e => {
-      console.warn('Global error:', e.error);
+//       // console.warn('Global error:', e.error);
       // Browser I/O handler will automatically suppress .ldb errors
     };
     

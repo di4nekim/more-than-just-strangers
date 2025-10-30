@@ -1,13 +1,21 @@
 node_modules
 .next/
 venv/
-.env.local
-.env.local.backup
+.env.*
 .env
 myenv/
 dynamodb/data/*
 coverage/
 test-reports/
+
 # Test environment variables
 .env.test
 test.env.example
+
+# AWS SAM build artifacts
+.aws-sam/
+**/*.zip
+**/*.icloud
+
+# Lambda build artifacts
+**/dist/

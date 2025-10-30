@@ -44,7 +44,7 @@ class BrowserIOHandler {
         
         // Show periodic summary instead of flooding console
         if (this.suppressedErrorCount % 10 === 0) {
-          console.warn(`🔇 Suppressed ${this.suppressedErrorCount} browser I/O errors. These are Chrome internal errors and don't affect app functionality.`);
+//           // console.warn(`🔇 Suppressed ${this.suppressedErrorCount} browser I/O errors. These are Chrome internal errors and don't affect app functionality.`);
         }
         return;
       }
@@ -57,7 +57,7 @@ class BrowserIOHandler {
     window.addEventListener('error', this.handleWindowError.bind(this));
     window.addEventListener('unhandledrejection', this.handleUnhandledRejection.bind(this));
 
-    console.log('🛡️ Browser I/O error handler initialized');
+//     // console.log('🛡️ Browser I/O error handler initialized');
   }
 
   /**
@@ -123,7 +123,7 @@ class BrowserIOHandler {
     window.removeEventListener('unhandledrejection', this.handleUnhandledRejection);
     
     if (this.suppressedErrorCount > 0) {
-      console.log(`🛡️ Browser I/O error handler removed. Suppressed ${this.suppressedErrorCount} total errors.`);
+//       // console.log(`🛡️ Browser I/O error handler removed. Suppressed ${this.suppressedErrorCount} total errors.`);
     }
   }
 

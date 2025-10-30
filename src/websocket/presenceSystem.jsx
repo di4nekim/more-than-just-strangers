@@ -47,7 +47,7 @@ export const usePresenceSystem = () => {
         
         lastSentRef.current = currentValues;
       } catch (error) {
-        console.warn('Failed to send presence update:', error);
+//         // console.warn('Failed to send presence update:', error);
 
       }
     };
@@ -73,7 +73,7 @@ export const usePresenceSystem = () => {
             chatId: userMetadata.chatId
           };
         } catch (error) {
-          console.warn('Failed to send initial presence update:', error);
+//           // console.warn('Failed to send initial presence update:', error);
         }
       };
       

@@ -43,7 +43,7 @@ class CSRFProtection {
       this.cleanupExpiredTokens();
       return token;
     } catch (error) {
-      console.warn('CSRF token generation failed, using fallback:', error.message);
+//       // console.warn('CSRF token generation failed, using fallback:', error.message);
       // Fallback token generation
       const token = generateFallbackToken(32);
       this.tokenCache.set(token, Date.now());
@@ -87,7 +87,7 @@ class CSRFProtection {
       // Safely access localStorage with error handling
       token = localStorage.getItem('csrf-token');
     } catch (error) {
-      console.warn('Failed to access localStorage for CSRF token:', error.message);
+//       // console.warn('Failed to access localStorage for CSRF token:', error.message);
       // Generate a session token without storing it
       return this.generateToken();
     }
@@ -97,7 +97,7 @@ class CSRFProtection {
         token = this.generateToken();
         localStorage.setItem('csrf-token', token);
       } catch (error) {
-        console.warn('Failed to store CSRF token in localStorage:', error.message);
+//         // console.warn('Failed to store CSRF token in localStorage:', error.message);
         // Return the token even if we can't store it
       }
     }

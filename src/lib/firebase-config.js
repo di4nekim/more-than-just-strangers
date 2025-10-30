@@ -15,8 +15,8 @@ const requiredVars = ['NEXT_PUBLIC_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_AUTH
 const missingVars = requiredVars.filter(envVar => !process.env[envVar]);
 
 if (missingVars.length > 0) {
-  console.warn(`Missing required Firebase environment variables: ${missingVars.join(', ')}`);
-  console.warn('Firebase will use demo configuration. Please set up proper environment variables for production.');
+//   // console.warn(`Missing required Firebase environment variables: ${missingVars.join(', ')}`);
+//   // console.warn('Firebase will use demo configuration. Please set up proper environment variables for production.');
 }
 
 let app, auth;
@@ -24,18 +24,18 @@ let app, auth;
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  console.log(missingVars.length > 0 ? 'Firebase initialized with demo configuration' : 'Firebase initialized successfully');
-  console.log('Firebase config used:', {
-    apiKey: firebaseConfig.apiKey ? 'Set' : 'Missing',
-    authDomain: firebaseConfig.authDomain,
-    projectId: firebaseConfig.projectId,
-    appId: firebaseConfig.appId ? 'Set' : 'Missing'
-  });
+  // console.log(missingVars.length > 0 ? 'Firebase initialized with demo configuration' : 'Firebase initialized successfully');
+  // console.log('Firebase config used:', {
+  //   apiKey: firebaseConfig.apiKey ? 'Set' : 'Missing',
+  //   authDomain: firebaseConfig.authDomain,
+  //   projectId: firebaseConfig.projectId,
+  //   appId: firebaseConfig.appId ? 'Set' : 'Missing'
+  // });
 } catch (error) {
   console.error('Firebase initialization failed:', error);
   
   try {
-    console.log('Attempting fallback Firebase configuration...');
+    // console.log('Attempting fallback Firebase configuration...');
     app = initializeApp({
       apiKey: 'demo-api-key',
       authDomain: 'demo-project.firebaseapp.com',
@@ -45,7 +45,7 @@ try {
       appId: '1:123456789012:web:abcdef1234567890'
     });
     auth = getAuth(app);
-    console.log('Firebase fallback configuration successful');
+    // console.log('Firebase fallback configuration successful');
   } catch (fallbackError) {
     console.error('Firebase fallback initialization also failed:', fallbackError);
     auth = {

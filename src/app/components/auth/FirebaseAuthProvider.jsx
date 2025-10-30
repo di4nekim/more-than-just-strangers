@@ -54,15 +54,15 @@ export function FirebaseAuthProvider({ children }) {
       setAuthLoading(true);
       setError(null);
       
-      console.log('Attempting sign in with:', { email, authDomain: auth.app.options.authDomain });
-      console.log('Firebase config:', auth.app.options);
+//       // console.log('Attempting sign in with:', { email, authDomain: auth.app.options.authDomain });
+//       // console.log('Firebase config:', auth.app.options);
       
       // Add retry logic for network issues
       let lastError;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          console.log('Sign in successful:', userCredential.user.uid);
+//           // console.log('Sign in successful:', userCredential.user.uid);
           return userCredential;
         } catch (error) {
           lastError = error;
@@ -73,7 +73,7 @@ export function FirebaseAuthProvider({ children }) {
           
           // If it's a network error and we have retries left, wait and try again
           if (error.code === 'auth/network-request-failed' && attempt < 3) {
-            console.log(`Retrying in ${attempt * 1000}ms...`);
+//             // console.log(`Retrying in ${attempt * 1000}ms...`);
             await new Promise(resolve => setTimeout(resolve, attempt * 1000));
             continue;
           }
@@ -231,7 +231,7 @@ export function FirebaseAuthProvider({ children }) {
     }
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('Firebase auth state changed:', firebaseUser?.uid || 'signed out');
+//       // console.log('Firebase auth state changed:', firebaseUser?.uid || 'signed out');
       
       // Only update state if something actually changed
       setUser(prevUser => {

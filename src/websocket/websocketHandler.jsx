@@ -45,11 +45,11 @@ export class WebSocketClient {
     try {
       const user = this.auth.currentUser;
       if (!user) {
-        console.log('WebSocket: No authenticated user, cannot create WebSocket URL');
+//         // console.log('WebSocket: No authenticated user, cannot create WebSocket URL');
         throw new Error('No authenticated user available');
       }
       
-      console.log('WebSocket: Getting token for user:', user.uid);
+//       // console.log('WebSocket: Getting token for user:', user.uid);
       
       // Force refresh token to ensure it's not expired
       const token = await user.getIdToken(true); // true forces refresh
@@ -59,9 +59,9 @@ export class WebSocketClient {
         throw new Error('No valid authentication token available');
       }
       
-      console.log('WebSocket: Token obtained successfully, length:', token.length);
-      console.log('WebSocket: Token prefix:', token.substring(0, 50) + '...');
-      console.log('WebSocket: Token validation - checking if token is valid JWT format...');
+//       // console.log('WebSocket: Token obtained successfully, length:', token.length);
+//       // console.log('WebSocket: Token prefix:', token.substring(0, 50) + '...');
+//       // console.log('WebSocket: Token validation - checking if token is valid JWT format...');
       
       // Basic JWT validation (check if it has 3 parts separated by dots)
       const tokenParts = token.split('.');
@@ -70,12 +70,12 @@ export class WebSocketClient {
         throw new Error('Invalid JWT token format');
       }
       
-      console.log('WebSocket: Token appears to be valid JWT format');
+//       // console.log('WebSocket: Token appears to be valid JWT format');
       
       const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_API_URL || 'wss://api.more-than-just-strangers.com';
       
-      console.log('WebSocket: Environment variable NEXT_PUBLIC_WEBSOCKET_API_URL:', process.env.NEXT_PUBLIC_WEBSOCKET_API_URL);
-      console.log('WebSocket: Using base URL:', baseUrl);
+//       // console.log('WebSocket: Environment variable NEXT_PUBLIC_WEBSOCKET_API_URL:', process.env.NEXT_PUBLIC_WEBSOCKET_API_URL);
+//       // console.log('WebSocket: Using base URL:', baseUrl);
       
       // Ensure baseUrl is a valid WebSocket URL
       if (!baseUrl || typeof baseUrl !== 'string') {
@@ -89,12 +89,12 @@ export class WebSocketClient {
       
       const authenticatedUrl = `${baseUrl}?token=${token}`;
       
-      console.log('WebSocket: Generated authenticated URL:', {
-        baseUrl,
-        tokenLength: token.length,
-        tokenPrefix: token.substring(0, 20) + '...',
-        fullUrl: authenticatedUrl.substring(0, 100) + '...'
-      });
+        console.log('WebSocket: Generated authenticated URL:', {
+          baseUrl,
+          tokenLength: token.length,
+          tokenPrefix: token.substring(0, 20) + '...',
+          fullUrl: authenticatedUrl.substring(0, 100) + '...'
+        });
       
       // Final validation of the complete URL
       try {
@@ -115,25 +115,25 @@ export class WebSocketClient {
    */
   async getCurrentToken() {
     try {
-      console.log('WebSocket: getCurrentToken called');
-      console.log('WebSocket: auth object:', !!this.auth);
-      console.log('WebSocket: currentUser:', !!this.auth.currentUser);
+//       // console.log('WebSocket: getCurrentToken called');
+//       // console.log('WebSocket: auth object:', !!this.auth);
+//       // console.log('WebSocket: currentUser:', !!this.auth.currentUser);
       
       const user = this.auth.currentUser;
       if (!user) {
-        console.log('WebSocket: No authenticated user found');
+//         // console.log('WebSocket: No authenticated user found');
         throw new Error('No authenticated user available');
       }
       
-      console.log('WebSocket: Authenticated user found:', user.uid);
-      console.log('WebSocket: Getting fresh ID token...');
+//       // console.log('WebSocket: Authenticated user found:', user.uid);
+//       // console.log('WebSocket: Getting fresh ID token...');
       
       // Force refresh token to ensure it's not expired
       const token = await user.getIdToken(true); // true forces refresh
       
-      console.log('WebSocket: Token obtained successfully');
-      console.log('WebSocket: Token length:', token.length);
-      console.log('WebSocket: Token prefix:', token.substring(0, 50) + '...');
+//       // console.log('WebSocket: Token obtained successfully');
+//       // console.log('WebSocket: Token length:', token.length);
+//       // console.log('WebSocket: Token prefix:', token.substring(0, 50) + '...');
       
       return token;
     } catch (error) {
@@ -147,16 +147,16 @@ export class WebSocketClient {
    * Reconnect with fresh authentication token
    */
   async reconnectWithFreshToken() {
-    console.log('WebSocket: Reconnecting with fresh token');
+//     // console.log('WebSocket: Reconnecting with fresh token');
     this.disconnect();
     
     // Force refresh the Firebase token
     try {
       const user = this.auth.currentUser;
       if (user) {
-        console.log('WebSocket: Forcing token refresh for reconnection');
+//         // console.log('WebSocket: Forcing token refresh for reconnection');
         await user.getIdToken(true); // Force refresh
-        console.log('WebSocket: Token refreshed successfully');
+//         // console.log('WebSocket: Token refreshed successfully');
       }
     } catch (error) {
       console.error('WebSocket: Failed to refresh token:', error);
@@ -164,7 +164,7 @@ export class WebSocketClient {
     
     // Longer delay before reconnecting to ensure token refresh propagates
     setTimeout(() => {
-      console.log('WebSocket: Attempting reconnection with fresh token');
+//       // console.log('WebSocket: Attempting reconnection with fresh token');
       this.connect().catch(console.error);
     }, 2000); // Increased from 1 second to 2 seconds
   }
@@ -179,10 +179,10 @@ export class WebSocketClient {
     // Attempt reconnection with fresh token after a delay
     if (this.authRetryCount < this.maxAuthRetries) {
       this.authRetryCount++;
-      console.log(`WebSocket: Will attempt reconnection ${this.authRetryCount}/${this.maxAuthRetries} in 3 seconds...`);
+//       // console.log(`WebSocket: Will attempt reconnection ${this.authRetryCount}/${this.maxAuthRetries} in 3 seconds...`);
       
       setTimeout(() => {
-        console.log('WebSocket: Attempting reconnection with fresh token');
+//         // console.log('WebSocket: Attempting reconnection with fresh token');
         this.reconnectWithFreshToken().catch(error => {
           console.error('WebSocket: Reconnection failed:', error);
         });
@@ -225,18 +225,18 @@ export class WebSocketClient {
         // Use provided URL or get authenticated WebSocket URL
         const authenticatedUrl = wsUrl || await this.getAuthenticatedWebSocketUrl();
         
-        console.log('WebSocket: Creating WebSocket connection to:', authenticatedUrl);
-        console.log('WebSocket: Connection details:', {
-          url: authenticatedUrl,
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent,
-          readyState: 'CONNECTING'
-        });
+//         // console.log('WebSocket: Creating WebSocket connection to:', authenticatedUrl);
+          console.log('WebSocket: Connection details:', {
+            url: authenticatedUrl,
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            readyState: 'CONNECTING'
+          });
         
         this.ws = new WebSocket(authenticatedUrl);
         
-        console.log('WebSocket: WebSocket object created, readyState:', this.ws.readyState);
-        console.log('WebSocket: WebSocket URL:', this.ws.url);
+//         // console.log('WebSocket: WebSocket object created, readyState:', this.ws.readyState);
+//         // console.log('WebSocket: WebSocket URL:', this.ws.url);
 
         // Set up connection timeout
         const connectionTimeout = setTimeout(() => {
@@ -261,23 +261,23 @@ export class WebSocketClient {
           this.authRetryCount = 0; // Reset on successful connection
           this.isConnected = true;
           this.onConnectionStateChange?.(true);
-          console.log('WebSocket: Connected successfully with authentication');
-          console.log('WebSocket: Connection established at:', new Date().toISOString());
-          console.log('WebSocket: Connection state updated - isConnected:', this.isConnected, 'isConnecting:', this.isConnecting);
+//           // console.log('WebSocket: Connected successfully with authentication');
+//           // console.log('WebSocket: Connection established at:', new Date().toISOString());
+//           // console.log('WebSocket: Connection state updated - isConnected:', this.isConnected, 'isConnecting:', this.isConnecting);
           resolve();
         };
    
         this.ws.onclose = (event) => {
           clearTimeout(connectionTimeout);
-          console.log('WebSocket: Connection closed with code:', event.code, 'reason:', event.reason);
-          console.log('WebSocket: Close event details:', {
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean,
-            timestamp: new Date().toISOString(),
-            readyState: this.ws?.readyState
-          });
-          console.log('WebSocket: Connection state before close - isConnected:', this.isConnected, 'isConnecting:', this.isConnecting);
+//           // console.log('WebSocket: Connection closed with code:', event.code, 'reason:', event.reason);
+            console.log('WebSocket: Close event details:', {
+              code: event.code,
+              reason: event.reason,
+              wasClean: event.wasClean,
+              timestamp: new Date().toISOString(),
+              readyState: this.ws?.readyState
+            });
+//           // console.log('WebSocket: Connection state before close - isConnected:', this.isConnected, 'isConnecting:', this.isConnecting);
           
           this.handleDisconnect(event);
           // Don't reject here, let handleDisconnect handle reconnection
@@ -312,14 +312,14 @@ export class WebSocketClient {
 
         this.ws.onmessage = (event) => {
           try {
-            console.log('WebSocket: Raw message received:', event.data);
-            console.log('WebSocket: Message type:', typeof event.data);
-            console.log('WebSocket: Message length:', event.data.length);
+//             // console.log('WebSocket: Raw message received:', event.data);
+//             // console.log('WebSocket: Message type:', typeof event.data);
+//             // console.log('WebSocket: Message length:', event.data.length);
             
             const message = JSON.parse(event.data);
-            console.log('WebSocket: Parsed message:', message);
-            console.log('WebSocket: Message action:', message.action);
-            console.log('WebSocket: Message data:', message.data);
+//             // console.log('WebSocket: Parsed message:', message);
+//             // console.log('WebSocket: Message action:', message.action);
+//             // console.log('WebSocket: Message data:', message.data);
             
             this.handleMessage(message);
           } catch (error) {
@@ -346,7 +346,7 @@ export class WebSocketClient {
    * Handle WebSocket connection establishment
    */
   handleConnect(event) {
-    console.log('WebSocket: Connection established');
+//     // console.log('WebSocket: Connection established');
     this.isConnecting = false;
     this.isConnected = true;
     this.connectionPromise = null;
@@ -360,10 +360,10 @@ export class WebSocketClient {
    * Handle WebSocket disconnection
    */
   handleDisconnect(event) {
-    console.log('WebSocket: Connection disconnected');
-    console.log('WebSocket: Disconnect event:', event);
-    console.log('WebSocket: Close code:', event.code);
-    console.log('WebSocket: Close reason:', event.reason);
+//     // console.log('WebSocket: Connection disconnected');
+//     // console.log('WebSocket: Disconnect event:', event);
+//     // console.log('WebSocket: Close code:', event.code);
+//     // console.log('WebSocket: Close reason:', event.reason);
     
     this.isConnected = false;
     this.isConnecting = false;
@@ -372,46 +372,46 @@ export class WebSocketClient {
     // Handle different close codes
     if (event.code === 1000) {
       // Normal closure
-      console.log('WebSocket: Normal closure');
+//       // console.log('WebSocket: Normal closure');
       return;
     } else if (event.code === 1001) {
       // Going away
-      console.log('WebSocket: Going away');
+//       // console.log('WebSocket: Going away');
       return;
     } else if (event.code === 1002) {
       // Protocol error
-      console.log('WebSocket: Protocol error');
+//       // console.log('WebSocket: Protocol error');
       return;
     } else if (event.code === 1003) {
       // Unsupported data
-      console.log('WebSocket: Unsupported data');
+//       // console.log('WebSocket: Unsupported data');
       return;
     } else if (event.code === 1006) {
       // Abnormal closure
-      console.log('WebSocket: Abnormal closure');
+//       // console.log('WebSocket: Abnormal closure');
       return;
     } else if (event.code === 1008) {
       // Policy violation (often auth-related)
-      console.log('WebSocket: Policy violation (often auth-related)');
+//       // console.log('WebSocket: Policy violation (often auth-related)');
       this.handleAuthenticationFailure();
       return;
     } else if (event.code === 1011) {
       // Server error
-      console.log('WebSocket: Server error');
+//       // console.log('WebSocket: Server error');
       return;
     } else if (event.code === 1015) {
       // TLS handshake failed
-      console.log('WebSocket: TLS handshake failed');
+//       // console.log('WebSocket: TLS handshake failed');
       return;
     } else {
-      console.log(`WebSocket: Unknown close code: ${event.code}`);
+//       // console.log(`WebSocket: Unknown close code: ${event.code}`);
     }
     
     // Handle auth-related disconnections
     if (event.code === 1008 || event.code === 1006) {
       if (this.authRetryCount < this.maxAuthRetries) {
         this.authRetryCount++;
-        console.log(`WebSocket: Auth-related disconnection (retry ${this.authRetryCount}/${this.maxAuthRetries})`);
+//         // console.log(`WebSocket: Auth-related disconnection (retry ${this.authRetryCount}/${this.maxAuthRetries})`);
         
         // Try to refresh token and reconnect
         setTimeout(async () => {
@@ -428,7 +428,7 @@ export class WebSocketClient {
     
     // Handle normal reconnection
     if (this.shouldReconnect && !this.isReconnecting) {
-      console.log('WebSocket: Attempting normal reconnection');
+//       // console.log('WebSocket: Attempting normal reconnection');
       this.handleReconnection();
     }
   }
@@ -437,9 +437,9 @@ export class WebSocketClient {
    * @param {WebSocketMessage} message
    */
   async send(message) {
-    console.log('WebSocket: Attempting to send message:', message);
-    console.log('WebSocket: Connection state:', this.ws ? this.ws.readyState : 'No WebSocket');
-    console.log('WebSocket: Is connected:', this.isConnected);
+//     // console.log('WebSocket: Attempting to send message:', message);
+//     // console.log('WebSocket: Connection state:', this.ws ? this.ws.readyState : 'No WebSocket');
+//     // console.log('WebSocket: Is connected:', this.isConnected);
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket: Cannot send message - WebSocket is not connected');
@@ -448,7 +448,7 @@ export class WebSocketClient {
       throw new Error('WebSocket is not connected');
     }
     
-    console.log('WebSocket: Sending message:', message);
+//     // console.log('WebSocket: Sending message:', message);
     
     // Add Firebase token to message for authentication with forced refresh
     try {
@@ -475,9 +475,9 @@ export class WebSocketClient {
         this.sentActionHistory = this.sentActionHistory.slice(0, 10);
       }
       
-      console.log('WebSocket: Sending message with fresh token at root level');
+//       // console.log('WebSocket: Sending message with fresh token at root level');
       this.ws.send(JSON.stringify(messageWithToken));
-      console.log('WebSocket: Message sent successfully');
+//       // console.log('WebSocket: Message sent successfully');
     } catch (error) {
       console.error('WebSocket: Failed to get token for message:', error);
       // Check if WebSocket is still connected before attempting to send
@@ -486,21 +486,21 @@ export class WebSocketClient {
         throw new Error('WebSocket is not connected');
       }
       // Fallback to sending without token if token retrieval fails (reverted for compatibility)
-      console.log('WebSocket: Sending message without token:', message);
+//       // console.log('WebSocket: Sending message without token:', message);
       this.ws.send(JSON.stringify(message));
     }
   }
 
 
   onMessage(action, handler) {
-    console.log('WebSocket: Setting up message handler for action:', action);
-    console.log('WebSocket: Handler function type:', typeof handler);
-    console.log('WebSocket: Current message handlers:', Array.from(this.messageHandlers.keys()));
+//     // console.log('WebSocket: Setting up message handler for action:', action);
+//     // console.log('WebSocket: Handler function type:', typeof handler);
+//     // console.log('WebSocket: Current message handlers:', Array.from(this.messageHandlers.keys()));
     
     this.messageHandlers.set(action, handler);
     
-    console.log('WebSocket: Message handler set successfully for action:', action);
-    console.log('WebSocket: Updated message handlers:', Array.from(this.messageHandlers.keys()));
+//     // console.log('WebSocket: Message handler set successfully for action:', action);
+//     // console.log('WebSocket: Updated message handlers:', Array.from(this.messageHandlers.keys()));
   }
 
   /**
@@ -551,9 +551,9 @@ export class WebSocketClient {
    * @param {WebSocketMessage} message
    */
   handleMessage(message) {
-    console.log('WebSocketHandler: Received message:', message);
-    console.log('WebSocketHandler: Message type:', typeof message);
-    console.log('WebSocketHandler: Message stringified:', JSON.stringify(message, null, 2));
+//     // console.log('WebSocketHandler: Received message:', message);
+//     // console.log('WebSocketHandler: Message type:', typeof message);
+//     // console.log('WebSocketHandler: Message stringified:', JSON.stringify(message, null, 2));
     
     // Handle authentication-specific error messages only if they come from the server with proper structure
     if (message.error && typeof message.error === 'string' && this.isAuthenticationError(message.error)) {
@@ -561,7 +561,7 @@ export class WebSocketClient {
       
       // Check if this is specifically a token expiration error
       if (this.isTokenExpiredError(message.error)) {
-        console.log('WebSocket: Token expired, attempting refresh and reconnect');
+//         // console.log('WebSocket: Token expired, attempting refresh and reconnect');
         this.reconnectWithFreshToken().catch(error => {
           console.error('WebSocket: Failed to reconnect with fresh token:', error);
           this.handleAuthenticationFailure();
@@ -606,31 +606,31 @@ export class WebSocketClient {
       }
       
       if (process.env.NODE_ENV === 'development') {
-        console.warn('WebSocketHandler: Message missing action field:', message);
+//         // console.warn('WebSocketHandler: Message missing action field:', message);
       }
       return;
     }
     
-    console.log('WebSocketHandler: Processing message with action:', message.action);
-    console.log('WebSocketHandler: Available message handlers:', Array.from(this.messageHandlers.keys()));
+//     // console.log('WebSocketHandler: Processing message with action:', message.action);
+//     // console.log('WebSocketHandler: Available message handlers:', Array.from(this.messageHandlers.keys()));
     
     const handler = this.messageHandlers.get(message.action);
     if (handler) {
       // Check both payload and data fields for compatibility with different message formats
       const payload = message.payload || message.data;
-      console.log('WebSocketHandler: Calling handler for action:', message.action, 'with payload:', payload);
-      console.log('WebSocketHandler: Handler function:', typeof handler);
+//       // console.log('WebSocketHandler: Calling handler for action:', message.action, 'with payload:', payload);
+//       // console.log('WebSocketHandler: Handler function:', typeof handler);
       
       try {
         handler(payload);
-        console.log('WebSocketHandler: Handler executed successfully for action:', message.action);
+//         // console.log('WebSocketHandler: Handler executed successfully for action:', message.action);
       } catch (error) {
         console.error('WebSocketHandler: Error in handler for action:', message.action, error);
       }
     } else {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('WebSocketHandler: No handler found for action:', message.action);
-        console.warn('WebSocketHandler: Available handlers:', Array.from(this.messageHandlers.keys()));
+//         // console.warn('WebSocketHandler: No handler found for action:', message.action);
+//         // console.warn('WebSocketHandler: Available handlers:', Array.from(this.messageHandlers.keys()));
       }
     }
   }
