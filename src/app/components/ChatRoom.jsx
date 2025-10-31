@@ -5,7 +5,6 @@ import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, mem
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation'; 
 import Image from 'next/image';
-import { v4 as uuidv4 } from 'uuid';
 import { useFirebaseAuth } from '../components/auth/FirebaseAuthProvider';
 import questions from '../../questions.json';
 import { useWebSocket } from '../../websocket/WebSocketContext';
