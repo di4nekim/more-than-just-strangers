@@ -2,8 +2,10 @@
 const nextConfig = {
   // Production optimizations
   compiler: {
-    // Aggressively remove console statements in production
-    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+    compiler: {
+      // Always remove console statements except errors and warnings
+      removeConsole: { exclude: ['error', 'warn'] },
+    },
   },
   
   // Production-specific optimizations
