@@ -1,9 +1,10 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
+const { authenticateWebSocketEvent } = require("../shared/auth");
 
 
-const { 
+const {
     createErrorResponse, 
     createSuccessResponse, 
     extractAction, 
@@ -39,7 +40,7 @@ const apiGateway = new ApiGatewayManagementApiClient({
     endpoint: process.env.WEBSOCKET_API_URL
 });
 
-exports.handler = async (event) => {
+const handlerLogic = async (event) => {
     console.log('Starting syncConversation handler');
     const startTime = Date.now();
     
@@ -109,6 +110,26 @@ exports.handler = async (event) => {
         }
 
         console.log('Conversation found:', JSON.stringify(conversation, null, 2));
+
+        // Authorization: the requesting user must be a participant in this conversation.
+        const { userId } = event.userInfo;
+        const participantList = Array.isArray(conversation.participants)
+            ? conversation.participants
+            : (conversation.participants instanceof Set ? [...conversation.participants] : []);
+        const isParticipant = participantList.includes(userId)
+            || conversation.userAId === userId
+            || conversation.userBId === userId;
+        if (!isParticipant) {
+            console.log('syncConversation: user not a participant in conversation:', userId);
+            return {
+                statusCode: 403,
+                body: JSON.stringify({
+                    action: 'error',
+                    data: { error: 'Unauthorized - not a participant in this conversation' }
+                })
+            };
+        }
+
         console.log(`Sending conversation sync data to connection: ${connectionId}`);
 
         // Check if we have a valid API Gateway client before using it
@@ -204,5 +225,32 @@ exports.handler = async (event) => {
         
         console.log('Returning 200 status code');
         return { statusCode: 200 };
+    }
+};
+
+// Wrap the handler with authentication middleware (previously this lambda had no auth,
+// so any connected client could read any conversation's metadata by chatId).
+exports.handler = async (event, context) => {
+    try {
+        const userInfo = await authenticateWebSocketEvent(event);
+        event.userInfo = userInfo;
+        return await handlerLogic(event, context);
+    } catch (error) {
+        console.error('syncConversation: Authentication failed:', error.message);
+        const action = extractAction(event);
+        const requestId = extractRequestId(event);
+        if (error.message === 'FIREBASE_TOKEN_MISSING' || error.message === 'JWT_TOKEN_MISSING') {
+            return createErrorResponse(401, 'Authentication required.', action, {
+                operation: 'authentication'
+            }, requestId);
+        } else if (error.message === 'FIREBASE_TOKEN_INVALID' || error.message === 'JWT_TOKEN_INVALID') {
+            return createErrorResponse(401, 'Invalid or expired token', action, {
+                operation: 'authentication'
+            }, requestId);
+        }
+        return createErrorResponse(500, 'Internal Server Error', action, {
+            operation: 'authentication',
+            error: error.message
+        }, requestId);
     }
 }; 

@@ -477,6 +477,23 @@ const handlerLogic = async (event) => {
                 }, requestId);
             }
 
+            // Authorization: the authenticated sender must be a participant in this conversation.
+            // Without this, any authenticated user could inject messages into any chatId.
+            const participantList = Array.isArray(conversation.participants)
+                ? conversation.participants
+                : (conversation.participants instanceof Set ? [...conversation.participants] : []);
+            const senderIsParticipant = participantList.includes(userId)
+                || conversation.userAId === userId
+                || conversation.userBId === userId;
+            if (!senderIsParticipant) {
+                console.log('sendMessage: sender not a participant in conversation:', userId);
+                const requestId = extractRequestId(event);
+                return createErrorResponse(403, 'Not a participant in this conversation', action, {
+                    operation: 'participant_authorization',
+                    chatId
+                }, requestId);
+            }
+
             // Get receiver's metadata - determine receiver from participants (Array or Set)
             let receiverId;
             console.log('Looking up receiver from participants...');
