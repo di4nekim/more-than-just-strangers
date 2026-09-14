@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTJS Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #f5f6f9;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --ink: #1a1e2b;
+    --ink-2: #59616f;
+    --ink-3: #8a93a2;
+    --line: #dde2ea;
+    --line-strong: #c7cedb;
+    --accent: #3f4bb3;
+    --accent-soft: #e9ebfa;
+    --crit: #c0392b;   --crit-bg: #fbeae8;
+    --high: #c2660a;   --high-bg: #fbefe2;
+    --med: #a67c00;    --med-bg: #f8f2df;
+    --low: #0f766e;    --low-bg: #e2f2f0;
+    --info: #5b6472;   --info-bg: #eceef2;
+    --good: #157347;   --good-bg: #e4f2ea;
+    --shadow: 0 1px 2px rgba(20,25,40,.06), 0 8px 24px rgba(20,25,40,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10131a;
+      --surface: #181c25;
+      --surface-2: #20252f;
+      --ink: #e8ebf2;
+      --ink-2: #9ca5b3;
+      --ink-3: #6b7382;
+      --line: #2a303b;
+      --line-strong: #3a414e;
+      --accent: #8b93ec;
+      --accent-soft: #22263c;
+      --crit: #f0796b;   --crit-bg: #2e1c1a;
+      --high: #e6a24d;   --high-bg: #2c2216;
+      --med: #d8bf5e;    --med-bg: #282413;
+      --low: #4bc0b3;    --low-bg: #12241f;
+      --info: #99a2b1;   --info-bg: #20242d;
+      --good: #5bce8f;   --good-bg: #14241a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10131a;
+    --surface: #181c25;
+    --surface-2: #20252f;
+    --ink: #e8ebf2;
+    --ink-2: #9ca5b3;
+    --ink-3: #6b7382;
+    --line: #2a303b;
+    --line-strong: #3a414e;
+    --accent: #8b93ec;
+    --accent-soft: #22263c;
+    --crit: #f0796b;   --crit-bg: #2e1c1a;
+    --high: #e6a24d;   --high-bg: #2c2216;
+    --med: #d8bf5e;    --med-bg: #282413;
+    --low: #4bc0b3;    --low-bg: #12241f;
+    --info: #99a2b1;   --info-bg: #20242d;
+    --good: #5bce8f;   --good-bg: #14241a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding-inline: 20px; padding-block: 0 72px; }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+
+  /* Masthead */
+  .mast { border-bottom: 2px solid var(--ink); padding-block: 40px 22px; margin-bottom: 8px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); font-weight: 500; }
+  h1 { font-family: "IBM Plex Serif", Georgia, serif; font-weight: 600; font-size: clamp(30px, 5vw, 46px); line-height: 1.05; letter-spacing: -.01em; margin: 10px 0 6px; text-wrap: balance; }
+  .subtitle { color: var(--ink-2); font-size: 17px; max-width: 60ch; margin: 0; }
+  .metaline { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 18px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-3); }
+  .metaline b { color: var(--ink-2); font-weight: 500; }
+
+  /* Verdict banner */
+  .verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 22px; padding: 16px 18px; border-radius: 10px; background: var(--crit-bg); border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); }
+  .verdict .flag { font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #fff; background: var(--crit); padding: 5px 10px; border-radius: 6px; white-space: nowrap; }
+  .verdict p { margin: 0; font-size: 14.5px; color: var(--ink); }
+
+  /* Scorecard */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 26px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 15px; box-shadow: var(--shadow); }
+  .card .k { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; font-family: "IBM Plex Mono", monospace; }
+  .card .v { font-family: "IBM Plex Serif", Georgia, serif; font-size: 27px; font-weight: 600; margin-top: 8px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .card .note { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+  .v.warn { color: var(--high); }
+  .v.bad { color: var(--crit); }
+
+  /* Sections */
+  section { margin-top: 46px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--line-strong); padding-bottom: 8px; margin-bottom: 20px; }
+  .sec-num { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--accent); font-weight: 500; }
+  h2 { font-family: "IBM Plex Sans", sans-serif; font-weight: 600; font-size: 21px; letter-spacing: -.01em; margin: 0; }
+  .sec-head .count { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-3); }
+  p.lede { color: var(--ink-2); font-size: 15.5px; max-width: 72ch; }
+  p.lede + p.lede { margin-top: 12px; }
+
+  /* Severity chip */
+  .sev { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px; white-space: nowrap; }
+  .sev.critical { color: var(--crit); background: var(--crit-bg); }
+  .sev.high { color: var(--high); background: var(--high-bg); }
+  .sev.medium { color: var(--med); background: var(--med-bg); }
+  .sev.low { color: var(--low); background: var(--low-bg); }
+  .sev.info { color: var(--info); background: var(--info-bg); }
+
+  /* Blocker cards */
+  .blockers { display: flex; flex-direction: column; gap: 12px; }
+  .blocker { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--crit); border-radius: 10px; padding: 15px 17px; box-shadow: var(--shadow); }
+  .blocker.high { border-left-color: var(--high); }
+  .blocker .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .blocker h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.005em; flex: 1 1 60%; }
+  .blocker .loc { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-3); margin-top: 8px; word-break: break-word; }
+  .blocker .detail { font-size: 14px; color: var(--ink-2); margin: 9px 0 0; }
+  .blocker .fix { font-size: 13.5px; margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--line-strong); }
+  .blocker .fix b { color: var(--accent); font-weight: 600; }
+  .verified { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--good); background: var(--good-bg); padding: 3px 7px; border-radius: 5px; letter-spacing: .04em; white-space: nowrap; }
+
+  /* Findings table */
+  .ftable { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .frow { display: grid; grid-template-columns: 92px 1fr; gap: 0 16px; padding: 14px 18px; background: var(--surface); border-top: 1px solid var(--line); }
+  .frow:first-child { border-top: none; }
+  .frow .meta { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+  .frow .dim { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+  .frow h4 { margin: 0; font-size: 14.5px; font-weight: 600; }
+  .frow p { margin: 5px 0 0; font-size: 13px; color: var(--ink-2); }
+  .frow .loc { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-3); margin-top: 6px; word-break: break-word; }
+
+  /* Test results */
+  .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+  .panel h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+  .bar { height: 26px; border-radius: 6px; overflow: hidden; display: flex; background: var(--surface-2); font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 500; }
+  .bar span { display: flex; align-items: center; justify-content: center; color: #fff; white-space: nowrap; }
+  .bar .pass { background: var(--good); }
+  .bar .fail { background: var(--crit); }
+  .barcap { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .kv:first-of-type { border-top: none; }
+  .kv .n { font-family: "IBM Plex Mono", monospace; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .kv .n.bad { color: var(--crit); }
+  .kv .n.ok { color: var(--good); }
+  .buckets { margin-top: 14px; }
+  .bucket { font-size: 13px; color: var(--ink-2); padding: 7px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; }
+  .bucket .c { font-family: "IBM Plex Mono", monospace; color: var(--crit); font-weight: 500; min-width: 34px; }
+  .bucket .c.env { color: var(--info); }
+
+  /* Lists */
+  ul.clean { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 11px; }
+  ul.clean li { position: relative; padding-left: 22px; font-size: 14.5px; color: var(--ink); }
+  ul.clean li::before { content: "→"; position: absolute; left: 0; top: 0; color: var(--accent); font-family: "IBM Plex Mono", monospace; }
+  ul.clean li.bright::before { content: "✦"; color: var(--good); }
+  ul.clean li b { font-weight: 600; }
+  ul.clean li .mono { font-size: 12.5px; color: var(--ink-3); }
+
+  ol.plan { padding: 0; margin: 0; counter-reset: p; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  ol.plan li { position: relative; padding-left: 40px; font-size: 14.5px; color: var(--ink); min-height: 26px; }
+  ol.plan li::before { counter-increment: p; content: counter(p, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 3px 7px; border-radius: 5px; font-weight: 500; }
+
+  .wins { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; }
+  .wins li { break-inside: avoid; }
+
+  footer { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--line-strong); font-size: 13px; color: var(--ink-3); }
+  footer b { color: var(--ink-2); font-weight: 600; }
+  footer p { max-width: 78ch; }
+  .caveat { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 14px; font-size: 13px; color: var(--ink-2); }
+
+  @media (max-width: 720px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .test-grid { grid-template-columns: 1fr; }
+    .wins { grid-template-columns: 1fr; }
+    .frow { grid-template-columns: 1fr; gap: 8px; }
+    .frow .meta { flex-direction: row; align-items: center; }
+  }
+</style>
+<style>html,body{margin:0}</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Read-only audit · 8-agent workflow</div>
+    <h1>More Than Just Strangers</h1>
+    <p class="subtitle">A production-readiness, security, correctness &amp; UX audit of the <span class="mono">frontend-prod-deployment</span> branch — a Next.js 15 + AWS WebSocket-Lambda real-time chat app.</p>
+    <div class="metaline">
+      <span><b>Branch</b> frontend-prod-deployment</span>
+      <span><b>HEAD</b> da592a4</span>
+      <span><b>Date</b> 2026-09-14</span>
+      <span><b>Findings</b> 110 raw → 23 ranked</span>
+      <span><b>Method</b> read-only, no code changed</span>
+    </div>
+
+    <div class="verdict">
+      <span class="flag">Not production-ready</span>
+      <p>The happy path works end-to-end, but 5 hard blockers — exposed live credentials, a deploy-broken lambda, unauthenticated debug routes, an IDOR, and disabled type-checking — must clear before real users touch it.</p>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="k">Overall health</div><div class="v warn">Fragile</div><div class="note">Advanced prototype on real infra</div></div>
+    <div class="card"><div class="k">Prod readiness</div><div class="v bad">Blocked</div><div class="note">5 blockers, all verified</div></div>
+    <div class="card"><div class="k">Test pass rate</div><div class="v warn">68%</div><div class="note">156 / 229 · 9 of 23 suites green</div></div>
+    <div class="card"><div class="k">Real coverage</div><div class="v bad">~13.5%</div><div class="note">README claims “70%+”</div></div>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>Where it's at</h2></div>
+    <p class="lede">This is best read as an <b>advanced prototype with real cloud infrastructure</b>, not a shippable product. The full journey — land → sign in → matchmake → 36-question chat → congrats — is wired up, and there are genuinely thoughtful touches: specific Firebase auth error messages, an IO-error recovery screen, confirm-before-end dialogs, and reconnection handling.</p>
+    <p class="lede">But it sits on a codebase that has <b>accreted heavily</b>. The data/auth layer has concrete correctness and authorization defects, the UI still ships hardcoded placeholder identities, and the safety nets meant to catch this — TypeScript and the test suite — are themselves compromised. The single most urgent item isn't a code bug: <b>live production credentials sit in cleartext on disk</b> and should be treated as compromised and rotated now.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>Ship blockers</h2><span class="count">must clear before deploy</span></div>
+    <div class="blockers">
+
+      <div class="blocker">
+        <div class="top"><span class="sev critical">Critical</span><h3>Live production credentials in plaintext on disk</h3><span class="verified">✓ verified</span></div>
+        <div class="loc">.env.production · .env.local · firebase mtjs-prod secrets/…adminsdk-fbsvc…json · mtjs firebase key.json</div>
+        <p class="detail">A real AWS IAM secret key and the Firebase Admin service-account private key for <span class="mono">mtjs-prod</span> exist in cleartext. Mitigating: the .env files are gitignored and <b>not</b> in git history, and the AWS secret isn't a <span class="mono">NEXT_PUBLIC</span> var (not in the client bundle). Risk remains — key material is trivially leaked via an accidental add, zip, backup, or <span class="mono">vercel env push</span>.</p>
+        <p class="fix"><b>Fix →</b> Rotate now: deactivate the IAM key (issue a scoped least-privilege replacement, ideally Vercel OIDC) and regenerate the Firebase Admin key. Remove the secret files from the tree; keep only a redacted <span class="mono">.env.example</span>; store prod values in Vercel encrypted env vars.</p>
+      </div>
+
+      <div class="blocker">
+        <div class="top"><span class="sev critical">Critical</span><h3>endConversation lambda exports no handler — ending a chat is deploy-broken</h3><span class="verified">✓ verified</span></div>
+        <div class="loc">server/lambdas/endConversation/index.js:28 · template.yaml:468 (Handler: endConversation/index.handler)</div>
+        <p class="detail">The file defines only <span class="mono">handlerLogic</span>; there is no <span class="mono">exports.handler</span>, yet the SAM template (and the lambda's own e2e test) require <span class="mono">index.handler</span>. AWS fails to load an undefined handler. It also never sets <span class="mono">event.userInfo</span> (no auth wrapper), so it would throw even if exported. Compounded: it never clears either user's <span class="mono">chatId</span>, so ending would leave both users permanently "already in a conversation."</p>
+        <p class="fix"><b>Fix →</b> Add an authenticated <span class="mono">exports.handler</span> (mirror setReady/updatePresence), clear <span class="mono">chatId/ready/questionIndex</span> on both participants, and add a deploy smoke test that every <span class="mono">Handler:</span> path resolves to an exported function.</p>
+      </div>
+
+      <div class="blocker high">
+        <div class="top"><span class="sev high">High</span><h3>IDOR — any authenticated user can read any conversation</h3><span class="verified">✓ verified</span></div>
+        <div class="loc">src/app/api/chat/[chatId]/messages/route.js:10 · sendMessage/index.js · syncConversation/index.js (no auth wrapper)</div>
+        <p class="detail">The messages route validates the Firebase token but never checks the caller is a participant before querying DynamoDB — and chatIds are guessable sorted <span class="mono">userA#userB</span> pairs. Worse on the lambda side: <span class="mono">sendMessage</span> has no participant check (message injection) and <span class="mono">syncConversation</span> has no auth wrapper at all.</p>
+        <p class="fix"><b>Fix →</b> Before any chat-scoped read/write, resolve participants and assert <span class="mono">user.uid</span> is one of them (403 otherwise). The <span class="mono">chat-context</span> route already does this — reuse it as the pattern.</p>
+      </div>
+
+      <div class="blocker high">
+        <div class="top"><span class="sev high">High</span><h3>Unauthenticated /api/debug routes leak config &amp; init the Admin SDK</h3><span class="verified">✓ verified</span></div>
+        <div class="loc">src/app/api/debug/env/route.js · src/app/api/debug/firebase-auth/route.js (untracked)</div>
+        <p class="detail">Both routes exist, are untracked, and middleware applies no auth. <span class="mono">env</span> reports which secrets are set, the exact <span class="mono">FIREBASE_PRIVATE_KEY</span> length, node/platform, and calls firebase-admin init per request; <span class="mono">firebase-auth</span> echoes internal error messages. The <span class="mono">vercel.json</span> redirect for <span class="mono">/debug/*</span> does <b>not</b> match <span class="mono">/api/debug/*</span>.</p>
+        <p class="fix"><b>Fix →</b> Delete <span class="mono">src/app/api/debug</span> before deploy, or gate behind <span class="mono">NODE_ENV!=='production'</span> + a secret. Never return env presence, key lengths, or raw errors to unauthenticated callers.</p>
+      </div>
+
+      <div class="blocker high">
+        <div class="top"><span class="sev high">High</span><h3>Type-checking disabled for the production build</h3><span class="verified">✓ verified</span></div>
+        <div class="loc">next.config.mjs:3-5 (uncommitted) · tsconfig.json:6-7 (strict:false)</div>
+        <p class="detail">A working-tree change sets <span class="mono">typescript.ignoreBuildErrors: true</span> on top of <span class="mono">strict:false</span>, so the Vercel prod build type-checks nothing — right before a prod deploy, and while the project is effectively JS (one <span class="mono">.ts</span> file, not even the imported one). This masks real defects in auth/validation paths.</p>
+        <p class="fix"><b>Fix →</b> Revert <span class="mono">ignoreBuildErrors</span> and fix the underlying errors, or scope + track the suppression as explicit debt. Then decide: commit to TS (incremental + strict) or drop the TS surface entirely.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Test results</h2><span class="count">existing suite, run this session</span></div>
+    <div class="test-grid">
+      <div class="panel">
+        <h3>Individual tests — 229 total</h3>
+        <div class="bar">
+          <span class="pass" style="width:68.1%">156 pass</span>
+          <span class="fail" style="width:31.9%">73 fail</span>
+        </div>
+        <div class="barcap"><span>68.1% passing</span><span>68.6s wall</span></div>
+        <div style="margin-top:16px">
+          <div class="kv"><span>Test suites passing</span><span class="n ok">9</span></div>
+          <div class="kv"><span>Test suites failing</span><span class="n bad">14</span></div>
+          <div class="kv"><span>Total suites</span><span class="n">23</span></div>
+          <div class="kv"><span>Coverage threshold</span><span class="n">never enforced</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Failures split two ways</h3>
+        <p style="margin:0 0 6px;font-size:13px;color:var(--ink-2)">Not all failures are equal — roughly half are environment-bound, half are the suite itself being broken:</p>
+        <div class="buckets">
+          <div class="bucket"><span class="c env">env</span><span>Lambda integration/e2e tests hitting <b>live AWS</b> — "Cannot access AWS resources", <span class="mono">410 Gone</span>, 20s timeouts. Expected without infra.</span></div>
+          <div class="bucket"><span class="c">×24</span><span><span class="mono">useFirebaseAuth must be used within a FirebaseAuthProvider</span> — tests don't wrap the provider.</span></div>
+          <div class="bucket"><span class="c">×20+</span><span>Undefined <span class="mono">fetch</span> mocks — <span class="mono">reading 'status'/'json'/'ok'</span> of undefined.</span></div>
+          <div class="bucket"><span class="c">×10</span><span>Broken <span class="mono">mockResolvedValue</span> / <span class="mono">querySelector of null</span> setups.</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:16px">The deeper problem is <b>false safety</b>: the headline API and integration suites mock <span class="mono">global.fetch</span> (or reimplement modules inline) and assert on their own canned data — so all 24 Next.js route handlers and the integration flows are effectively untested despite green checks. Real coverage of production code measured <b>~13.5% statements / 15.5% lines</b>, and the three lambdas where critical defects were confirmed (<span class="mono">onDisconnect</span>, <span class="mono">syncConversation</span>, <span class="mono">updatePresence</span>) have zero tests. Per your constraint, I ran the existing suite but wrote <b>no new test files</b>.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Other ranked findings</h2><span class="count">high → info</span></div>
+    <div class="ftable">
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Backend</span></div><div><h4>onDisconnect can never clean up on real disconnect events</h4><p>Handler 400s if <span class="mono">event.body</span> is missing and reads the user from the body — but $disconnect events carry no body. Stale connections persist, presence stays "connected", later sends target dead connections. Identity is also client-supplied (spoofable).</p><div class="loc">server/lambdas/onDisconnect/index.js:29-60 · key on requestContext.connectionId instead</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Backend</span></div><div><h4>Matchmaking &amp; setReady have unguarded read-modify-write races</h4><p>findMatch uses a full-table Scan with no locking; two users can both run the create path (double conversation, double notify). setReady computes <span class="mono">questionIndex+1</span> from a stale read with a plain SET, so simultaneous toggles double-advance and skip a question.</p><div class="loc">startConversation/index.js:93-197 · setReady/index.js:210-262 · use conditional writes + atomic ADD</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Frontend</span></div><div><h4>Duplicate onMessage('error') handler disables matchmaking error rejection</h4><p><span class="mono">'error'</span> is registered twice in a Map; the second <span class="mono">.set()</span> wins, killing the handler that rejects the matchmaking promise and runs "already in a conversation" recovery. Errors only surface after the 10s timeout.</p><div class="loc">src/websocket/WebSocketContext.jsx:460 &amp; :739 — verified</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Frontend</span></div><div><h4>conversationMetadata is never populated — partner logic is dead</h4><p><span class="mono">setConversationMetadata</span> is only ever called with the empty init value; no handler populates participants/endedBy. So partner names, other-user id, and the endedBy → congrats navigation are all non-functional; <span class="mono">participants</span> is always <span class="mono">[]</span>.</p><div class="loc">src/websocket/WebSocketContext.jsx:170, :982 (setters only)</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Backend</span></div><div><h4>Raw JWTs logged; token travels in the WS query string &amp; browser console</h4><p>Multiple lambdas <span class="mono">JSON.stringify(event)</span>, and the client sends the Firebase token in the connection query string and message body — so the raw JWT lands in CloudWatch on nearly every invocation and in the browser console. Recoverable and reusable until expiry.</p><div class="loc">server/lambdas/*/index.js · websocketHandler.jsx:90-97 · redact + move to header</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Frontend</span></div><div><h4>Send button doesn't clear the message input</h4><p>The button sets <span class="mono">inputRef.value=''</span> but the input is controlled with a sync effect that re-asserts the old value. Sending via the button leaves the text (re-sendable); only the Enter path clears.</p><div class="loc">src/app/components/ChatRoom.jsx:817-827 vs 56-68</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">UX</span></div><div><h4>Hardcoded placeholder identities ship to the UI</h4><p>Every message is labeled QUINCEY/JOHNATHAN, congrats greets everyone as "Quincey", home always claims "5* NEW MESSAGES", partner names fall back to "Johnathan". Reads as an unfinished mockup (partly downstream of the dead metadata).</p><div class="loc">HomeContent.jsx:166,173,494 · congrats/page.jsx:74</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Frontend</span></div><div><h4>No accessibility affordances; key controls are hover-only</h4><p>Zero aria-labels, no <span class="mono">role="dialog"</span>, icon-only buttons with no accessible name, modals with no focus trap/Escape. Sign Out, End Conversation &amp; nav are <span class="mono">opacity-0</span> revealed only on hover — unreachable by keyboard/touch.</p><div class="loc">src/app (0 aria matches) · reveal on focus-within</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Backend</span></div><div><h4>updatePresence builds its response with the wrong argument order</h4><p><span class="mono">createSuccessResponse('Presence updated successfully', action, {…})</span> puts a string where the numeric statusCode belongs — a malformed response API Gateway may treat as an error.</p><div class="loc">server/lambdas/updatePresence/index.js:163 — verified</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Backend</span></div><div><h4>startConversation direct path can force any user into a chat</h4><p>The non-matchmaking path takes <span class="mono">otherUserId</span> from the client, rejects only self-chat, then SETs chatId on both users with no consent/existence check and Puts the conversation with no <span class="mono">attribute_not_exists</span> guard. Auth here uses a full-table Scan, not the JWT middleware.</p><div class="loc">startConversation/index.js:286-365, 582-618</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Security</span></div><div><h4>CORS trusts any *.vercel.app with credentials; rate-limit &amp; CSRF ineffective</h4><p>Wildcard <span class="mono">*.vercel.app</span> match sends <span class="mono">Allow-Credentials: true</span> (any attacker vercel subdomain trusted — bounded by bearer auth). Rate limiting is a per-instance in-memory Map; the CSRF module is exported but never wired to a route.</p><div class="loc">src/middleware.js:21,69-85 · src/lib/csrf-protection.js</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Backend</span></div><div><h4>Input validation gaps reach DynamoDB</h4><p><span class="mono">parseInt(limit)</span> with no NaN check/upper bound: <span class="mono">?limit=abc</span> → <span class="mono">Limit:NaN</span> → ValidationException → 500; <span class="mono">?limit=100000</span> accepted. sendMessage stores under a client-supplied <span class="mono">messageId</span> SK with no guard (overwrite existing).</p><div class="loc">chat/[chatId]/messages/route.js:15 · fetchChatHistory/index.js</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev low">Low</span><span class="dim">Frontend</span></div><div><h4>Question 36 navigates to congrats before the final question is answered</h4><p>The nav effect fires at <span class="mono">questionIndex===36</span>; with indices 1–36, arriving at 36 immediately routes both users to /congrats, so the last question may never be shown.</p><div class="loc">src/app/components/ChatRoom.jsx:417-425</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev low">Low</span><span class="dim">Architecture</span></div><div><h4>WebSocketContext.jsx is a 1,637-line god module with upward deps</h4><p>One context owns WS lifecycle, REST orchestration, all metadata/message/presence/typing state, with 204 console statements. The <span class="mono">src/websocket</span> layer imports from <span class="mono">src/app</span>, inverting the dependency direction.</p><div class="loc">src/websocket/WebSocketContext.jsx (1637 LOC)</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev low">Low</span><span class="dim">Architecture</span></div><div><h4>Dead / orphaned code &amp; broken tooling throughout</h4><p>5 empty API route dirs, ~700 LOC of lib modules imported only by tests, api-client methods calling routes that 404, ~30+ npm scripts invoking a non-existent <span class="mono">scripts/</span> dir, duplicate <span class="mono">useDebounce</span> (.jsx/.ts), two sign-in routes, a deprecated-but-wired typing indicator.</p><div class="loc">package.json:36-62 · src/lib/* · src/hooks/useDebounce.*</div></div></div>
+
+      <div class="frow"><div class="meta"><span class="sev info">Info</span><span class="dim">Security</span></div><div><h4>CSP allows unsafe-eval/unsafe-inline; infra packages as runtime deps</h4><p><span class="mono">script-src</span> includes <span class="mono">unsafe-eval</span> + <span class="mono">unsafe-inline</span>. <span class="mono">dependencies</span> ships aws-cdk-lib, constructs, react-devtools, wscat; next.config lists <span class="mono">boto3</span> (a Python package).</p><div class="loc">src/middleware.js:91 · package.json</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>UX inconsistencies &amp; friction</h2></div>
+    <ul class="clean">
+      <li><b>Placeholder identities everywhere.</b> QUINCEY/JOHNATHAN on every message, "Quincey" on congrats, "5* NEW MESSAGES" always — the app reads as an unfinished mockup to a real user.</li>
+      <li><b>Navigation is inconsistent &amp; partly unreachable.</b> Two sign-in routes disagree on where to send users; post-login lands on the marketing page; sign out / home / end-chat are hover-only, so they fail on touch and keyboard.</li>
+      <li><b>No escape from "Finding a match…".</b> The spinner has no cancel or timeout — a user can hang forever — and there's no clear disconnected/reconnecting state.</li>
+      <li><b>Paid-for feedback is invisible.</b> Typing-indicator and presence systems are imported but never rendered (and the typing module is deprecated yet still in the path).</li>
+      <li><b>Responsiveness gap.</b> Fixed 50/50 split layouts and side-by-side congrats panels will break at phone widths.</li>
+      <li><b>Off-by-one completion.</b> Reaching question 36 jumps to congrats, apparently skipping the final question.</li>
+      <li class="bright"><b>Worth preserving.</b> Specific Firebase auth error messages, the IO-error recovery screen, confirm-before-end dialogs, and reconnection handling are genuine bright spots.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Recommended test plan</h2><span class="count">not written — per your constraint</span></div>
+    <p class="lede" style="margin-bottom:18px">What a comprehensive suite <em>should</em> add — designed to lock in the fixes above rather than mock around them:</p>
+    <ol class="plan">
+      <li>Rewrite API-route tests to <b>import and invoke the real Next.js handlers</b> (mock only DynamoDB/Firebase Admin at the SDK boundary); add a 403-for-non-participant test on <span class="mono">/api/chat/[chatId]/messages</span> to lock in the IDOR fix.</li>
+      <li>Add a <b>deploy smoke test</b> that loads <span class="mono">template.yaml</span> and asserts every <span class="mono">Handler:</span> path resolves to an exported function (would have caught endConversation).</li>
+      <li>Add lambda tests for the three untested handlers: <span class="mono">onDisconnect</span> (cleanup from a body-less $disconnect, keyed on connectionId), <span class="mono">syncConversation</span> (auth + participant check), <span class="mono">updatePresence</span> (numeric 200 + shape).</li>
+      <li>Add <span class="mono">sendMessage</span> authorization tests: non-participant rejected; a forged/duplicate messageId can't overwrite an existing message.</li>
+      <li>Add concurrency tests: two simultaneous matches create exactly one conversation; two simultaneous ready toggles advance questionIndex by exactly one.</li>
+      <li>Add a WebSocketContext test asserting a single live <span class="mono">'error'</span> handler, that errors reject before the 10s timeout, and that <span class="mono">conversationMetadata.participants</span> populates after conversationStarted.</li>
+      <li>Add a ChatRoom test that the send button clears the input, and a validation test that <span class="mono">?limit=abc</span>/<span class="mono">?limit=100000</span> are clamped rather than reaching DynamoDB.</li>
+      <li>Wire <span class="mono">jest --coverage</span> into CI with a real (or ratcheting) threshold, so coverage claims are actually gated.</li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>Quick wins</h2><span class="count">high value · low effort</span></div>
+    <ul class="clean wins">
+      <li>Rotate the exposed AWS + Firebase Admin credentials and delete the secret <span class="mono">.env</span> files (no code change, highest impact).</li>
+      <li>Delete the untracked <span class="mono">src/app/api/debug</span> dir (or gate on <span class="mono">NODE_ENV</span>) before any deploy.</li>
+      <li>Revert the uncommitted <span class="mono">ignoreBuildErrors: true</span> so the build type-checks again.</li>
+      <li>Add a participant check to <span class="mono">/api/chat/[chatId]/messages</span> (reuse the chat-context pattern).</li>
+      <li>Clamp/validate the messages <span class="mono">limit</span> param (default/min/max, reject NaN).</li>
+      <li>Merge the two <span class="mono">onMessage('error')</span> handlers so matchmaking errors reject fast.</li>
+      <li>Fix the <span class="mono">updatePresence</span> argument order to return a real 200.</li>
+      <li>Reveal hover-only controls on <span class="mono">focus-within</span> so touch/keyboard users can reach them.</li>
+      <li>Add a cancel/timeout to the "Finding a match…" spinner.</li>
+      <li>Prune empty route dirs, dead lib modules, and the broken npm scripts.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p><b>Method.</b> A read-only, 8-agent workflow reviewed 7 dimensions in parallel (architecture, security, frontend, backend, config, testing, UX) → 110 raw findings → one deduplicated, ranked synthesis. The existing Jest suite was run once with coverage to a scratch dir. <b>No files in the repo were created, modified, or deleted.</b> The most load-bearing critical/high claims (missing handler, IDOR, duplicate error handler, argument order, credentials on disk) were independently re-verified against the source.</p>
+    <div class="caveat"><b>Caveats.</b> The config/deploy reviewer returned a malformed result, so Vercel/build-config specifics are the one lightly-covered area — though its concerns (disabled type-checking, dev deps shipped as runtime deps, CSP) were caught by the architecture and security reviewers. Findings marked “verified” were confirmed by direct file inspection this session; the rest reflect the reviewing agents' analysis and are worth a spot-check before acting on the deeper ones.</div>
+  </footer>
+
+</div>
+</body>
+</html>
