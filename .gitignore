@@ -3,6 +3,7 @@ node_modules
 venv/
 .env.*
 .env
+!.env.example
 myenv/
 dynamodb/data/*
 coverage/

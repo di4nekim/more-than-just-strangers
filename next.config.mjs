@@ -1,11 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Production optimizations
-  compiler: {
-    compiler: {
-      // Always remove console statements except errors and warnings
-      removeConsole: { exclude: ['error', 'warn'] },
-    },
+  // Type-check the production build; do not silence errors before deploy.
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+  eslint: {
+    ignoreDuringBuilds: false,
   },
   
   // Production-specific optimizations
