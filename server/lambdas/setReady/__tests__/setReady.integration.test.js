@@ -18,7 +18,11 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
     }
 });
 
-describe('setReady Lambda Integration Tests', () => {
+// Runs against a local DynamoDB (DYNAMODB_ENDPOINT); skipped unless explicitly enabled:
+//   ENABLE_INTEGRATION_TESTS=true jest server/lambdas/setReady
+const describeIntegration = process.env.ENABLE_INTEGRATION_TESTS === 'true' ? describe : describe.skip;
+
+describeIntegration('setReady Lambda Integration Tests', () => {
     let dynamoDB;
     const testTableName = process.env.TABLE_NAME || 'test-table';
 

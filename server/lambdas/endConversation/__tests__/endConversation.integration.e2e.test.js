@@ -16,7 +16,11 @@ const {
     validateAWSAccess
 } = require('./helpers/testSetup');
 
-describe('endConversation E2E Integration Test', () => {
+// Runs against real, deployed AWS resources; skipped unless explicitly enabled:
+//   ENABLE_INTEGRATION_TESTS=true jest server/lambdas/endConversation
+const describeIntegration = process.env.ENABLE_INTEGRATION_TESTS === 'true' ? describe : describe.skip;
+
+describeIntegration('endConversation E2E Integration Test', () => {
     let testChatId;
     let testUserId1;
     let testUserId2;

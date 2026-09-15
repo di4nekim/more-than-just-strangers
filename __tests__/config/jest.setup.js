@@ -138,6 +138,12 @@ jest.mock('@aws-sdk/client-apigatewaymanagementapi', () => ({
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';
+// Lambdas validate these at module load; defaults let handlers be required in unit tests.
+process.env.AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+process.env.WEBSOCKET_API_URL = process.env.WEBSOCKET_API_URL || 'https://test.execute-api.us-east-1.amazonaws.com/test';
+process.env.USER_METADATA_TABLE = process.env.USER_METADATA_TABLE || 'test-user-metadata';
+process.env.CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE || 'test-conversations';
+process.env.MESSAGES_TABLE = process.env.MESSAGES_TABLE || 'test-messages';
 process.env.NEXT_PUBLIC_FIREBASE_API_KEY = 'test-api-key';
 process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = 'test.firebaseapp.com';
 process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = 'test-project-id';
@@ -160,7 +166,8 @@ global.matchMedia = jest.fn().mockImplementation(query => ({
   dispatchEvent: jest.fn(),
 }));
 
-// Mock fetch globally
+// Mock fetch globally (keep the native one for the opt-in HTTP integration tests)
+global.__nativeFetch = global.fetch;
 global.fetch = jest.fn();
 
 // Mock console methods in tests to reduce noise

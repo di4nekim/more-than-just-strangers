@@ -895,14 +895,15 @@ module.exports.handler = async (event, context) => {
     } catch (error) {
         console.error('Authentication failed:', error.message);
         
-        if (error.message === 'JWT_TOKEN_MISSING') {
+        // shared/auth throws FIREBASE_TOKEN_* codes; the legacy JWT_* codes are kept for compatibility.
+        if (error.message === 'FIREBASE_TOKEN_MISSING' || error.message === 'JWT_TOKEN_MISSING') {
             const action = extractAction(event);
             const requestId = extractRequestId(event);
-            return createErrorResponse(401, 'Authentication required. JWT token missing.', action, {
+            return createErrorResponse(401, 'Authentication required. Firebase ID token missing.', action, {
                 operation: 'authentication',
-                authType: 'jwt'
+                authType: 'firebase'
             }, requestId);
-        } else if (error.message === 'JWT_TOKEN_INVALID') {
+        } else if (['FIREBASE_TOKEN_INVALID', 'FIREBASE_TOKEN_EXPIRED', 'FIREBASE_TOKEN_REVOKED', 'JWT_TOKEN_INVALID'].includes(error.message)) {
             const action = extractAction(event);
             const requestId = extractRequestId(event);
             return createErrorResponse(401, 'Invalid or expired JWT token', action, {

@@ -1,37 +1,74 @@
 import React from 'react';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { WebSocketProvider, useWebSocket } from '../../src/websocket/WebSocketContext';
 
-// Mock the WebSocket handler
+/**
+ * WebSocketProvider tests.
+ *
+ * The provider never touches the raw WebSocket API: it drives a WebSocketClient
+ * plus the actions from createWebSocketActions, and reacts to server messages
+ * through client.onMessage(action, handler). Those are the seams mocked here.
+ *
+ * The client/actions/user mocks are STABLE singletons on purpose — returning a
+ * fresh object from every call hands effects keyed on them a new dependency each
+ * render, which re-fires them forever (a heap OOM in practice).
+ */
+
+// The provider passes a connection-state callback into the client; capture it so
+// tests can simulate connect / disconnect the way the real client reports them.
+const mockConnectionState = { callback: null };
+
+const mockWsClient = {
+  ws: { readyState: 1 }, // WebSocket.OPEN — the provider checks this before getCurrentState
+  connect: jest.fn(async () => {
+    mockConnectionState.callback?.(true);
+    return true;
+  }),
+  disconnect: jest.fn(async () => {
+    mockConnectionState.callback?.(false);
+  }),
+  send: jest.fn(),
+  onMessage: jest.fn(),
+  isConnected: true,
+};
+
+const mockWsActions = {
+  connect: jest.fn(() => mockWsClient.connect()),
+  startConversation: jest.fn().mockResolvedValue(true),
+  endConversation: jest.fn().mockResolvedValue(true),
+  getCurrentState: jest.fn().mockResolvedValue(true),
+  updatePresence: jest.fn().mockResolvedValue(true),
+  sendMessage: jest.fn().mockResolvedValue(true),
+  setReady: jest.fn().mockResolvedValue(true),
+  syncConversation: jest.fn().mockResolvedValue(true),
+  fetchChatHistory: jest.fn().mockResolvedValue(true),
+};
+
 jest.mock('../../src/websocket/websocketHandler', () => ({
-  WebSocketClient: jest.fn().mockImplementation(() => ({
-    connect: jest.fn().mockResolvedValue(true),
-    disconnect: jest.fn(),
-    send: jest.fn(),
-    isConnected: true,
-  })),
-  createWebSocketActions: jest.fn(() => ({
-    sendMessage: jest.fn(),
-    sendReadyToAdvance: jest.fn(),
-    endChat: jest.fn(),
-    startNewChat: jest.fn(),
-    sendTypingStatus: jest.fn(),
-    getCurrentState: jest.fn(),
-  })),
+  WebSocketClient: jest.fn((url, onConnectionStateChange) => {
+    mockConnectionState.callback = onConnectionStateChange;
+    return mockWsClient;
+  }),
+  createWebSocketActions: jest.fn(() => mockWsActions),
 }));
 
-// Mock the dependencies
-jest.mock('firebase/auth', () => ({
-  getAuth: jest.fn(() => ({
-    currentUser: {
-      uid: 'test-user-123',
-      email: 'test@example.com',
-      getIdToken: jest.fn().mockResolvedValue('mock-token'),
-    },
-    onAuthStateChanged: jest.fn(() => () => {}), // Return unsubscribe function
-    onIdTokenChanged: jest.fn(() => () => {}), // Return unsubscribe function
-  })),
+// The provider builds its actions from websocketActions (not websocketHandler);
+// mock that module too, or the real actions run against the mock client.
+jest.mock('../../src/websocket/websocketActions', () => ({
+  __esModule: true,
+  createWebSocketActions: jest.fn(() => mockWsActions),
+  default: jest.fn(() => mockWsActions),
+}));
+
+const mockFirebaseUser = {
+  uid: 'test-user-123',
+  email: 'test@example.com',
+  getIdToken: jest.fn().mockResolvedValue('mock-token'),
+};
+
+jest.mock('../../src/app/components/auth/FirebaseAuthProvider', () => ({
+  useFirebaseAuth: () => ({ user: mockFirebaseUser, isInitialized: true, loading: false }),
 }));
 
 jest.mock('../../src/app/lib/api-client', () => ({
@@ -46,317 +83,194 @@ jest.mock('../../src/app/lib/api-client', () => ({
       name: 'Partner User',
       displayName: 'Partner User',
     }),
-    hasActiveChat: jest.fn().mockResolvedValue({
-      hasActiveChat: true,
-      chatId: 'test-chat-123',
-    }),
+    hasActiveChat: jest.fn().mockResolvedValue({ hasActiveChat: false, chatId: null }),
     getInitialChatContext: jest.fn().mockResolvedValue({
-      currentChatId: 'test-chat-123',
-      partnerId: 'partner-user-456',
-      hasActiveChat: true,
-      questionIndex: 5,
+      currentChatId: null,
+      partnerId: null,
+      hasActiveChat: false,
+      questionIndex: 1,
     }),
+    validateChatAccess: jest.fn().mockResolvedValue({ hasAccess: true }),
   },
 }));
 
-// Mock WebSocket
-const mockWebSocket = {
-  send: jest.fn(),
-  close: jest.fn(),
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-  readyState: 1, // OPEN
-};
+const { apiClient } = require('../../src/app/lib/api-client');
+const { WebSocketClient } = require('../../src/websocket/websocketHandler');
 
-global.WebSocket = jest.fn(() => mockWebSocket);
+const USER_ID = 'test-user-123';
+const CHAT_ID = 'test-chat-123';
 
-// Test component to access context
-const TestComponent = () => {
-  const context = useWebSocket();
-  
+// Exposes the live context value to the tests without a component per action.
+let ctx;
+const Probe = () => {
+  ctx = useWebSocket();
   return (
     <div>
-      <div data-testid="user-id">{context.userMetadata?.userId || 'No user'}</div>
-      <div data-testid="chat-id">{context.conversationMetadata?.chatId || 'No chat'}</div>
-      <div data-testid="is-connected">{context.isConnected ? 'Connected' : 'Disconnected'}</div>
-      <div data-testid="has-active-chat">{context.hasActiveChat ? 'Has chat' : 'No chat'}</div>
-      <div data-testid="loading">{context.initState.isInitializing ? 'Loading' : 'Ready'}</div>
-      <button onClick={() => context.initializeUser('test-user-123')}>Initialize</button>
-      <button onClick={() => context.startNewChat()}>Start Chat</button>
-      <button onClick={() => context.endChat('test-chat-123')}>End Chat</button>
+      <div data-testid="profile-id">{ctx.userProfile?.userId || 'No user'}</div>
+      <div data-testid="chat-id">{ctx.conversationMetadata?.chatId || 'No chat'}</div>
+      <div data-testid="is-connected">{ctx.isConnected ? 'Connected' : 'Disconnected'}</div>
+      <div data-testid="init">{ctx.initState.isInitializing ? 'Loading' : 'Ready'}</div>
+      <div data-testid="init-error">{ctx.initState.error || ''}</div>
     </div>
   );
 };
 
-describe('WebSocket Context', () => {
+const renderProvider = () =>
+  render(
+    <WebSocketProvider>
+      <Probe />
+    </WebSocketProvider>
+  );
+
+// Server-message handlers the provider registered, keyed by action name.
+const handlers = () => Object.fromEntries(mockWsClient.onMessage.mock.calls);
+const dispatch = (action, data) => act(async () => { handlers()[action](data); });
+
+// Polls the DOM without act(); for the one flow whose follow-up work keeps act() busy.
+const untilDom = async (predicate, timeoutMs = 3000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error('untilDom: condition not met within ' + timeoutMs + 'ms');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+};
+
+async function waitForConnection() {
+  await waitFor(() => expect(screen.getByTestId('is-connected')).toHaveTextContent('Connected'));
+}
+
+async function initializeUser() {
+  await waitForConnection();
+  await act(async () => { await ctx.initializeUser(USER_ID); });
+  await waitFor(() => expect(screen.getByTestId('init')).toHaveTextContent('Ready'));
+}
+
+describe('WebSocketProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Set environment variables
+    mockConnectionState.callback = null;
     process.env.NEXT_PUBLIC_WEBSOCKET_API_URL = 'wss://test-websocket-url.com';
-    
-    // Reset WebSocket mock
-    mockWebSocket.send.mockClear();
-    mockWebSocket.close.mockClear();
-    mockWebSocket.addEventListener.mockClear();
-    mockWebSocket.removeEventListener.mockClear();
-    
-    // Reset global fetch
-    global.fetch = jest.fn();
   });
 
-  test('should provide WebSocket context to children', () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    expect(screen.getByTestId('user-id')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-id')).toBeInTheDocument();
-    expect(screen.getByTestId('is-connected')).toBeInTheDocument();
-  });
+  describe('connection lifecycle', () => {
+    test('creates a client for the configured URL and connects automatically on mount', async () => {
+      renderProvider();
 
-  test('should initialize user when initializeUser is called', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    const initializeButton = screen.getByText('Initialize');
-    
-    await act(async () => {
-      fireEvent.click(initializeButton);
+      await waitForConnection();
+      expect(WebSocketClient).toHaveBeenCalledWith('wss://test-websocket-url.com', expect.any(Function));
+      expect(mockWsActions.connect).toHaveBeenCalled();
     });
-    
-    // Should show loading initially
-    expect(screen.getByTestId('loading')).toHaveTextContent('Loading');
-    
-    // Wait for initialization to complete
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('Ready');
-    });
-  });
 
-  test('should handle start new chat', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    const startChatButton = screen.getByText('Start Chat');
-    
-    await act(async () => {
-      fireEvent.click(startChatButton);
-    });
-    
-    // Should attempt to start a new chat
-    expect(mockWebSocket.send).toHaveBeenCalled();
-  });
+    test('reflects a dropped connection reported by the client', async () => {
+      renderProvider();
+      await waitForConnection();
 
-  test('should handle end chat', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    const endChatButton = screen.getByText('End Chat');
-    
-    await act(async () => {
-      fireEvent.click(endChatButton);
-    });
-    
-    // Should attempt to end the chat
-    expect(mockWebSocket.send).toHaveBeenCalled();
-  });
+      await act(async () => { mockConnectionState.callback(false); });
 
-  test('should handle WebSocket connection events', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate WebSocket open event
-    const openCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'open'
-    )?.[1];
-    
-    if (openCallback) {
-      await act(async () => {
-        openCallback();
-      });
-    }
-    
-    await waitFor(() => {
-      expect(screen.getByTestId('is-connected')).toHaveTextContent('Connected');
-    });
-  });
-
-  test('should handle WebSocket message events', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate WebSocket message event
-    const messageCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'message'
-    )?.[1];
-    
-    if (messageCallback) {
-      const mockMessage = {
-        data: JSON.stringify({
-          type: 'chat_message',
-          content: 'Hello from partner!',
-          senderId: 'partner-user-456',
-          timestamp: new Date().toISOString(),
-        }),
-      };
-      
-      await act(async () => {
-        messageCallback(mockMessage);
-      });
-    }
-    
-    // Should handle the message appropriately
-    // This would depend on the specific message handling logic
-  });
-
-  test('should handle WebSocket close events', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate WebSocket close event
-    const closeCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'close'
-    )?.[1];
-    
-    if (closeCallback) {
-      await act(async () => {
-        closeCallback({ code: 1000, reason: 'Normal closure' });
-      });
-    }
-    
-    await waitFor(() => {
       expect(screen.getByTestId('is-connected')).toHaveTextContent('Disconnected');
     });
-  });
 
-  test('should handle WebSocket error events', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate WebSocket error event
-    const errorCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'error'
-    )?.[1];
-    
-    if (errorCallback) {
-      await act(async () => {
-        errorCallback(new Error('WebSocket error'));
-      });
-    }
-    
-    // Should handle the error gracefully
-    expect(consoleSpy).toHaveBeenCalled();
-    
-    consoleSpy.mockRestore();
-  });
+    test('registers exactly one handler per server action (no duplicate "error" registration)', async () => {
+      renderProvider();
+      await waitForConnection();
 
-  test('should reconnect on connection loss', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate connection loss
-    const closeCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'close'
-    )?.[1];
-    
-    if (closeCallback) {
-      await act(async () => {
-        closeCallback({ code: 1006, reason: 'Abnormal closure' });
-      });
-    }
-    
-    // Should attempt to reconnect
-    // This would depend on the reconnection logic
-  });
-
-  test('should handle authentication state changes', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate user authentication
-    const authCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'auth_state_changed'
-    )?.[1];
-    
-    if (authCallback) {
-      await act(async () => {
-        authCallback({
-          uid: 'test-user-123',
-          email: 'test@example.com',
-        });
-      });
-    }
-    
-    // Should update user metadata
-    await waitFor(() => {
-      expect(screen.getByTestId('user-id')).toHaveTextContent('test-user-123');
+      const registered = mockWsClient.onMessage.mock.calls.map(([action]) => action);
+      expect(registered.filter((a) => a === 'error')).toHaveLength(1);
+      expect(registered).toEqual(expect.arrayContaining(['conversationStarted', 'error']));
     });
   });
 
-  test('should handle token refresh', async () => {
-    render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    // Simulate token refresh
-    const tokenCallback = mockWebSocket.addEventListener.mock.calls.find(
-      call => call[0] === 'token_refresh'
-    )?.[1];
-    
-    if (tokenCallback) {
-      await act(async () => {
-        tokenCallback('new-token');
-      });
-    }
-    
-    // Should update the WebSocket connection with new token
-    // This would depend on the token refresh logic
+  describe('initializeUser', () => {
+    test('loads the profile, syncs state over the socket and finishes without error', async () => {
+      renderProvider();
+
+      await initializeUser();
+
+      expect(apiClient.getCurrentUserProfile).toHaveBeenCalled();
+      expect(mockWsActions.getCurrentState).toHaveBeenCalledWith({ userId: USER_ID });
+      expect(screen.getByTestId('profile-id')).toHaveTextContent(USER_ID);
+      expect(screen.getByTestId('init-error')).toHaveTextContent('');
+    });
   });
 
-  test('should cleanup on unmount', () => {
-    const { unmount } = render(
-      <WebSocketProvider>
-        <TestComponent />
-      </WebSocketProvider>
-    );
-    
-    unmount();
-    
-    // Should cleanup WebSocket connection
-    expect(mockWebSocket.close).toHaveBeenCalled();
+  describe('starting a chat', () => {
+    test('rejects before the user is initialized', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      await expect(ctx.startNewChat()).rejects.toThrow(/not ready|not loaded/);
+      expect(mockWsActions.startConversation).not.toHaveBeenCalled();
+    });
+
+    test('sends startConversation and resolves when the server confirms the conversation', async () => {
+      renderProvider();
+      await initializeUser();
+
+      let pending;
+      await act(async () => { pending = ctx.startNewChat(); });
+      expect(mockWsActions.startConversation).toHaveBeenCalledWith({ userId: USER_ID });
+
+      // Deliver the server's confirmation directly rather than inside act(): the
+      // provider reacts by kicking off the chat-history load, whose pending work
+      // keeps act() from settling. React still renders the update outside act.
+      handlers().conversationStarted({
+        chatId: CHAT_ID,
+        participants: [USER_ID, 'partner-user-456'],
+        matched: true,
+        createdAt: new Date().toISOString(),
+      });
+
+      await expect(pending).resolves.toMatchObject({ chatId: CHAT_ID, matched: true });
+      // conversationStarted populates the conversation metadata (it used to stay empty).
+      await untilDom(() => screen.getByTestId('chat-id').textContent === CHAT_ID);
+      expect(ctx.conversationMetadata.participants).toEqual(expect.arrayContaining([USER_ID, 'partner-user-456']));
+    });
+
+    test('rejects promptly when the server answers with an error, instead of waiting for the timeout', async () => {
+      renderProvider();
+      await initializeUser();
+
+      let pending;
+      await act(async () => { pending = ctx.startNewChat(); });
+      pending.catch(() => {}); // observed below; avoid an unhandled rejection in between
+
+      const startedAt = Date.now();
+      await dispatch('error', { error: 'User already in a conversation' });
+
+      await expect(pending).rejects.toThrow(/already in a conversation/);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+    });
   });
-}); 
+
+  describe('ending a chat', () => {
+    test('rejects before the user is initialized', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      await expect(ctx.endChat(CHAT_ID)).rejects.toThrow(/not ready|not loaded/);
+      expect(mockWsActions.endConversation).not.toHaveBeenCalled();
+    });
+
+    test('sends endConversation for the given chat', async () => {
+      renderProvider();
+      await initializeUser();
+
+      await act(async () => { await ctx.endChat(CHAT_ID); });
+
+      expect(mockWsActions.endConversation).toHaveBeenCalledWith({
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        endReason: 'user_ended',
+      });
+    });
+  });
+
+  describe('unmount', () => {
+    test('unmounts cleanly after connecting', async () => {
+      const { unmount } = renderProvider();
+      await waitForConnection();
+
+      expect(() => unmount()).not.toThrow();
+    });
+  });
+});

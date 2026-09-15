@@ -15,8 +15,15 @@ process.env.DYNAMODB_ENDPOINT = process.env.DYNAMODB_ENDPOINT || 'http://localho
 process.env.AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 process.env.WEBSOCKET_API_URL = 'https://test-websocket-api.execute-api.us-east-1.amazonaws.com/test';
 
+// This is an integration test against a real (local) DynamoDB. Without one the
+// requests hang until they time out, so it only runs when explicitly enabled:
+//   ENABLE_INTEGRATION_TESTS=true DYNAMODB_ENDPOINT=http://localhost:8000 jest ...
+const RUN_INTEGRATION = process.env.ENABLE_INTEGRATION_TESTS === 'true';
+const describeIntegration = RUN_INTEGRATION ? describe : describe.skip;
+const beforeAllIntegration = RUN_INTEGRATION ? beforeAll : () => {};
+
 // Ensure the table exists before running tests
-beforeAll(async () => {
+beforeAllIntegration(async () => {
   const dynamodbRaw = new AWS.DynamoDB({
     region: process.env.AWS_REGION,
     endpoint: process.env.DYNAMODB_ENDPOINT,
@@ -65,7 +72,7 @@ async function clearTable(tableName) {
   );
 }
 
-describe('getCurrentState Lambda Function (Integration)', () => {
+describeIntegration('getCurrentState Lambda Function (Integration)', () => {
     const validEvent = {
         body: JSON.stringify({
             action: 'getCurrentState',

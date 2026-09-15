@@ -183,20 +183,25 @@ describe('ChatRoom Component', () => {
   });
 
   test('should handle sending a message', async () => {
+    // Sending requires a live connection.
+    mockUseWebSocket.mockReturnValue({
+      ...mockUseWebSocket(),
+      isConnected: true,
+    });
+
     render(<ChatRoom />);
     
     const messageInput = await screen.findByPlaceholderText(/TYPE YOUR REPLY HERE/);
-    // Use a more specific selector for the submit button - it's the last button in the form
-    const form = messageInput.closest('form');
-    const sendButton = form.querySelector('button[type="submit"]');
+    // The composer is not a <form>; the send control is the labelled icon button.
+    const sendButton = screen.getByRole('button', { name: /send message/i });
     
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
     fireEvent.click(sendButton);
-    
-    // Since the mock function is not being called properly, let's just verify the form submission works
-    // The component should handle the message input and button click without crashing
-    expect(messageInput.value).toBe('Test message');
-    expect(sendButton).toBeInTheDocument();
+
+    // Sending hands the text to the optimistic sender and clears the composer
+    // (the send button and the Enter key share the same submit path).
+    expect(mockUseWebSocket().sendMessageOptimistic).toHaveBeenCalledWith('Test message');
+    await waitFor(() => expect(messageInput.value).toBe(''));
   });
 
   test('should handle typing indicator', async () => {
@@ -310,7 +315,7 @@ describe('ChatRoom Component', () => {
 
     render(<ChatRoom />);
     
-    expect(screen.getByText(/Failed to initialize chat/)).toBeInTheDocument();
+    // The init-error screen surfaces the context's initState.error verbatim.
     expect(screen.getByText(/Connection failed/)).toBeInTheDocument();
   });
 
@@ -338,9 +343,8 @@ describe('ChatRoom Component', () => {
     render(<ChatRoom />);
     
     const messageInput = await screen.findByPlaceholderText(/TYPE YOUR REPLY HERE/);
-    // Use a more specific selector for the submit button - it's the last button in the form
-    const form = messageInput.closest('form');
-    const sendButton = form.querySelector('button[type="submit"]');
+    // The composer is not a <form>; the send control is the labelled icon button.
+    const sendButton = screen.getByRole('button', { name: /send message/i });
     
     // Try to send empty message
     fireEvent.change(messageInput, { target: { value: '' } });
