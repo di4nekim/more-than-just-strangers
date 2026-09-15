@@ -458,7 +458,7 @@ export default function HomeContent() {
                 Hi, {userProfile?.name || 'there.'}
               </div>
               <div>
-                You're currently on question
+                You&apos;re currently on question
               </div>
               <div className='font-semibold'>
                 {questionProgress.current}/{questionProgress.total} with {partnerName}.

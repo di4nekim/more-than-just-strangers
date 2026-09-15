@@ -369,6 +369,18 @@ export const WebSocketProvider = ({ children }) => {
       const hasChat = !!data.chatId;
       setHasActiveChat(prev => prev === hasChat ? prev : hasChat);
 //       // console.log('WebSocket: User metadata and hasActiveChat updated to:', hasChat);
+
+      // Populate conversation metadata from the current state payload
+      setConversationMetadata(prev => ({
+        ...prev,
+        chatId: data.chatId ?? prev.chatId,
+        participants: data.participants ? getParticipantsAsArray(data.participants) : prev.participants,
+        endedBy: data.endedBy ?? prev.endedBy,
+        endReason: data.endReason ?? prev.endReason,
+        lastMessage: data.lastMessage ?? prev.lastMessage,
+        createdAt: data.createdAt ?? prev.createdAt,
+        lastUpdated: new Date().toISOString()
+      }));
       
       // If user has an active chat, load the messages (only if not already loaded for this specific chat)
       if (data.chatId) {
@@ -417,7 +429,16 @@ export const WebSocketProvider = ({ children }) => {
           chatId: data.chatId
         }));
       }
-      
+
+      // Populate conversation metadata from the conversationStarted payload
+      setConversationMetadata(prev => ({
+        ...prev,
+        chatId: data.chatId ?? prev.chatId,
+        participants: data.participants ? getParticipantsAsArray(data.participants) : prev.participants,
+        createdAt: data.createdAt ?? prev.createdAt,
+        lastUpdated: new Date().toISOString()
+      }));
+
       // Resolve the matchmaking promise if it exists
       if (matchmakingPromiseRef.current) {
         // Clear timeout if it exists (for safety)
@@ -451,38 +472,6 @@ export const WebSocketProvider = ({ children }) => {
           matchmakingPromiseRef.current.reject(new Error('Unexpected matchmaking response'));
         }
         
-        setMatchmakingPromise(null);
-        matchmakingPromiseRef.current = null;
-      }
-    });
-
-    // Handle error responses
-    wsClient.onMessage('error', (data) => {
-      console.error('WebSocket: Received error response:', data);
-      
-      // Reject the matchmaking promise if it exists
-      if (matchmakingPromiseRef.current) {
-        // Clear timeout if it exists (for safety)
-        if (matchmakingPromiseRef.current.timeout) {
-          clearTimeout(matchmakingPromiseRef.current.timeout);
-        }
-        
-        // Create a more specific error message for common cases
-        const errorMessage = data.error || 'WebSocket error';
-        const enhancedError = new Error(errorMessage);
-        
-        // Add specific handling for "already in conversation" errors
-        if (errorMessage.includes('already in a conversation')) {
-//           // console.log('WebSocket: User attempted to start conversation while already in one, triggering state refresh');
-          // Refresh user state to ensure frontend is synchronized with backend
-          if (wsActions && userMetadata.userId) {
-            wsActions.getCurrentState({ userId: userMetadata.userId }).catch(err => {
-              console.error('Failed to refresh user state after conversation error:', err);
-            });
-          }
-        }
-        
-        matchmakingPromiseRef.current.reject(enhancedError);
         setMatchmakingPromise(null);
         matchmakingPromiseRef.current = null;
       }
@@ -699,10 +688,20 @@ export const WebSocketProvider = ({ children }) => {
         });
         
         setHasMoreMessages(data.hasMore || false);
-        
+
         // Update the last message timestamp for pagination
         if (transformedMessages.length > 0) {
           lastMessageTimestamp.current = transformedMessages[0]?.timestamp;
+
+          // Populate conversation metadata with the most recent message
+          // (index 0 is the oldest loaded message, so the last element is newest)
+          const latestMessage = transformedMessages[transformedMessages.length - 1];
+          setConversationMetadata(prev => ({
+            ...prev,
+            chatId: userMetadataRef.current.chatId ?? prev.chatId,
+            lastMessage: latestMessage ?? prev.lastMessage,
+            lastUpdated: new Date().toISOString()
+          }));
         }
         
         // Clear retry count on successful chat history load
@@ -735,10 +734,39 @@ export const WebSocketProvider = ({ children }) => {
       // Handle user left events
     });
 
-    // Handle server errors that might affect optimistic messages
+    // Handle error responses (merged: rejects the pending matchmaking promise and
+    // runs the "already in a conversation" recovery, AND performs optimistic-message
+    // cleanup / error-state handling for action-scoped server errors)
     wsClient.onMessage('error', (data) => {
-//       // console.log('WebSocket: Received error:', data);
-      
+      console.error('WebSocket: Received error response:', data);
+
+      // Reject the matchmaking promise if it exists
+      if (matchmakingPromiseRef.current) {
+        // Clear timeout if it exists (for safety)
+        if (matchmakingPromiseRef.current.timeout) {
+          clearTimeout(matchmakingPromiseRef.current.timeout);
+        }
+
+        // Create a more specific error message for common cases
+        const errorMessage = data.error || 'WebSocket error';
+        const enhancedError = new Error(errorMessage);
+
+        // Add specific handling for "already in conversation" errors
+        if (errorMessage.includes('already in a conversation')) {
+//           // console.log('WebSocket: User attempted to start conversation while already in one, triggering state refresh');
+          // Refresh user state to ensure frontend is synchronized with backend
+          if (wsActions && userMetadata.userId) {
+            wsActions.getCurrentState({ userId: userMetadata.userId }).catch(err => {
+              console.error('Failed to refresh user state after conversation error:', err);
+            });
+          }
+        }
+
+        matchmakingPromiseRef.current.reject(enhancedError);
+        setMatchmakingPromise(null);
+        matchmakingPromiseRef.current = null;
+      }
+
       // Extract action from error data, with fallback to data.action for backward compatibility
       const action = data?.data?.action || data?.action;
       

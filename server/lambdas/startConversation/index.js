@@ -102,9 +102,33 @@ const handlerLogic = async (event) => {
 
                 console.log('startConversation: Creating matchmaking conversation:', chatId);
 
-                // Create new conversation record
+                // Claim the matched user's queue entry with a conditional delete so a
+                // given queue entry can only be consumed once. If the entry is already
+                // gone, another request has already matched this user; abort so we don't
+                // create a duplicate or steal an in-flight match.
+                try {
+                    await dynamoDB.send(new DeleteCommand({
+                        TableName: process.env.MATCHMAKING_QUEUE_TABLE,
+                        Key: { PK: `USER#${match.userId}` },
+                        ConditionExpression: 'attribute_exists(PK)'
+                    }));
+                    console.log('startConversation: Claimed matched user queue entry:', match.userId);
+                } catch (claimError) {
+                    if (claimError.name === 'ConditionalCheckFailedException') {
+                        console.log('startConversation: Matched user already claimed by another request, aborting create');
+                        // The other matcher creates the conversation and notifies both
+                        // users, so simply acknowledge without creating a duplicate.
+                        return { statusCode: 200 };
+                    }
+                    throw claimError;
+                }
+
+                // Create new conversation record. The attribute_not_exists(PK) guard makes
+                // this a winner-take-all lock: chatId is deterministic for a pair, so both
+                // matched users' invocations target the same PK and only one Put succeeds.
                 const conversationParams = {
                     TableName: process.env.CONVERSATIONS_TABLE,
+                    ConditionExpression: 'attribute_not_exists(PK)',
                     Item: {
                         PK: `CHAT#${chatId}`,
                         chatId,
@@ -126,7 +150,16 @@ const handlerLogic = async (event) => {
                     }
                 };
 
-                await dynamoDB.send(new PutCommand(conversationParams));
+                try {
+                    await dynamoDB.send(new PutCommand(conversationParams));
+                } catch (putError) {
+                    if (putError.name === 'ConditionalCheckFailedException') {
+                        console.log('startConversation: Conversation already created by the other matched request, aborting duplicate create');
+                        // The winning invocation updates metadata and notifies both users.
+                        return { statusCode: 200 };
+                    }
+                    throw putError;
+                }
 
                 // Update both users' metadata
                 await Promise.all([
@@ -152,17 +185,12 @@ const handlerLogic = async (event) => {
                     }))
                 ]);
 
-                // Remove both users from queue
-                await Promise.all([
-                    dynamoDB.send(new DeleteCommand({
-                        TableName: process.env.MATCHMAKING_QUEUE_TABLE,
-                        Key: { PK: `USER#${userId}` }
-                    })),
-                    dynamoDB.send(new DeleteCommand({
-                        TableName: process.env.MATCHMAKING_QUEUE_TABLE,
-                        Key: { PK: `USER#${match.userId}` }
-                    }))
-                ]);
+                // Remove the current user from the queue (the matched user's entry was
+                // already claimed above with the conditional delete).
+                await dynamoDB.send(new DeleteCommand({
+                    TableName: process.env.MATCHMAKING_QUEUE_TABLE,
+                    Key: { PK: `USER#${userId}` }
+                }));
 
                 // Notify both users about the match
                 await notifyMatch(userId, match.userId, chatId, chatParticipants, timestamp);
@@ -316,9 +344,61 @@ const handlerLogic = async (event) => {
 
         console.log('startConversation: Creating conversation:', chatId);
 
-        // Create new conversation record with both Array and GSI support
+        // otherUserId is client-supplied, so verify both users exist and neither is
+        // already in a conversation before creating one. This prevents hijacking a user
+        // who is already chatting and prevents pointing at a non-existent user.
+        const [selfMetadata, otherMetadata] = await Promise.all([
+            dynamoDB.send(new GetCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${userId}` },
+                ConsistentRead: true
+            })),
+            dynamoDB.send(new GetCommand({
+                TableName: process.env.USER_METADATA_TABLE,
+                Key: { PK: `USER#${otherUserId}` },
+                ConsistentRead: true
+            }))
+        ]);
+
+        if (!selfMetadata.Item || !otherMetadata.Item) {
+            console.log('startConversation: One or both users do not exist');
+            const connectionId = event.requestContext.connectionId;
+            try {
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { error: 'User not found' }
+                    })
+                }));
+            } catch (error) {
+                console.error('startConversation: Error sending user-not-found error:', error);
+            }
+            return { statusCode: 200 };
+        }
+
+        if (selfMetadata.Item.chatId || otherMetadata.Item.chatId) {
+            console.log('startConversation: One or both users already in a conversation');
+            const connectionId = event.requestContext.connectionId;
+            try {
+                await apiGateway.send(new PostToConnectionCommand({
+                    ConnectionId: connectionId,
+                    Data: JSON.stringify({
+                        action: 'error',
+                        data: { error: 'User already in a conversation' }
+                    })
+                }));
+            } catch (error) {
+                console.error('startConversation: Error sending already-in-conversation error:', error);
+            }
+            return { statusCode: 200 };
+        }
+
+        // Create new conversation record with both Array and GSI support.
+        // attribute_not_exists(PK) guards against a duplicate/concurrent create.
         const conversationParams = {
             TableName: process.env.CONVERSATIONS_TABLE,
+            ConditionExpression: 'attribute_not_exists(PK)',
             Item: {
                 PK: `CHAT#${chatId}`,
                 chatId,
@@ -340,7 +420,27 @@ const handlerLogic = async (event) => {
             }
         };
 
-        await dynamoDB.send(new PutCommand(conversationParams));
+        try {
+            await dynamoDB.send(new PutCommand(conversationParams));
+        } catch (putError) {
+            if (putError.name === 'ConditionalCheckFailedException') {
+                console.log('startConversation: Conversation already exists for these users');
+                const connectionId = event.requestContext.connectionId;
+                try {
+                    await apiGateway.send(new PostToConnectionCommand({
+                        ConnectionId: connectionId,
+                        Data: JSON.stringify({
+                            action: 'error',
+                            data: { error: 'User already in a conversation' }
+                        })
+                    }));
+                } catch (error) {
+                    console.error('startConversation: Error sending conversation-exists error:', error);
+                }
+                return { statusCode: 200 };
+            }
+            throw putError;
+        }
 
         // Update both users' metadata for direct conversation creation
         await Promise.all([

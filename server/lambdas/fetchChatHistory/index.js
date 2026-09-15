@@ -49,7 +49,14 @@ const handlerLogic = async (event, context) => {
 
         // Extract parameters from the action/data structure
         const data = body.data || {};
-        const { chatId, limit = 20, lastEvaluatedKey } = data;
+        const { chatId, lastEvaluatedKey } = data;
+
+        // Sanitize client-supplied limit: integer, default 20 on NaN, clamped to [1, 100]
+        let limit = parseInt(data.limit, 10);
+        if (isNaN(limit)) {
+            limit = 20;
+        }
+        limit = Math.max(1, Math.min(100, limit));
 
         if (!chatId) {
             await apiGateway.send(new PostToConnectionCommand({

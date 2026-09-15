@@ -600,7 +600,9 @@ const handlerLogic = async (event) => {
                     content,
                     sentAt,
                     queued: !receiverMetadata.Item.connectionId
-                }
+                },
+                // Guard against overwriting an existing message with a duplicate client-supplied messageId
+                ConditionExpression: 'attribute_not_exists(SK)'
             };
 
             console.log('Storing message in DynamoDB with params:', JSON.stringify(messageParams, null, 2));
@@ -636,6 +638,18 @@ const handlerLogic = async (event) => {
                     errorCode: error.code,
                     errorName: error.name
                 });
+                // A failed attribute_not_exists(SK) condition means this messageId already exists.
+                if (error.name === 'ConditionalCheckFailedException') {
+                    console.log('Duplicate messageId detected, message already stored:', messageId);
+                    const requestId = extractRequestId(event);
+                    return createErrorResponse(409, 'Duplicate messageId', action, {
+                        operation: 'message_storage',
+                        resource: 'messages',
+                        tableName: process.env.MESSAGES_TABLE,
+                        messageId,
+                        chatId
+                    }, requestId);
+                }
                 return handleDynamoDBError(error, action, {
                     operation: 'message_storage',
                     resource: 'messages',

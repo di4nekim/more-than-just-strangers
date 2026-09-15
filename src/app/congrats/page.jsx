@@ -84,7 +84,7 @@ export default function Congrats() {
 
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-8">
         <div className="text-center">
-          <h3 className="text-4xl font-mono font-semibold text-teal mb-2">You've completed your</h3>
+          <h3 className="text-4xl font-mono font-semibold text-teal mb-2">You&apos;ve completed your</h3>
           <h4 className="text-4xl font-mono font-semibold text-teal mb-16">
             conversation with <span className="italic">{partnerName}.</span>
           </h4>

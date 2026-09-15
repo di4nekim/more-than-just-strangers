@@ -140,7 +140,7 @@ const FirebaseSignIn = memo(function FirebaseSignIn() {
         <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow-md">
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Welcome!</h2>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">You're signed in with Firebase Auth</p>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">You&apos;re signed in with Firebase Auth</p>
           </div>
           
           <div className="space-y-4">
@@ -235,7 +235,7 @@ const FirebaseSignIn = memo(function FirebaseSignIn() {
       <div className="relative z-10 h-full flex">
         <div className="w-1/2 flex items-center justify-center">
           <div className="text-left text-beige">
-            <div className="text-xl italic">let's be</div>
+            <div className="text-xl italic">let&apos;s be</div>
             <div className="text-5xl font-semibold">MORE THAN</div>
             <div className="text-5xl font-semibold">JUST STRANGERS</div>
           </div>

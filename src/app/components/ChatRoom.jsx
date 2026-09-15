@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect, useImperativeHandle, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation'; 
 import Image from 'next/image';
@@ -14,38 +14,53 @@ import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
 
 // Completely isolated input component with its own state management
-const IsolatedInput = memo(({ 
-  inputRef, 
+const IsolatedInput = memo(({
+  inputRef,
+  controlRef,
   onSendMessage,
-  placeholder, 
-  disabled, 
-  className 
+  placeholder,
+  disabled,
+  className
 }) => {
   const [localValue, setLocalValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  
+
   const handleChange = useCallback((e) => {
     setLocalValue(e.target.value);
   }, []);
-  
+
   const handleFocus = useCallback(() => {
     setIsFocused(true);
   }, []);
-  
+
   const handleBlur = useCallback(() => {
     setIsFocused(false);
   }, []);
-  
+
+  // Shared submit path for both the Enter key and the send button so they
+  // behave identically and clear the input through React state.
+  const handleSubmit = useCallback(() => {
+    if (localValue.trim() && !disabled) {
+      onSendMessage(localValue.trim());
+      setLocalValue('');
+    }
+  }, [localValue, disabled, onSendMessage]);
+
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (localValue.trim() && !disabled) {
-        onSendMessage(localValue.trim());
-        setLocalValue('');
-      }
+      handleSubmit();
     }
-  }, [localValue, disabled, onSendMessage]);
-  
+  }, [handleSubmit]);
+
+  // Expose an imperative API so the send button can submit/clear through the
+  // same React state the Enter key uses (the DOM-value sync effect below would
+  // otherwise re-assert stale text if we cleared the DOM node directly).
+  useImperativeHandle(controlRef, () => ({
+    submit: handleSubmit,
+    clear: () => setLocalValue(''),
+  }), [handleSubmit]);
+
   // Update ref value for external access
   useEffect(() => {
     if (inputRef.current) {
@@ -109,6 +124,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   const messageEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
+  const inputControlRef = useRef(null);
 
   const { chatId: encodedChatId } = useParams();
   const chatId = propChatId || (encodedChatId ? decodeURIComponent(Array.isArray(encodedChatId) ? encodedChatId[0] : encodedChatId) : '');
@@ -417,7 +433,12 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   useEffect(() => {
     if (hasNavigatedRef.current) return;
 
-    if (chatId && (conversationMetadata.endedBy || questionIndex === 36)) {
+    // Navigate to congrats only once the conversation has actually completed:
+    // an explicit end event (endedBy), or the final question (36) has been
+    // answered and advanced past (the backend increments to 37 when both users
+    // ready on Q36). Firing on `=== 36` navigated on ENTERING the last question,
+    // before it was answered.
+    if (chatId && (conversationMetadata.endedBy || questionIndex > 36)) {
       hasNavigatedRef.current = true;
       cleanup();
       navigateToCongrats();
@@ -654,22 +675,24 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
 
       {/* Left Navigation Bar */}
       <div className="w-16 border-r border-teal flex flex-col items-center py-4 pt-10 space-y-6 relative z-10 group">
-        <button className="text-teal hover:text-teal ">
+        <button className="text-teal hover:text-teal " aria-label="Menu">
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <button 
+        <button
           onClick={() => router.push('/home')}
-          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
+          aria-label="Go home"
+          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
           </svg>
         </button>
-        <button 
+        <button
           onClick={() => setShowEndDialog(true)}
-          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-all duration-200"
+          aria-label="End conversation"
+          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
         >
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -699,6 +722,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
                 }
               }}
               disabled={!isConnected}
+              aria-label="Refresh question"
               className="bg-transparent p-1 rounded-full transition-all duration-200 border-2 border-transparent hover:border-beige hover:text-beige text-beige"
               title="Refresh question (in case WebSocket messages failed)"
             >
@@ -714,6 +738,8 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
                   ? 'text-green-300 hover:border-beige hover:text-beige' 
                   : 'hover:border-beige hover:text-beige text-beige'
               }`}
+              aria-label={localReadyState ? 'Click to unready' : 'Ready for next question'}
+              aria-pressed={localReadyState}
               title={localReadyState ? 'Click to unready' : 'Ready for next question'}
             >
               {localReadyState ? (
@@ -809,6 +835,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
           <div className="relative">
             <IsolatedInput
               inputRef={inputRef}
+              controlRef={inputControlRef}
               onSendMessage={handleSendMessage}
               placeholder="TYPE YOUR REPLY HERE"
               disabled={!isConnected || isSendingMessage || !userProfile}
@@ -817,15 +844,12 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
             <button
               type="button"
               onClick={() => {
-                const message = inputRef.current?.value?.trim();
-                if (message) {
-                  handleSendMessage(message);
-                  if (inputRef.current) {
-                    inputRef.current.value = '';
-                  }
-                }
+                // Route through the same submit path as the Enter key so the
+                // input is cleared via React state and text can't be re-sent.
+                inputControlRef.current?.submit();
               }}
               disabled={!isConnected || isSendingMessage || !userProfile}
+              aria-label="Send message"
               className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-teal hover:bg-teal text-white p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -839,9 +863,14 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
       {/* Custom End Conversation Dialog */}
       {showEndDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-beige border-2 border-teal rounded-lg p-6 max-w-md mx-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="end-conversation-title"
+            className="bg-beige border-2 border-teal rounded-lg p-6 max-w-md mx-4"
+          >
             <div className="text-center">
-              <h3 className="text-teal font-bold text-lg mb-4 uppercase">
+              <h3 id="end-conversation-title" className="text-teal font-bold text-lg mb-4 uppercase">
                 End Conversation?
               </h3>
               <p className="text-teal mb-6 text-sm uppercase">

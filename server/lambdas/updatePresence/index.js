@@ -160,11 +160,11 @@ const handlerLogic = async (event) => {
 
     const action = extractAction(event);
     const requestId = extractRequestId(event);
-    return createSuccessResponse('Presence updated successfully', action, {
+    return createSuccessResponse(200, {
       userId,
       status: payload.status,
       timestamp
-    }, requestId);
+    }, action, requestId);
   } catch (error) {
     console.error('updatePresence: Error updating presence:', error);
     const action = extractAction(event);
