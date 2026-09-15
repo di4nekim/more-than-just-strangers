@@ -28,12 +28,15 @@ export default {
     '!server/lambdas/.aws-sam/**/*',
     '!server/.aws-sam/**/*'
   ],
+  // Ratcheting gate: set just below the measured coverage so CI fails on a
+  // regression, and raised as coverage grows. The previous 70% was aspirational
+  // (never met, never enforced). Measured 2026-09-15: ~31% stmts / ~35% lines.
   coverageThreshold: {
     global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
+      branches: 20,
+      functions: 24,
+      lines: 33,
+      statements: 29,
     },
   },
   testMatch: [

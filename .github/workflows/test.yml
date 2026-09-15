@@ -1,0 +1,31 @@
+name: Test
+
+on:
+  push:
+    branches: [main, frontend-prod-deployment]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npx eslint src
+
+      # Unit suites only; the live-infrastructure suites are gated behind
+      # ENABLE_INTEGRATION_TESTS and skip here. Coverage is enforced by the
+      # ratcheting threshold in jest.config.js.
+      - name: Test with coverage gate
+        run: npx jest --ci --coverage --maxWorkers=2 --forceExit
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096

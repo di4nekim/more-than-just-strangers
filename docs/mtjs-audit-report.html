@@ -221,22 +221,22 @@
 
     <div class="verdict ok">
       <span class="flag">Blockers cleared</span>
-      <p>All five ship blockers are fixed and pushed, the test suite is green (256 passing, 0 failing), and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
+      <p>All five ship blockers are fixed and pushed, the test suite is green (304 passing, 0 failing) with a coverage gate enforced in CI, and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
     </div>
   </header>
 
   <div class="cards">
     <div class="card"><div class="k">Overall health</div><div class="v warn">Stabilizing</div><div class="note">Was “Fragile” — blockers cleared, hardening left</div></div>
     <div class="card"><div class="k">Prod readiness</div><div class="v ok">Unblocked</div><div class="note">5 of 5 blockers fixed · rotate credentials</div></div>
-    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">256 / 256 runnable · 19 of 19 suites · was 68%</div></div>
-    <div class="card"><div class="k">Real coverage</div><div class="v warn">~31%</div><div class="note">Was ~13.5% · 70% threshold still unmet</div></div>
+    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">304 / 304 runnable · 24 of 24 suites · was 68%</div></div>
+    <div class="card"><div class="k">Real coverage</div><div class="v warn">~36%</div><div class="note">Was ~13.5% · ratcheting gate enforced in CI</div></div>
   </div>
 
   <section>
     <div class="sec-head"><span class="sec-num">01</span><h2>Where it's at</h2></div>
     <p class="lede">This is best read as an <b>advanced prototype with real cloud infrastructure</b>, not a shippable product. The full journey — land → sign in → matchmake → 36-question chat → congrats — is wired up, and there are genuinely thoughtful touches: specific Firebase auth error messages, an IO-error recovery screen, confirm-before-end dialogs, and reconnection handling.</p>
     <p class="lede">But it sits on a codebase that has <b>accreted heavily</b>. The data/auth layer has concrete correctness and authorization defects, the UI still ships hardcoded placeholder identities, and the safety nets meant to catch this — TypeScript and the test suite — are themselves compromised. The single most urgent item isn't a code bug: <b>live production credentials sit in cleartext on disk</b> and should be treated as compromised and rotated now.</p>
-    <p class="lede"><b>Update, 2026-09-15.</b> Since the audit: all five blockers were fixed, the backend races and presence bugs were closed with conditional writes, the frontend data-flow bugs were repaired, CORS/CSP were tightened, and the test suite was rebuilt so it exercises the real code — <b>256 tests passing, 0 failing</b>, up from 156 / 73. Everything below carries a status chip. Credential rotation is being handled outside this report.</p>
+    <p class="lede"><b>Update, 2026-09-15.</b> Since the audit: all five blockers were fixed, the backend races and presence bugs were closed with conditional writes, the frontend data-flow bugs were repaired, CORS/CSP were tightened, and the test suite was rebuilt so it exercises the real code — <b>304 tests passing, 0 failing</b>, up from 156 / 73, with every lambda, the messages route and the deploy manifest under test and a coverage gate in CI. Everything below carries a status chip. Credential rotation is being handled outside this report.</p>
   </section>
 
   <section>
@@ -285,17 +285,19 @@
     <div class="sec-head"><span class="sec-num">03</span><h2>Test results</h2><span class="count">after remediation · 2026-09-15</span></div>
     <div class="test-grid">
       <div class="panel">
-        <h3>Runnable tests — 256 total</h3>
+        <h3>Runnable tests — 304 total</h3>
         <div class="bar">
-          <span class="pass" style="width:100%">256 pass · 0 fail</span>
+          <span class="pass" style="width:100%">304 pass · 0 fail</span>
         </div>
-        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>15.0s wall</span></div>
+        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>16.2s wall</span></div>
         <div style="margin-top:16px">
-          <div class="kv"><span>Suites passing</span><span class="n ok">19 of 19</span></div>
+          <div class="kv"><span>Suites passing</span><span class="n ok">24 of 24</span></div>
           <div class="kv"><span>Suites gated (skip without infra)</span><span class="n">2</span></div>
           <div class="kv"><span>Obsolete suites removed</span><span class="n">5</span></div>
-          <div class="kv"><span>New v3-mocked lambda suites</span><span class="n ok">7</span></div>
-          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">30.9% / 35.4%</span></div>
+          <div class="kv"><span>v3-mocked lambda suites (all 10 lambdas)</span><span class="n ok">10</span></div>
+          <div class="kv"><span>Real-handler API route suite · deploy smoke test</span><span class="n ok">✓ · ✓</span></div>
+          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">36.2% / 41.5%</span></div>
+          <div class="kv"><span>Coverage gate</span><span class="n ok">ratchet (29 / 20 / 24 / 33) in CI</span></div>
         </div>
       </div>
       <div class="panel">
@@ -303,7 +305,7 @@
         <div class="buckets">
           <div class="bucket"><span class="c env">was</span><span>156 pass / 73 fail across 23 suites at ~13.5% coverage — and the green suites mocked <span class="mono">fetch</span> and asserted their own canned data.</span></div>
           <div class="bucket"><span class="c env">infra</span><span>Lambdas get default env at test time so handlers can be required; token verification is mocked at the <span class="mono">firebase-config</span> boundary that <span class="mono">shared/auth</span> really calls.</span></div>
-          <div class="bucket"><span class="c env">lambdas</span><span>endConversation 100%, onConnect 96%, getCurrentState 88%, startConversation 86%, fetchChatHistory 79% line coverage; setReady and sendMessage covered by routed-mock suites that lock in the security fixes.</span></div>
+          <div class="bucket"><span class="c env">lambdas</span><span>All ten lambdas have routed-mock unit suites at their real contracts: endConversation 100%, onConnect 96%, updatePresence 90%, getCurrentState 88%, onDisconnect 86%, startConversation 86%, syncConversation 81%, fetchChatHistory 79% line coverage; setReady and sendMessage lock in the race guards and the 403/409 paths. A smoke test asserts every <span class="mono">template.yaml</span> handler resolves to an exported function.</span></div>
           <div class="bucket"><span class="c env">frontend</span><span>WebSocketContext rewritten against its real seams with stable mocks (fresh mock objects per render re-fired effects until the heap ran out); ChatRoom and FirebaseAuthProvider mocks now target the modules the code actually uses.</span></div>
         </div>
       </div>
@@ -323,7 +325,7 @@
       </tbody>
     </table>
     </div>
-    <p class="lede" style="margin-top:14px">Net: only two of the four originally gated suites were real integration tests waiting for infrastructure; the other two were dead tests hiding behind a skip, so they were replaced or removed rather than kept. Remaining gaps: <span class="mono">onDisconnect</span>, <span class="mono">syncConversation</span> and <span class="mono">updatePresence</span> still have no unit coverage, the Next.js API routes are still exercised only through canned-data mocks, and the 70% coverage threshold is not enforced in CI.</p>
+    <p class="lede" style="margin-top:14px">Net: only two of the four originally gated suites were real integration tests waiting for infrastructure; the other two were dead tests hiding behind a skip, so they were replaced or removed rather than kept. The gaps that audit surfaced were then closed: <span class="mono">onDisconnect</span>, <span class="mono">syncConversation</span> and <span class="mono">updatePresence</span> gained unit suites (0% → 81–90%), <span class="mono">/api/chat/[chatId]/messages</span> is now tested through its real handler (401/403/404, pagination, limit clamp — 91%), and a ratcheting coverage threshold runs in GitHub Actions. What remains untested at the real-handler level is the rest of the Next.js API routes, which the older canned-mock suites still cover only nominally.</p>
   </section>
 
   <section>
@@ -377,18 +379,18 @@
   </section>
 
   <section>
-    <div class="sec-head"><span class="sec-num">06</span><h2>Test plan</h2><span class="count">4 done · 1 partial · 3 open</span></div>
+    <div class="sec-head"><span class="sec-num">06</span><h2>Test plan</h2><span class="count">7 done · 2 partial · 0 open</span></div>
     <p class="lede" style="margin-bottom:18px">What a comprehensive suite should add — designed to lock in the fixes above rather than mock around them — and where it stands:</p>
     <ol class="plan">
-      <li><span class="sev open">open</span> Rewrite API-route tests to <b>import and invoke the real Next.js handlers</b> (mock only DynamoDB/Firebase Admin at the SDK boundary); add a 403-for-non-participant test on <span class="mono">/api/chat/[chatId]/messages</span> to lock in the IDOR fix.</li>
-      <li><span class="sev open">open</span> Add a <b>deploy smoke test</b> that loads <span class="mono">template.yaml</span> and asserts every <span class="mono">Handler:</span> path resolves to an exported function (would have caught endConversation).</li>
-      <li><span class="sev open">open</span> Add lambda tests for the three still-untested handlers: <span class="mono">onDisconnect</span> (cleanup from a body-less $disconnect, keyed on connectionId), <span class="mono">syncConversation</span> (auth + participant check), <span class="mono">updatePresence</span> (numeric 200 + shape).</li>
+      <li><span class="sev partial">partial</span> API-route tests that <b>import and invoke the real Next.js handlers</b>: done for <span class="mono">/api/chat/[chatId]/messages</span> (401/403 non-participant, 404, pagination, limit clamp, POST 405); the remaining routes are still covered only by the older canned-mock suites.</li>
+      <li><span class="sev fixed">done</span> <b>Deploy smoke test</b>: loads <span class="mono">template.yaml</span> and asserts all 10 <span class="mono">Handler:</span> paths resolve to an exported function (would have caught endConversation).</li>
+      <li><span class="sev fixed">done</span> Lambda tests for <span class="mono">onDisconnect</span> (body-less $disconnect resolved via the connectionId index, Scan fallback, legacy body path), <span class="mono">syncConversation</span> (auth + participant 403) and <span class="mono">updatePresence</span> (real 200 + shape, participant 403, notification).</li>
       <li><span class="sev fixed">done</span> <span class="mono">sendMessage</span> authorization tests: non-participant rejected (403); a duplicate messageId can't overwrite an existing message (409).</li>
       <li><span class="sev partial">partial</span> Race guards are asserted directly (conditional queue claim, create-once Put, guarded ADD on questionIndex, concurrent-toggle backoff) — true parallel-invocation tests would need a DynamoDB-backed harness.</li>
       <li><span class="sev fixed">done</span> WebSocketContext: exactly one live <span class="mono">'error'</span> handler; a server error rejects matchmaking promptly; <span class="mono">conversationMetadata</span> populates after conversationStarted.</li>
-      <li><span class="sev fixed">done</span> ChatRoom send button clears the input; <span class="mono">fetchChatHistory</span> limit clamping (NaN → 20, 0 → 1, 500 → 100) — the HTTP messages route's clamp is still untested (see item 1).</li>
+      <li><span class="sev fixed">done</span> ChatRoom send button clears the input; limit clamping tested in both <span class="mono">fetchChatHistory</span> (NaN → 20, 0 → 1, 500 → 100) and the HTTP messages route (NaN → 50, 0 → 1, 100000 → 100).</li>
       <li><span class="sev fixed">done</span> Also added: <span class="mono">onConnect</span>, <span class="mono">setReady</span>, <span class="mono">startConversation</span>, <span class="mono">getCurrentState</span> and <span class="mono">endConversation</span> unit suites at the real handler contracts.</li>
-      <li><span class="sev open">open</span> Wire <span class="mono">jest --coverage</span> into CI with a real (or ratcheting) threshold, so coverage claims are actually gated.</li>
+      <li><span class="sev fixed">done</span> <span class="mono">jest --coverage</span> runs in GitHub Actions (<span class="mono">.github/workflows/test.yml</span>) behind a ratcheting threshold set just under the measured coverage; raise it as coverage grows.</li>
     </ol>
   </section>
 
