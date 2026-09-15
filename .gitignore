@@ -20,3 +20,7 @@ test.env.example
 
 # Lambda build artifacts
 **/dist/
+# Firebase / service-account keys
+*-adminsdk-*.json
+*firebase*key*.json
+serviceAccount*.json
