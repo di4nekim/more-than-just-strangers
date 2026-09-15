@@ -20,6 +20,26 @@ const {
 //   ENABLE_INTEGRATION_TESTS=true jest server/lambdas/endConversation
 const describeIntegration = process.env.ENABLE_INTEGRATION_TESTS === 'true' ? describe : describe.skip;
 
+// The handler authenticates every call, so a real Firebase ID token is required;
+// its user becomes participant 1 of the seeded conversation:
+//   FIREBASE_TEST_ID_TOKEN=<id token> ENABLE_INTEGRATION_TESTS=true jest server/lambdas/endConversation
+const TEST_ID_TOKEN = process.env.FIREBASE_TEST_ID_TOKEN || '';
+const tokenUid = (() => {
+    try {
+        const claims = JSON.parse(Buffer.from(TEST_ID_TOKEN.split('.')[1], 'base64').toString('utf8'));
+        return claims.user_id || claims.sub || null;
+    } catch (error) {
+        return null;
+    }
+})();
+
+// Mirrors what API Gateway delivers: the token in the query string, chatId at the body root.
+const authedEvent = (body) => ({
+    requestContext: { connectionId: 'e2e-connection', requestId: 'e2e-request' },
+    queryStringParameters: { token: TEST_ID_TOKEN },
+    body: JSON.stringify(body)
+});
+
 describeIntegration('endConversation E2E Integration Test', () => {
     let testChatId;
     let testUserId1;
@@ -37,7 +57,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
         
         // Setup test data
         testChatId = 'e2e-test-chat-' + Date.now();
-        testUserId1 = 'e2e-user-1-' + Date.now();
+        testUserId1 = tokenUid || 'e2e-user-1-' + Date.now();
         testUserId2 = 'e2e-user-2-' + Date.now();
         
         testData = {
@@ -60,15 +80,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Happy Path - End Conversation Successfully', () => {
         test('should end conversation and update DynamoDB', async () => {
-            const event = {
-                body: JSON.stringify({
-                    data: {
-                        chatId: testChatId,
-                        userId: testUserId1,
-                        reason: 'user_ended'
-                    }
-                })
-            };
+            const event = authedEvent({ action: 'endConversation', chatId: testChatId, reason: 'user_ended' });
 
             const result = await endConversationHandler(event);
 
@@ -84,53 +96,30 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Error Cases', () => {
         test('should return 400 for missing chatId', async () => {
-            const event = {
-                body: JSON.stringify({
-                    data: {
-                        userId: testUserId1,
-                        reason: 'user_ended'
-                    }
-                })
-            };
+            const event = authedEvent({ action: 'endConversation', reason: 'user_ended' });
 
             const result = await endConversationHandler(event);
 
             expect(result.statusCode).toBe(400);
-            
+
             const responseBody = JSON.parse(result.body);
             expect(responseBody.action).toBe('error');
-            expect(responseBody.data.error).toBe('Missing chatId or userId');
+            expect(responseBody.data.error).toBe('Missing chatId');
         });
 
-        test('should return 400 for missing userId', async () => {
+        test('should return 401 for an unauthenticated request', async () => {
             const event = {
-                body: JSON.stringify({
-                    data: {
-                        chatId: testChatId,
-                        reason: 'user_ended'
-                    }
-                })
+                requestContext: { connectionId: 'e2e-connection' },
+                body: JSON.stringify({ action: 'endConversation', chatId: testChatId, reason: 'user_ended' })
             };
 
             const result = await endConversationHandler(event);
 
-            expect(result.statusCode).toBe(400);
-            
-            const responseBody = JSON.parse(result.body);
-            expect(responseBody.action).toBe('error');
-            expect(responseBody.data.error).toBe('Missing chatId or userId');
+            expect(result.statusCode).toBe(401);
         });
 
         test('should return 404 for non-existent conversation', async () => {
-            const event = {
-                body: JSON.stringify({
-                    data: {
-                        chatId: 'non-existent-chat',
-                        userId: testUserId1,
-                        reason: 'user_ended'
-                    }
-                })
-            };
+            const event = authedEvent({ action: 'endConversation', chatId: 'non-existent-chat', reason: 'user_ended' });
 
             const result = await endConversationHandler(event);
 
@@ -144,15 +133,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Data Validation', () => {
         test('should properly format timestamp', async () => {
-            const event = {
-                body: JSON.stringify({
-                    data: {
-                        chatId: testChatId,
-                        userId: testUserId1,
-                        reason: 'test_end'
-                    }
-                })
-            };
+            const event = authedEvent({ action: 'endConversation', chatId: testChatId, reason: 'test_end' });
 
             const result = await endConversationHandler(event);
             

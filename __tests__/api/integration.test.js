@@ -23,8 +23,10 @@ describeIntegration('API Integration Tests', () => {
   beforeAll(() => {
     // jest.setup replaces global.fetch with a mock; these tests need the real one.
     if (global.__nativeFetch) global.fetch = global.__nativeFetch;
-    // Create a test JWT token
-    testToken = createFirebaseTestJWT({
+    // The API verifies tokens with firebase-admin, which only accepts real Firebase
+    // ID tokens — supply one via FIREBASE_TEST_ID_TOKEN. The locally-signed JWT is
+    // kept only as a fallback so the negative (invalid-token) cases still exercise.
+    testToken = process.env.FIREBASE_TEST_ID_TOKEN || createFirebaseTestJWT({
       uid: 'integration-test-user-123',
       email: 'integration-test@example.com',
       displayName: 'Integration Test User'

@@ -174,9 +174,10 @@ module.exports.handler = async (event, context) => {
                     Data: JSON.stringify({
                         action: 'error',
                         data: { 
-                            error: error.message === 'JWT_TOKEN_MISSING' 
-                                ? 'Authentication required. JWT token missing.' 
-                                : 'Invalid or expired JWT token'
+                            // shared/auth throws FIREBASE_TOKEN_*; the legacy JWT_* code is kept for compatibility.
+                            error: ['FIREBASE_TOKEN_MISSING', 'JWT_TOKEN_MISSING'].includes(error.message)
+                                ? 'Authentication required. Firebase ID token missing.'
+                                : 'Invalid or expired Firebase ID token'
                         }
                     })
                 }));
