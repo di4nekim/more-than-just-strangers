@@ -2,8 +2,9 @@ const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent, redactBody } = require("../shared/logging");
 
-const { 
+const {
     createErrorResponse, 
     createSuccessResponse, 
     extractAction, 
@@ -23,7 +24,7 @@ const dynamoDB = DynamoDBDocumentClient.from(dynamoDbClient);
 // Main handler logic
 const handlerLogic = async (event) => {
   console.log('updatePresence: Function started');
-  console.log('updatePresence: Event received:', JSON.stringify(event, null, 2));
+  console.log('updatePresence: Event received:', JSON.stringify(redactEvent(event), null, 2));
   
   try {
     // Get authenticated user info
@@ -34,7 +35,7 @@ const handlerLogic = async (event) => {
     const body = JSON.parse(event.body || '{}');
     const payload = body.data || {};
 
-    console.log('updatePresence: Parsed payload:', payload);
+    console.log('updatePresence: Parsed payload:', redactBody(payload));
 
     // Validate required fields
     if (!payload.chatId || !payload.status) {

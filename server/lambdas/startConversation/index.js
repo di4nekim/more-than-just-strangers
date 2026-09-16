@@ -1,9 +1,10 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
+const { redactEvent } = require("../shared/logging");
 
 
-const { 
+const {
     createErrorResponse, 
     createSuccessResponse, 
     extractAction, 
@@ -30,7 +31,7 @@ const apiGateway = new ApiGatewayManagementApiClient({
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('startConversation: Function started');
-    console.log('startConversation: Event received:', JSON.stringify(event, null, 2));
+    console.log('startConversation: Event received:', JSON.stringify(redactEvent(event), null, 2));
     
     // Log environment variables for debugging
     console.log('Environment variables:');

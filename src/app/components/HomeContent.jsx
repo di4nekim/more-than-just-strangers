@@ -8,6 +8,11 @@ import { useWebSocket } from '../../websocket/WebSocketContext';
 import { apiClient } from '../lib/api-client';
 import HOME_BG from '../../../public/HOME_BG.svg';
 
+// How long to wait before telling the user the search is taking a while. This is a
+// SOFT timeout: the search keeps running, the user just gets an explicit choice
+// between cancelling and carrying on waiting.
+const MATCHMAKING_SOFT_TIMEOUT_MS = 60000;
+
 export default function HomeContent() {
   const router = useRouter();
   
@@ -23,6 +28,7 @@ export default function HomeContent() {
     isConnected: wsConnected,
     initializeUser,
     startNewChat,
+    cancelMatchmaking,
     endChat,
     initState,
     wsActions, // Added wsActions to the hook
@@ -41,6 +47,8 @@ export default function HomeContent() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [partnerName, setPartnerName] = useState("Anonymous");
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [matchmakingTakingLong, setMatchmakingTakingLong] = useState(false);
+  const [keepWaitingAt, setKeepWaitingAt] = useState(0);
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -155,6 +163,22 @@ export default function HomeContent() {
     }
   }, [userMetadata.chatId, hasActiveChat, userMetadata.connectionId, userMetadata.ready]);
 
+  // Soft timeout while searching: after a while, say so and let the user choose
+  // between cancelling and waiting longer. The search itself is never cancelled here.
+  useEffect(() => {
+    if (!isInMatchmakingQueue) {
+      setMatchmakingTakingLong(false);
+      return;
+    }
+
+    setMatchmakingTakingLong(false);
+    const timeoutId = setTimeout(() => {
+      setMatchmakingTakingLong(true);
+    }, MATCHMAKING_SOFT_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [isInMatchmakingQueue, keepWaitingAt]);
+
   // Update partner name when conversation metadata changes
   useEffect(() => {
     const updatePartnerName = async () => {
@@ -238,8 +262,14 @@ export default function HomeContent() {
         throw new Error('Failed to start matchmaking process');
       }
     } catch (error) {
+      // A cancellation is a user action, not a failure: cancelMatchmaking has already
+      // reset the queue state, so don't surface an error for it.
+      if (error.message && error.message.includes('Matchmaking cancelled')) {
+        return;
+      }
+
       console.error('Failed to start matchmaking:', error);
-      
+
       // Check if the error is about user already being in a conversation
       if (error.message && error.message.includes('already in a conversation')) {
         setError('You already have an active conversation. Please end your current conversation before starting a new one.');
@@ -254,22 +284,33 @@ export default function HomeContent() {
     try {
 //       // console.log('Leaving matchmaking queue...');
       setError(null);
-      
-      if (wsActions) {
-        try {
+
+      // cancelMatchmaking leaves the queue AND clears any pending startNewChat();
+      // fall back to the raw action if the context doesn't expose it.
+      try {
+        if (typeof cancelMatchmaking === 'function') {
+          await cancelMatchmaking();
+        } else if (wsActions) {
           await wsActions.setReady({ ready: false });
-        } catch (error) {
-//           // console.warn('Failed to remove from matchmaking queue:', error);
         }
+      } catch (error) {
+//           // console.warn('Failed to remove from matchmaking queue:', error);
       }
-      
+
       setIsInMatchmakingQueue(false);
-      
+      setMatchmakingTakingLong(false);
+
 //       // console.log('Successfully left matchmaking queue');
     } catch (error) {
       console.error('Failed to leave matchmaking queue:', error);
       setError('Failed to leave matchmaking queue. Please try again.');
     }
+  };
+
+  const handleKeepWaiting = () => {
+    // Hide the notice and restart the soft-timeout clock; the search never stopped.
+    setMatchmakingTakingLong(false);
+    setKeepWaitingAt(Date.now());
   };
 
   const handleToggleMatchmaking = async () => {
@@ -476,6 +517,34 @@ export default function HomeContent() {
             <div className="mb-6 mt-4 text-center text-teal text-lg">
               {getCurrentStatus()}
             </div>
+
+            {/* Matchmaking controls - the search can always be abandoned, and after
+                the soft timeout the user is told it's still running. */}
+            {isInMatchmakingQueue && (
+              <div className="mb-6 space-y-3">
+                {matchmakingTakingLong && (
+                  <p className="text-teal text-sm uppercase">
+                    Still looking. This is taking longer than usual — you can keep waiting or cancel the search.
+                  </p>
+                )}
+                <div className="flex space-x-4 justify-center">
+                  <button
+                    onClick={handleLeaveMatchmakingQueue}
+                    className="px-4 py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"
+                  >
+                    Cancel Search
+                  </button>
+                  {matchmakingTakingLong && (
+                    <button
+                      onClick={handleKeepWaiting}
+                      className="px-4 py-2 bg-teal text-beige rounded hover:bg-opacity-80 transition-colors uppercase"
+                    >
+                      Keep Waiting
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="space-y-4">

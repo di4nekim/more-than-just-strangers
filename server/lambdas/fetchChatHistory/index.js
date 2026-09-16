@@ -2,6 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent } = require("../shared/logging");
 
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
@@ -27,7 +28,7 @@ const handlerLogic = async (event, context) => {
     console.log('Authenticated user requesting chat history:', userId);
     
     try {
-        console.log('Event:', JSON.stringify(event, null, 2));
+        console.log('Event:', JSON.stringify(redactEvent(event), null, 2));
         
         // Parse the WebSocket message body
         let body;

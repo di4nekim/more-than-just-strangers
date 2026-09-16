@@ -8,6 +8,7 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, UpdateCommand, DeleteCommand, GetCommand, QueryCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent, redactBody, redactString } = require("../shared/logging");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { 
     createErrorResponse, 
@@ -44,12 +45,12 @@ try {
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('setReady: Function started');
-    console.log('setReady: Event received:', JSON.stringify(event, null, 2));
-    console.log('setReady: Event body:', event.body);
+    console.log('setReady: Event received:', JSON.stringify(redactEvent(event), null, 2));
+    console.log('setReady: Event body:', redactString(event.body));
     console.log('setReady: Event body type:', typeof event.body);
-    console.log('setReady: Event requestContext:', event.requestContext);
-    console.log('setReady: Event headers:', event.headers);
-    console.log('setReady: Event queryStringParameters:', event.queryStringParameters);
+    console.log('setReady: Event requestContext:', redactBody(event.requestContext));
+    console.log('setReady: Event headers:', redactBody(event.headers));
+    console.log('setReady: Event queryStringParameters:', redactBody(event.queryStringParameters));
     
     // Get authenticated user info
     const { userId } = event.userInfo;
@@ -60,9 +61,9 @@ const handlerLogic = async (event) => {
         let payload;
         try {
             payload = JSON.parse(event.body);
-            console.log('setReady: Parsed payload:', JSON.stringify(payload, null, 2));
+            console.log('setReady: Parsed payload:', JSON.stringify(redactBody(payload), null, 2));
             console.log('setReady: Payload keys:', Object.keys(payload));
-            console.log('setReady: Payload.data:', payload.data);
+            console.log('setReady: Payload.data:', redactBody(payload.data));
             console.log('setReady: Payload.data keys:', payload.data ? Object.keys(payload.data) : 'No data field');
         } catch (error) {
             const action = extractAction(event);
@@ -77,7 +78,7 @@ const handlerLogic = async (event) => {
         const { ready } = payload.data || payload;
         if (typeof ready !== 'boolean') {
             console.log('setReady: Invalid ready value:', ready);
-            console.log('setReady: Full payload:', JSON.stringify(payload, null, 2));
+            console.log('setReady: Full payload:', JSON.stringify(redactBody(payload), null, 2));
             const action = extractAction(event);
             const requestId = extractRequestId(event);
             return createErrorResponse(400, 'Invalid ready value. Must be a boolean.', action, {
@@ -85,7 +86,7 @@ const handlerLogic = async (event) => {
                 requiredField: 'ready',
                 providedValue: ready,
                 expectedType: 'boolean',
-                payloadStructure: payload
+                payloadStructure: redactBody(payload)
             }, requestId);
         }
 

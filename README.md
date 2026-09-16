@@ -2,7 +2,7 @@
 
 **A scalable real-time chat application implementing the "36 Questions for Falling in Love" experiment through modern cloud-native architecture.**
 
-[![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#) [![Test Coverage](https://img.shields.io/badge/Coverage-70%25+-brightgreen.svg)](#) [![AWS](https://img.shields.io/badge/AWS-Deployed-orange.svg)](#)
+[![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#) [![Tests](https://img.shields.io/badge/Tests-325%20passing-brightgreen.svg)](#) [![AWS](https://img.shields.io/badge/AWS-Deployed-orange.svg)](#)
 
 ## Project Overview
 
@@ -78,16 +78,16 @@ AWS Serverless Architecture
 
 ### Development & Testing
 
-- **Testing**: Jest + React Testing Library (70%+ coverage)
+- **Testing**: Jest + React Testing Library (325 unit tests, coverage gated in CI)
 - **Test Types**: Unit, Integration, E2E, API, WebSocket
 - **Code Quality**: ESLint, comprehensive test suites
 - **Development**: Hot reloading, environment-specific configs
 
 ## Project Metrics
 
-- **9 Lambda Functions** with optimized performance and error handling
+- **10 Lambda Functions** with optimized performance and error handling
 - **4 DynamoDB Tables** with efficient data access patterns
-- **70%+ Test Coverage** across unit, integration, and E2E tests
+- **325 unit tests across 25 suites**, every Lambda and the deploy manifest covered; ~38% statement / ~43% line coverage, gated in CI by a ratcheting threshold
 - **Sub-100ms Latency** for real-time message delivery
 - **Scalable Architecture** supporting concurrent users through serverless design
 - **Environment Management** with dev/staging/prod deployment pipelines
@@ -106,15 +106,19 @@ AWS Serverless Architecture
 └── Lambda Tests (serverless function validation)
 
 # Test Commands
-npm run test:coverage        # Full coverage report
-npm run test:integration     # Integration test suite
-npm run test:auth           # Authentication flows
-npm run test:websocket      # Real-time communication
+npm test                     # Full unit suite (live-infrastructure suites skip)
+npm run test:coverage        # Same, with the coverage gate from jest.config.js
+npm run test:unit            # Everything except integration / e2e
+npm run test:lambda          # Lambda handler suites only
+
+# Live-infrastructure suites (deployed AWS tables, a running dev server)
+ENABLE_INTEGRATION_TESTS=true FIREBASE_TEST_ID_TOKEN=<id token> \
+  npx jest server/lambdas/endConversation __tests__/api/integration
 ```
 
 ### Quality Metrics
 
-- **70% minimum coverage** threshold enforced
+- **Coverage gate enforced in CI** (`.github/workflows/test.yml`): a ratcheting threshold in `jest.config.js`, set just under measured coverage and raised as coverage grows
 - **Automated test categorization** with dedicated test runner
 - **Mock implementations** for external services (Firebase, WebSocket)
 - **Error scenario testing** for robust error handling
@@ -135,8 +139,8 @@ git clone <repository>
 cd more-than-just-strangers
 npm install
 
-# Environment setup
-npm run setup:env
+# Environment setup (fill in the values; never commit real secrets)
+cp .env.example .env.local
 
 # Development server
 npm run dev
@@ -190,7 +194,7 @@ sam build && sam deploy
 
 3. **Database Optimization**: Created efficient DynamoDB data models with GSIs for complex query patterns
 
-4. **Test-Driven Development**: Achieved 70%+ test coverage with comprehensive test categorization and automation
+4. **Tested at the real contracts**: 325 unit tests that invoke the actual handlers with AWS SDK v3 mocked at the command boundary, a deploy smoke test over `template.yaml`, and a coverage gate in CI
 
 5. **Infrastructure as Code**: Built complete AWS infrastructure using SAM with environment parameterization
 

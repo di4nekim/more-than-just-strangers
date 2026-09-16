@@ -80,7 +80,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Happy Path - End Conversation Successfully', () => {
         test('should end conversation and update DynamoDB', async () => {
-            const event = authedEvent({ action: 'endConversation', chatId: testChatId, reason: 'user_ended' });
+            const event = authedEvent({ action: 'endConversation', data: { chatId: testChatId, endReason: 'user_ended' } });
 
             const result = await endConversationHandler(event);
 
@@ -96,7 +96,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Error Cases', () => {
         test('should return 400 for missing chatId', async () => {
-            const event = authedEvent({ action: 'endConversation', reason: 'user_ended' });
+            const event = authedEvent({ action: 'endConversation', data: { endReason: 'user_ended' } });
 
             const result = await endConversationHandler(event);
 
@@ -110,7 +110,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
         test('should return 401 for an unauthenticated request', async () => {
             const event = {
                 requestContext: { connectionId: 'e2e-connection' },
-                body: JSON.stringify({ action: 'endConversation', chatId: testChatId, reason: 'user_ended' })
+                body: JSON.stringify({ action: 'endConversation', data: { chatId: testChatId, endReason: 'user_ended' } })
             };
 
             const result = await endConversationHandler(event);
@@ -119,7 +119,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
         });
 
         test('should return 404 for non-existent conversation', async () => {
-            const event = authedEvent({ action: 'endConversation', chatId: 'non-existent-chat', reason: 'user_ended' });
+            const event = authedEvent({ action: 'endConversation', data: { chatId: 'non-existent-chat', endReason: 'user_ended' } });
 
             const result = await endConversationHandler(event);
 
@@ -133,7 +133,7 @@ describeIntegration('endConversation E2E Integration Test', () => {
 
     describe('Data Validation', () => {
         test('should properly format timestamp', async () => {
-            const event = authedEvent({ action: 'endConversation', chatId: testChatId, reason: 'test_end' });
+            const event = authedEvent({ action: 'endConversation', data: { chatId: testChatId, endReason: 'test_end' } });
 
             const result = await endConversationHandler(event);
             

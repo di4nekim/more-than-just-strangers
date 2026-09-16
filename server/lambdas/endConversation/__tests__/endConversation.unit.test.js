@@ -36,6 +36,8 @@ const makeEvent = (body) => ({
     requestContext: { connectionId: 'conn-a', requestId: 'req-1' },
     body: typeof body === 'string' ? body : JSON.stringify(body)
 });
+// The shape the client actually sends: { action, data: { chatId, endReason } }.
+const endEvent = (data) => makeEvent({ action: 'endConversation', data });
 
 const conversationItem = (overrides = {}) => ({
     PK: `CHAT#${CHAT_ID}`,
@@ -86,7 +88,7 @@ describe('endConversation lambda', () => {
         test('returns 401 when the Firebase token is missing', async () => {
             mockAuthenticate.mockRejectedValue(new Error('FIREBASE_TOKEN_MISSING'));
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(401);
             expect(parseBody(response).error).toMatch(/Authentication required/);
@@ -96,7 +98,7 @@ describe('endConversation lambda', () => {
         test('returns 401 when the Firebase token is invalid', async () => {
             mockAuthenticate.mockRejectedValue(new Error('FIREBASE_TOKEN_INVALID'));
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(401);
             expect(parseBody(response).error).toMatch(/Invalid or expired/);
@@ -105,7 +107,7 @@ describe('endConversation lambda', () => {
         test('returns 500 on an unexpected authentication failure', async () => {
             mockAuthenticate.mockRejectedValue(new Error('boom'));
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(500);
         });
@@ -120,7 +122,7 @@ describe('endConversation lambda', () => {
         });
 
         test('returns 400 when chatId is missing', async () => {
-            const response = await handler(makeEvent({ action: 'endConversation' }));
+            const response = await handler(endEvent({ endReason: 'done' }));
 
             expect(response.statusCode).toBe(400);
             expect(parseBody(response).data.error).toBe('Missing chatId');
@@ -131,7 +133,7 @@ describe('endConversation lambda', () => {
         test('returns 404 when the conversation does not exist', async () => {
             seedDynamo({ conversation: undefined });
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(404);
             expect(parseBody(response).data.error).toBe('Conversation not found');
@@ -140,7 +142,7 @@ describe('endConversation lambda', () => {
         test('returns 403 when the caller is not a participant', async () => {
             seedDynamo({ conversation: conversationItem({ userAId: 'someone-else', userBId: 'another' }) });
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(403);
             expect(parseBody(response).data.error).toMatch(/not participant/);
@@ -151,7 +153,7 @@ describe('endConversation lambda', () => {
 
     describe('ending a conversation', () => {
         test('marks the conversation ended with the caller as endedBy', async () => {
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID, reason: 'done' }));
+            const response = await handler(endEvent({ chatId: CHAT_ID, endReason: 'done' }));
 
             expect(response.statusCode).toBe(200);
             const conversationUpdate = sentCommands().find(
@@ -165,7 +167,7 @@ describe('endConversation lambda', () => {
         });
 
         test('clears both participants\' conversation state so they can be rematched', async () => {
-            await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            await handler(endEvent({ chatId: CHAT_ID }));
 
             const userUpdates = sentCommands().filter(
                 (c) => c.commandType === 'Update' && c.TableName === process.env.USER_METADATA_TABLE
@@ -179,7 +181,7 @@ describe('endConversation lambda', () => {
         });
 
         test('notifies the other participant when they are connected', async () => {
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(mockPostToConnection).toHaveBeenCalledTimes(1);
             const [notification] = mockPostToConnection.mock.calls[0];
@@ -196,7 +198,7 @@ describe('endConversation lambda', () => {
         test('skips the notification when the other participant is offline', async () => {
             seedDynamo({ conversation: conversationItem(), otherUser: { PK: `USER#${USER_B}` } });
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(200);
             expect(mockPostToConnection).not.toHaveBeenCalled();
@@ -205,7 +207,7 @@ describe('endConversation lambda', () => {
         test('still succeeds when notifying the other participant fails', async () => {
             mockPostToConnection.mockRejectedValue(new Error('GoneException'));
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(200);
         });
@@ -213,7 +215,7 @@ describe('endConversation lambda', () => {
         test('returns 500 when DynamoDB fails', async () => {
             mockSend.mockRejectedValue(new Error('DynamoDB unavailable'));
 
-            const response = await handler(makeEvent({ action: 'endConversation', chatId: CHAT_ID }));
+            const response = await handler(endEvent({ chatId: CHAT_ID }));
 
             expect(response.statusCode).toBe(500);
             expect(parseBody(response).data.error).toBe('Internal server error');

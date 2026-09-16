@@ -169,6 +169,65 @@ describe('HomeContent Component', () => {
     });
   });
 
+  test('should offer a cancel button while searching for a match', async () => {
+    const mockCancelMatchmaking = jest.fn().mockResolvedValue(undefined);
+    const mockSetReady = jest.fn().mockResolvedValue(undefined);
+
+    // ready with no chat === waiting in the matchmaking queue
+    mockUseWebSocket.mockReturnValue({
+      userMetadata: {
+        userId: 'test-user-123',
+        connectionId: 'test-connection-123',
+        chatId: null,
+        ready: true,
+        questionIndex: 0,
+        lastSeen: '2024-01-01T00:00:00.000Z',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      conversationMetadata: {
+        chatId: null,
+        participants: [],
+        lastMessage: null,
+        lastUpdated: null,
+        endedBy: null,
+        endReason: null,
+        createdAt: null,
+      },
+      hasActiveChat: false,
+      isConnected: true,
+      initializeUser: jest.fn(),
+      startNewChat: jest.fn(),
+      cancelMatchmaking: mockCancelMatchmaking,
+      endChat: jest.fn(),
+      initState: {
+        isInitializing: false,
+        profileLoaded: true,
+        chatContextLoaded: true,
+        wsConnected: true,
+        error: null,
+      },
+      wsActions: {
+        setReady: mockSetReady,
+      },
+      wsClient: {
+        disconnect: jest.fn(),
+      },
+    });
+
+    render(<HomeContent />);
+
+    const cancelButton = await screen.findByRole('button', { name: /cancel search/i });
+    expect(screen.getByText(/LOOKING FOR YOUR NEXT PARTNER/)).toBeInTheDocument();
+
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(mockCancelMatchmaking).toHaveBeenCalled();
+    });
+    // The context function owns leaving the queue; the raw action is only a fallback.
+    expect(mockSetReady).not.toHaveBeenCalled();
+  });
+
   test('should show loading state during initialization', async () => {
     mockUseWebSocket.mockReturnValue({
       userMetadata: {

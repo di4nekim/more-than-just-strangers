@@ -59,6 +59,7 @@ import { useFirebaseAuth } from '../app/components/auth/FirebaseAuthProvider';
  * @property {{isOnline: boolean, restApiHealthy: boolean, wsConnected: boolean}} networkStatus
  * @property {function(string): Promise<void>} initializeUser - Initialize complete user session
  * @property {function(): Promise<Object>} startNewChat - Start matchmaking and create new chat
+ * @property {function(): Promise<void>} cancelMatchmaking - Leave the matchmaking queue and abandon a pending startNewChat
  * @property {function(string, string?): Promise<void>} endChat - End current chat
  * @property {function(): Promise<void>} loadMoreMessages - Load older messages
  * @property {function(string): Promise<void>} sendMessageOptimistic - Send message with optimistic update
@@ -120,6 +121,7 @@ const WebSocketContext = createContext({
   firebaseReady: false,
   initializeUser: async () => {},
   startNewChat: async () => ({}),
+  cancelMatchmaking: async () => {},
   endChat: async () => {},
   loadMoreMessages: async () => {},
   sendMessageOptimistic: async () => {},
@@ -370,18 +372,27 @@ export const WebSocketProvider = ({ children }) => {
       setHasActiveChat(prev => prev === hasChat ? prev : hasChat);
 //       // console.log('WebSocket: User metadata and hasActiveChat updated to:', hasChat);
 
-      // Populate conversation metadata from the current state payload
-      setConversationMetadata(prev => ({
-        ...prev,
-        chatId: data.chatId ?? prev.chatId,
-        participants: data.participants ? getParticipantsAsArray(data.participants) : prev.participants,
-        endedBy: data.endedBy ?? prev.endedBy,
-        endReason: data.endReason ?? prev.endReason,
-        lastMessage: data.lastMessage ?? prev.lastMessage,
-        createdAt: data.createdAt ?? prev.createdAt,
-        lastUpdated: new Date().toISOString()
-      }));
-      
+      // 'currentState' is USER metadata only (server/lambdas/getCurrentState sends
+      // userId, connectionId, chatId, ready, questionIndex, lastSeen, createdAt).
+      // It carries no participants / endedBy / endReason / lastMessage, and its
+      // createdAt is the user's, not the conversation's - so only the chatId is
+      // adopted here and the conversation fields are requested with a
+      // syncConversation, which answers with 'conversationSync'.
+      if (data.chatId) {
+        setConversationMetadata(prev => (
+          prev.chatId === data.chatId
+            ? prev
+            : { ...initialConversationMetadata, chatId: data.chatId }
+        ));
+
+        const currentWsActions = wsActionsRef.current;
+        if (currentWsActions) {
+          currentWsActions.syncConversation({ chatId: data.chatId }).catch(error => {
+            console.error('Failed to request conversation sync for active chat:', error);
+          });
+        }
+      }
+
       // If user has an active chat, load the messages (only if not already loaded for this specific chat)
       if (data.chatId) {
 //         // console.log('WebSocket: Chat ID found in currentState:', data.chatId);
@@ -475,6 +486,38 @@ export const WebSocketProvider = ({ children }) => {
         setMatchmakingPromise(null);
         matchmakingPromiseRef.current = null;
       }
+    });
+
+    // Handle conversation sync response. This is the only server message that
+    // carries the full conversation record (server/lambdas/syncConversation sends
+    // chatId, participants, lastMessage, lastUpdated, endedBy, endReason, createdAt).
+    wsClient.onMessage('conversationSync', (data) => {
+      if (!data) return;
+
+      setConversationMetadata(prev => ({
+        ...prev,
+        chatId: data.chatId ?? prev.chatId,
+        participants: data.participants ? getParticipantsAsArray(data.participants) : prev.participants,
+        lastMessage: data.lastMessage ?? prev.lastMessage,
+        lastUpdated: data.lastUpdated ?? new Date().toISOString(),
+        endedBy: data.endedBy ?? prev.endedBy,
+        endReason: data.endReason ?? prev.endReason,
+        createdAt: data.createdAt ?? prev.createdAt
+      }));
+    });
+
+    // Handle conversation ended notification (server/lambdas/endConversation sends
+    // chatId, endedBy, endReason, timestamp to the other participant).
+    wsClient.onMessage('conversationEnded', (data) => {
+      if (!data) return;
+
+      setConversationMetadata(prev => ({
+        ...prev,
+        chatId: data.chatId ?? prev.chatId,
+        endedBy: data.endedBy ?? prev.endedBy,
+        endReason: data.endReason ?? prev.endReason,
+        lastUpdated: data.timestamp ?? new Date().toISOString()
+      }));
     });
 
     // Handle ready status updated response
@@ -696,10 +739,15 @@ export const WebSocketProvider = ({ children }) => {
           // Populate conversation metadata with the most recent message
           // (index 0 is the oldest loaded message, so the last element is newest)
           const latestMessage = transformedMessages[transformedMessages.length - 1];
+          // Keep the same {content, sentAt} shape the server stores on the
+          // conversation record and sends back in 'conversationSync'.
+          const latestAsMetadata = latestMessage
+            ? { content: latestMessage.content, sentAt: latestMessage.timestamp }
+            : null;
           setConversationMetadata(prev => ({
             ...prev,
             chatId: userMetadataRef.current.chatId ?? prev.chatId,
-            lastMessage: latestMessage ?? prev.lastMessage,
+            lastMessage: latestAsMetadata ?? prev.lastMessage,
             lastUpdated: new Date().toISOString()
           }));
         }
@@ -1415,6 +1463,34 @@ export const WebSocketProvider = ({ children }) => {
     }
   }, [wsActions, userProfile?.userId]);
 
+  // Leave the matchmaking queue and abandon any in-flight startNewChat()
+  const cancelMatchmaking = useCallback(async () => {
+    // Clear the pending matchmaking promise first so a late 'conversationStarted'
+    // cannot resolve a search the user has already abandoned.
+    const pending = matchmakingPromiseRef.current;
+    if (pending) {
+      if (pending.timeout) {
+        clearTimeout(pending.timeout);
+      }
+      matchmakingPromiseRef.current = null;
+      setMatchmakingPromise(null);
+      pending.reject(new Error('Matchmaking cancelled'));
+    }
+
+    // Mirror the server: setReady({ ready: false }) removes the user from the
+    // matchmaking queue table and clears their ready flag.
+    setUserMetadata(prev => (prev.ready ? { ...prev, ready: false } : prev));
+
+    if (!wsActions) return;
+
+    try {
+      await wsActions.setReady({ ready: false });
+    } catch (error) {
+      console.error('Failed to leave matchmaking queue:', error);
+      throw error;
+    }
+  }, [wsActions]);
+
   // End current chat
   const endChat = useCallback(async (chatId) => {
     if (!wsActions || !userProfile?.userId) {
@@ -1652,6 +1728,7 @@ export const WebSocketProvider = ({ children }) => {
       firebaseReady,
       initializeUser,
       startNewChat,
+      cancelMatchmaking,
       endChat,
       loadMoreMessages,
       sendMessageOptimistic,

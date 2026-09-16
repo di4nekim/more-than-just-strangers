@@ -2,8 +2,9 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
-const { 
-    createErrorResponse, 
+const { redactEvent } = require("../shared/logging");
+const {
+    createErrorResponse,
     extractAction, 
     extractRequestId
 } = require("../shared/errorHandler");
@@ -31,7 +32,7 @@ const handlerLogic = async (event) => {
     console.log('Authenticated user requesting current state:', userId, email);
     
     try {
-        console.log('Event:', JSON.stringify(event, null, 2));
+        console.log('Event:', JSON.stringify(redactEvent(event), null, 2));
         
         if (!connectionId) {
             throw new Error('Missing connectionId');

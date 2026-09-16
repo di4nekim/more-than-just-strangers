@@ -221,15 +221,15 @@
 
     <div class="verdict ok">
       <span class="flag">Blockers cleared</span>
-      <p>All five ship blockers are fixed and pushed, the test suite is green (304 passing, 0 failing) with a coverage gate enforced in CI, and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
+      <p>All five ship blockers are fixed and pushed, the test suite is green (325 passing, 0 failing) with a coverage gate enforced in CI, and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
     </div>
   </header>
 
   <div class="cards">
     <div class="card"><div class="k">Overall health</div><div class="v warn">Stabilizing</div><div class="note">Was “Fragile” — blockers cleared, hardening left</div></div>
     <div class="card"><div class="k">Prod readiness</div><div class="v ok">Unblocked</div><div class="note">5 of 5 blockers fixed · rotate credentials</div></div>
-    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">304 / 304 runnable · 24 of 24 suites · was 68%</div></div>
-    <div class="card"><div class="k">Real coverage</div><div class="v warn">~36%</div><div class="note">Was ~13.5% · ratcheting gate enforced in CI</div></div>
+    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">325 / 325 runnable · 25 of 25 suites · was 68%</div></div>
+    <div class="card"><div class="k">Real coverage</div><div class="v warn">~38%</div><div class="note">Was ~13.5% · ratcheting gate enforced in CI</div></div>
   </div>
 
   <section>
@@ -285,18 +285,18 @@
     <div class="sec-head"><span class="sec-num">03</span><h2>Test results</h2><span class="count">after remediation · 2026-09-15</span></div>
     <div class="test-grid">
       <div class="panel">
-        <h3>Runnable tests — 304 total</h3>
+        <h3>Runnable tests — 325 total</h3>
         <div class="bar">
-          <span class="pass" style="width:100%">304 pass · 0 fail</span>
+          <span class="pass" style="width:100%">325 pass · 0 fail</span>
         </div>
-        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>16.2s wall</span></div>
+        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>21.2s wall</span></div>
         <div style="margin-top:16px">
-          <div class="kv"><span>Suites passing</span><span class="n ok">24 of 24</span></div>
+          <div class="kv"><span>Suites passing</span><span class="n ok">25 of 25</span></div>
           <div class="kv"><span>Suites gated (skip without infra)</span><span class="n">2</span></div>
           <div class="kv"><span>Obsolete suites removed</span><span class="n">5</span></div>
           <div class="kv"><span>v3-mocked lambda suites (all 10 lambdas)</span><span class="n ok">10</span></div>
           <div class="kv"><span>Real-handler API route suite · deploy smoke test</span><span class="n ok">✓ · ✓</span></div>
-          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">36.2% / 41.5%</span></div>
+          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">37.6% / 42.9%</span></div>
           <div class="kv"><span>Coverage gate</span><span class="n ok">ratchet (29 / 20 / 24 / 33) in CI</span></div>
         </div>
       </div>
@@ -337,9 +337,9 @@
 
       <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Frontend</span></div><div><h4>Duplicate onMessage('error') handler disables matchmaking error rejection <span class="sev fixed">fixed</span></h4><p><span class="mono">'error'</span> is registered twice in a Map; the second <span class="mono">.set()</span> wins, killing the handler that rejects the matchmaking promise and runs "already in a conversation" recovery. Errors only surface after the 10s timeout.</p><div class="loc">src/websocket/WebSocketContext.jsx:460 &amp; :739 — verified</div></div></div>
 
-      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Frontend</span></div><div><h4>conversationMetadata is never populated — partner logic is dead <span class="sev partial">partial — field names unverified against live payloads</span></h4><p><span class="mono">setConversationMetadata</span> is only ever called with the empty init value; no handler populates participants/endedBy. So partner names, other-user id, and the endedBy → congrats navigation are all non-functional; <span class="mono">participants</span> is always <span class="mono">[]</span>.</p><div class="loc">src/websocket/WebSocketContext.jsx:170, :982 (setters only)</div></div></div>
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Frontend</span></div><div><h4>conversationMetadata is never populated — partner logic is dead <span class="sev fixed">fixed — field names verified against the lambdas; conversationSync/conversationEnded handlers added</span></h4><p><span class="mono">setConversationMetadata</span> is only ever called with the empty init value; no handler populates participants/endedBy. So partner names, other-user id, and the endedBy → congrats navigation are all non-functional; <span class="mono">participants</span> is always <span class="mono">[]</span>.</p><div class="loc">src/websocket/WebSocketContext.jsx:170, :982 (setters only)</div></div></div>
 
-      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Backend</span></div><div><h4>Raw JWTs logged; token travels in the WS query string &amp; browser console <span class="sev open">open</span></h4><p>Multiple lambdas <span class="mono">JSON.stringify(event)</span>, and the client sends the Firebase token in the connection query string and message body — so the raw JWT lands in CloudWatch on nearly every invocation and in the browser console. Recoverable and reusable until expiry.</p><div class="loc">server/lambdas/*/index.js · websocketHandler.jsx:90-97 · redact + move to header</div></div></div>
+      <div class="frow"><div class="meta"><span class="sev high">High</span><span class="dim">Backend</span></div><div><h4>Raw JWTs logged; token travels in the WS query string &amp; browser console <span class="sev partial">partial — tokens redacted from all lambda logs; token still in the WS query string</span></h4><p>Multiple lambdas <span class="mono">JSON.stringify(event)</span>, and the client sends the Firebase token in the connection query string and message body — so the raw JWT lands in CloudWatch on nearly every invocation and in the browser console. Recoverable and reusable until expiry.</p><div class="loc">server/lambdas/*/index.js · websocketHandler.jsx:90-97 · redact + move to header</div></div></div>
 
       <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Frontend</span></div><div><h4>Send button doesn't clear the message input <span class="sev fixed">fixed</span></h4><p>The button sets <span class="mono">inputRef.value=''</span> but the input is controlled with a sync effect that re-asserts the old value. Sending via the button leaves the text (re-sendable); only the Enter path clears.</p><div class="loc">src/app/components/ChatRoom.jsx:817-827 vs 56-68</div></div></div>
 
@@ -361,7 +361,7 @@
 
       <div class="frow"><div class="meta"><span class="sev low">Low</span><span class="dim">Architecture</span></div><div><h4>Dead / orphaned code &amp; broken tooling throughout <span class="sev open">open</span></h4><p>5 empty API route dirs, ~700 LOC of lib modules imported only by tests, api-client methods calling routes that 404, ~30+ npm scripts invoking a non-existent <span class="mono">scripts/</span> dir, duplicate <span class="mono">useDebounce</span> (.jsx/.ts), two sign-in routes, a deprecated-but-wired typing indicator.</p><div class="loc">package.json:36-62 · src/lib/* · src/hooks/useDebounce.*</div></div></div>
 
-      <div class="frow"><div class="meta"><span class="sev info">Info</span><span class="dim">Security</span></div><div><h4>CSP allows unsafe-eval/unsafe-inline; infra packages as runtime deps <span class="sev partial">partial — unsafe-eval removed; deps cleanup open</span></h4><p><span class="mono">script-src</span> includes <span class="mono">unsafe-eval</span> + <span class="mono">unsafe-inline</span>. <span class="mono">dependencies</span> ships aws-cdk-lib, constructs, react-devtools, wscat; next.config lists <span class="mono">boto3</span> (a Python package).</p><div class="loc">src/middleware.js:91 · package.json</div></div></div>
+      <div class="frow"><div class="meta"><span class="sev info">Info</span><span class="dim">Security</span></div><div><h4>CSP allows unsafe-eval/unsafe-inline; infra packages as runtime deps <span class="sev partial">partial — unsafe-eval removed, deps moved to devDependencies; unsafe-inline needs a nonce pipeline</span></h4><p><span class="mono">script-src</span> includes <span class="mono">unsafe-eval</span> + <span class="mono">unsafe-inline</span>. <span class="mono">dependencies</span> ships aws-cdk-lib, constructs, react-devtools, wscat; next.config lists <span class="mono">boto3</span> (a Python package).</p><div class="loc">src/middleware.js:91 · package.json</div></div></div>
     </div>
   </section>
 
@@ -370,7 +370,7 @@
     <ul class="clean">
       <li><b>Placeholder identities everywhere.</b> QUINCEY/JOHNATHAN on every message, "Quincey" on congrats, "5* NEW MESSAGES" always — the app reads as an unfinished mockup to a real user.</li>
       <li><b>Navigation is inconsistent &amp; partly unreachable.</b> Two sign-in routes disagree on where to send users; post-login lands on the marketing page; sign out / home / end-chat are hover-only, so they fail on touch and keyboard. <span class="sev partial">hover-only controls now reveal on focus; routing still open</span></li>
-      <li><b>No escape from "Finding a match…".</b> The spinner has no cancel or timeout — a user can hang forever — and there's no clear disconnected/reconnecting state.</li>
+      <li><b>No escape from "Finding a match…".</b> The spinner has no cancel or timeout — a user can hang forever — and there's no clear disconnected/reconnecting state. <span class="sev partial">Cancel + 60 s "still looking" notice added; disconnected state still open</span></li>
       <li><b>Paid-for feedback is invisible.</b> Typing-indicator and presence systems are imported but never rendered (and the typing module is deprecated yet still in the path).</li>
       <li><b>Responsiveness gap.</b> Fixed 50/50 split layouts and side-by-side congrats panels will break at phone widths.</li>
       <li><b>Off-by-one completion.</b> Reaching question 36 jumps to congrats, apparently skipping the final question. <span class="sev fixed">fixed</span></li>
@@ -405,7 +405,7 @@
       <li><span class="sev fixed">done</span> The two <span class="mono">onMessage('error')</span> handlers merged; matchmaking errors reject promptly.</li>
       <li><span class="sev fixed">done</span> <span class="mono">updatePresence</span> argument order fixed.</li>
       <li><span class="sev fixed">done</span> Hover-only controls also reveal on keyboard focus.</li>
-      <li><span class="sev open">open</span> Add a cancel/timeout to the "Finding a match…" spinner.</li>
+      <li><span class="sev fixed">done</span> Cancel button and 60 s soft timeout on the "Finding a match…" spinner.</li>
       <li><span class="sev open">open</span> Prune empty route dirs, dead lib modules, and the broken npm scripts.</li>
     </ul>
   </section>

@@ -242,6 +242,89 @@ describe('WebSocketProvider', () => {
     });
   });
 
+  describe('cancelling matchmaking', () => {
+    test('leaves the queue and rejects the pending startNewChat', async () => {
+      renderProvider();
+      await initializeUser();
+
+      let pending;
+      await act(async () => { pending = ctx.startNewChat(); });
+      pending.catch(() => {}); // observed below; avoid an unhandled rejection in between
+      expect(mockWsActions.startConversation).toHaveBeenCalledWith({ userId: USER_ID });
+
+      await act(async () => { await ctx.cancelMatchmaking(); });
+
+      // ready:false is what removes the user from MATCHMAKING_QUEUE_TABLE server-side.
+      expect(mockWsActions.setReady).toHaveBeenCalledWith({ ready: false });
+      await expect(pending).rejects.toThrow(/cancelled/i);
+    });
+
+    test('a match that lands after cancelling cannot resolve the abandoned search', async () => {
+      renderProvider();
+      await initializeUser();
+
+      let pending;
+      await act(async () => { pending = ctx.startNewChat(); });
+      pending.catch(() => {});
+
+      await act(async () => { await ctx.cancelMatchmaking(); });
+      await expect(pending).rejects.toThrow(/cancelled/i);
+
+      // Late server confirmation: must not throw, and must not resolve `pending`.
+      expect(() => handlers().conversationStarted({
+        chatId: CHAT_ID,
+        participants: [USER_ID, 'partner-user-456'],
+        matched: true,
+        createdAt: new Date().toISOString(),
+      })).not.toThrow();
+    });
+  });
+
+  describe('conversation metadata', () => {
+    test('populates metadata from a conversationSync payload', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      await dispatch('conversationSync', {
+        chatId: CHAT_ID,
+        participants: [USER_ID, 'partner-user-456'],
+        lastMessage: { content: 'hello', sentAt: '2024-01-02T00:00:00.000Z' },
+        lastUpdated: '2024-01-02T00:00:00.000Z',
+        endedBy: null,
+        endReason: null,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+
+      expect(screen.getByTestId('chat-id')).toHaveTextContent(CHAT_ID);
+      expect(ctx.conversationMetadata).toMatchObject({
+        chatId: CHAT_ID,
+        participants: [USER_ID, 'partner-user-456'],
+        lastMessage: { content: 'hello', sentAt: '2024-01-02T00:00:00.000Z' },
+        lastUpdated: '2024-01-02T00:00:00.000Z',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    });
+
+    test('records who ended the conversation and why from conversationEnded', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      await dispatch('conversationEnded', {
+        chatId: CHAT_ID,
+        endedBy: 'partner-user-456',
+        endReason: 'User ended conversation',
+        timestamp: '2024-01-03T00:00:00.000Z',
+      });
+
+      expect(ctx.conversationMetadata).toMatchObject({
+        chatId: CHAT_ID,
+        endedBy: 'partner-user-456',
+        endReason: 'User ended conversation',
+        lastUpdated: '2024-01-03T00:00:00.000Z',
+      });
+    });
+  });
+
   describe('ending a chat', () => {
     test('rejects before the user is initialized', async () => {
       renderProvider();

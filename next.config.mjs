@@ -122,9 +122,7 @@ const nextConfig = {
   serverExternalPackages: [
     '@aws-sdk/client-dynamodb',
     '@aws-sdk/lib-dynamodb',
-    'ws',
-    'wscat',
-    'boto3'
+    'ws'
   ]
 };
 

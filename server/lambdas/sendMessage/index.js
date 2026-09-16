@@ -15,8 +15,9 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws
 
 // Shared module imports
 const { authenticateWebSocketEvent } = require("../shared/auth");
-const { 
-    createErrorResponse, 
+const { redactEvent, redactBody } = require("../shared/logging");
+const {
+    createErrorResponse,
     createSuccessResponse, 
     extractAction, 
     extractRequestId,
@@ -28,7 +29,7 @@ const {
 const handlerLogic = async (event) => {
     console.log('=== HANDLER LOGIC STARTING ===');
     console.log('Lambda invoked');
-    console.log('Event received:', JSON.stringify(event, null, 2));
+    console.log('Event received:', JSON.stringify(redactEvent(event), null, 2));
     
             // Declare variables that will be used throughout the function
         let userId, email, dynamoDbClient, apiGatewayClient, connectionId;
@@ -125,7 +126,7 @@ const handlerLogic = async (event) => {
         let body;
         try {
             body = JSON.parse(event.body);
-            console.log('Request body parsed successfully:', JSON.stringify(body, null, 2));
+            console.log('Request body parsed successfully:', JSON.stringify(redactBody(body), null, 2));
         } catch (error) {
             console.log('Failed to parse request body:', error.message);
             const action = extractAction(event);

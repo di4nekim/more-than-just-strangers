@@ -24,3 +24,7 @@ test.env.example
 *-adminsdk-*.json
 *firebase*key*.json
 serviceAccount*.json
+
+# macOS
+.DS_Store
+**/.DS_Store

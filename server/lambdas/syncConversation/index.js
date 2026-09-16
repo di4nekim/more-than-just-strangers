@@ -2,6 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent, redactBody } = require("../shared/logging");
 
 
 const {
@@ -45,10 +46,10 @@ const handlerLogic = async (event) => {
     const startTime = Date.now();
     
     try {
-        console.log('Event:', JSON.stringify(event, null, 2));
-        
+        console.log('Event:', JSON.stringify(redactEvent(event), null, 2));
+
         const body = JSON.parse(event.body);
-        console.log('Parsed request body:', JSON.stringify(body, null, 2));
+        console.log('Parsed request body:', JSON.stringify(redactBody(body), null, 2));
         
         const { chatId } = body.data;
         const connectionId = event.requestContext.connectionId;

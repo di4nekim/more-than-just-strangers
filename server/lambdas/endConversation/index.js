@@ -2,9 +2,10 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent } = require("../shared/logging");
 
 
-const { 
+const {
     createErrorResponse, 
     createSuccessResponse, 
     extractAction, 
@@ -27,7 +28,7 @@ const apiGateway = new ApiGatewayManagementApiClient({
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('endConversation: Function started');
-    console.log('endConversation: Event received:', JSON.stringify(event, null, 2));
+    console.log('endConversation: Event received:', JSON.stringify(redactEvent(event), null, 2));
     
     // Get authenticated user info
     const { userId } = event.userInfo;
@@ -47,7 +48,11 @@ const handlerLogic = async (event) => {
         }
 
         // Validate required fields
-        const { chatId, reason } = payload;
+        // The client sends { action, data: { chatId, endReason } } (see websocketActions);
+        // the legacy top-level { chatId, reason } shape is still accepted.
+        const source = payload.data || payload;
+        const chatId = source.chatId;
+        const reason = source.endReason || source.reason;
         if (!chatId) {
             console.log('endConversation: Missing chatId');
             return {
