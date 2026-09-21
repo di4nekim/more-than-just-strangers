@@ -9,9 +9,19 @@ import { useFirebaseAuth } from '../components/auth/FirebaseAuthProvider';
 import questions from '../../questions.json';
 import { useWebSocket } from '../../websocket/WebSocketContext';
 import { usePresenceSystem } from '../../websocket/presenceSystem';
-import { useTypingIndicator } from '../../websocket/typingIndicator';
+// NOTE: the server has deprecated the `typingStatus` action (the sendMessage
+// lambda no-ops on it), so the typing-indicator wiring was removed from this
+// screen. src/websocket/typingIndicator.jsx is intentionally left in place.
 import { useReconnectionHandler } from '../../websocket/reconnectionHandler';
 import { useDebounce } from '../../hooks/useDebounce';
+
+// Copy for the compact connection banner. Anything unrecognised is treated as
+// "connecting" so the banner never renders an empty string.
+const CONNECTION_BANNERS = {
+  reconnecting: 'Reconnecting…',
+  connecting: 'Connecting…',
+  offline: "You're offline — messages will send when you're back"
+};
 
 // Completely isolated input component with its own state management
 const IsolatedInput = memo(({
@@ -102,13 +112,15 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
     conversationMetadata,
     userMetadata,
     userProfile,
+    partnerId: contextPartnerId,
+    displayNameFor,
+    connectionStatus,
     messages,
     initState,
     hasActiveChat,
     isLoadingMessages,
     hasMoreMessages,
     otherUserPresence,
-    typingStatus,
     initializeUser,
     sendMessageOptimistic,
     loadMoreMessages,
@@ -117,7 +129,6 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   } = useWebSocket();
 
   const { updatePresence, setLocalStatus } = usePresenceSystem();
-  const { sendTypingStatus, isTyping } = useTypingIndicator();
 
   const hasNavigatedRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -154,6 +165,38 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   const otherUserId = participantsArray.length === 2
     ? participantsArray.find(id => id !== userId) || ''
     : '';
+
+  // The context owns partner resolution; fall back to the locally derived id so
+  // this screen still works against an older/partial context value.
+  const partnerId = contextPartnerId || otherUserId || null;
+
+  // Real identities only: the context's displayNameFor never invents a name.
+  // If it is unavailable we degrade to the same honest fallbacks rather than
+  // rendering a placeholder person.
+  const resolveDisplayName = useCallback((someUserId) => {
+    if (typeof displayNameFor === 'function') {
+      const resolved = displayNameFor(someUserId);
+      if (typeof resolved === 'string' && resolved.trim()) return resolved;
+    }
+    if (someUserId && someUserId === userId) return 'You';
+    if (typeof someUserId === 'string' && someUserId.length > 0) return someUserId.slice(0, 8);
+    return 'Your match';
+  }, [displayNameFor, userId]);
+
+  const partnerName = resolveDisplayName(partnerId);
+
+  // Single derived socket status for the UI. `isConnected` stays the authority
+  // for whether an action can be sent; this only drives the feedback copy.
+  const effectiveConnectionStatus = connectionStatus || (isConnected ? 'connected' : 'connecting');
+  const isConnectionHealthy = effectiveConnectionStatus === 'connected';
+  const connectionBanner = isConnectionHealthy
+    ? null
+    : (CONNECTION_BANNERS[effectiveConnectionStatus] || CONNECTION_BANNERS.connecting);
+
+  // presenceStatus/presenceUpdated deliver {status, lastSeen}; older callers
+  // hand over {isOnline}. Accept both so the dot never lies by omission.
+  const isPartnerOnline = otherUserPresence?.status === 'online' || otherUserPresence?.isOnline === true;
+  const presenceLabel = isPartnerOnline ? 'Online' : 'Offline';
 
   const prevQuestionIndexRef = useRef(questionIndex);
   
@@ -661,7 +704,9 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
   }
 
   return (
-    <div className="flex h-screen bg-teal relative font-mono">
+    // h-screen is the baseline; 100dvh (progressively enhanced) keeps the sticky
+    // composer above the on-screen keyboard on phones.
+    <div className="flex flex-col md:flex-row h-screen supports-[height:100dvh]:h-[100dvh] overflow-x-hidden bg-teal relative font-mono">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <Image
@@ -673,44 +718,65 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
         />
       </div>
 
-      {/* Left Navigation Bar */}
-      <div className="w-16 border-r border-teal flex flex-col items-center py-4 pt-10 space-y-6 relative z-10 group">
-        <button className="text-teal hover:text-teal " aria-label="Menu">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Navigation: a top bar on phones, the original hover-reveal rail from md up */}
+      <div className="w-full md:w-16 shrink-0 border-b md:border-b-0 md:border-r border-teal flex flex-row md:flex-col items-center justify-start gap-6 md:gap-0 px-4 md:px-0 py-3 md:py-4 md:pt-10 md:space-y-6 relative z-10 group">
+        <button className="text-teal hover:text-teal shrink-0" aria-label="Menu">
+          <svg className="w-7 h-7 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
         <button
           onClick={() => router.push('/home')}
           aria-label="Go home"
-          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
+          className="text-sky-blue hover:text-teal shrink-0 opacity-80 md:opacity-0 md:group-hover:opacity-80 md:group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
         >
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-7 h-7 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
           </svg>
         </button>
         <button
           onClick={() => setShowEndDialog(true)}
           aria-label="End conversation"
-          className="text-sky-blue hover:text-teal opacity-0 group-hover:opacity-80 group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
+          className="text-sky-blue hover:text-teal shrink-0 opacity-80 md:opacity-0 md:group-hover:opacity-80 md:group-focus-within:opacity-80 focus:!opacity-100 hover:!opacity-100 transition-all duration-200"
         >
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-7 h-7 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
         </button>
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative z-10 pt-10">
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col relative z-10 pt-4 md:pt-10">
+        {/* Partner identity + presence */}
+        <div className="w-full md:w-[80%] mx-auto px-4 md:px-0 mb-2 flex items-center gap-2 text-teal min-w-0">
+          <span className="font-semibold uppercase truncate">{partnerName}</span>
+          <span
+            aria-hidden="true"
+            className={`inline-block w-2 h-2 rounded-full shrink-0 ${isPartnerOnline ? 'bg-green-500' : 'bg-gray-400'}`}
+          />
+          <span className="text-xs uppercase shrink-0">{presenceLabel}</span>
+        </div>
+
+        {/* Connection feedback */}
+        {connectionBanner && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="w-full md:w-[80%] mx-auto mb-2 px-4 py-2 bg-light-blue border border-teal rounded-lg text-teal text-xs sm:text-sm text-center uppercase"
+          >
+            {connectionBanner}
+          </div>
+        )}
+
         {/* Top Header with Question */}
-        <div className="w-[80%] bg-teal text-beige py-2 px-4 rounded-lg mx-auto  mb-4 flex items-center">
-          <div className="text-lg font-semibold mr-4">
+        <div className="w-full md:w-[80%] bg-teal text-beige py-2 px-3 md:px-4 rounded-lg mx-auto mb-3 md:mb-4 flex flex-wrap md:flex-nowrap items-center gap-2 min-w-0">
+          <div className="text-base md:text-lg font-semibold md:mr-4 shrink-0">
             ({questionIndex})
           </div>
-          <div className="flex-1 text-center text-lg font-semibold uppercase">
+          <div className="order-last md:order-none w-full md:w-auto md:flex-1 text-center text-base md:text-lg font-semibold uppercase break-words min-w-0">
             {questionText || 'LOADING QUESTION...'}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 ml-auto md:ml-0 shrink-0">
             <button 
               onClick={async () => {
                 try {
@@ -762,7 +828,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
 
         {/* Show waiting indicator when user is ready but waiting for other user */}
         {localReadyState && (
-          <div className="w-[50%] mx-auto mb-4 p-3 bg-light-blue border border-teal rounded-lg">
+          <div className="w-[92%] md:w-[50%] mx-auto mb-4 p-3 bg-light-blue border border-teal rounded-lg">
             <div className="flex items-center justify-center space-x-6 text-teal">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal"></div>
               <span className="text-sm font-medium uppercase">Waiting for other user to be ready...</span>
@@ -780,7 +846,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
         {/* Messages Container */}
         <div 
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto px-4 space-y-4"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 md:px-4 space-y-4"
           role="list"
         >
           {isLoadingMessages && (
@@ -801,23 +867,24 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
               {/* Messages for this date */}
               {dateMessages.map((message) => {
                 const isCurrentUser = message.senderId === userId;
-                const userName = isCurrentUser ? 'QUINCEY' : 'JOHNATHAN';
+                // Real identities only - never a hardcoded stand-in name.
+                const userName = resolveDisplayName(message.senderId);
                 const textColor = isCurrentUser ? 'text-teal' : 'text-blue-400';
                 const bgColor = isCurrentUser ? 'bg-teal' : 'bg-blue-400';
-                
+
                 return (
-                  <div key={message.id} className="mb-4 mx-10">
-                    <div className="flex items-start space-x-2">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className={`font-semibold ${textColor}`}>
+                  <div key={message.id} className="mb-4 mx-1 sm:mx-4 md:mx-10">
+                    <div className="flex items-start space-x-2 min-w-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1 min-w-0">
+                          <span className={`font-semibold uppercase truncate ${textColor}`}>
                             {userName}
                           </span>
-                          <span className={`${bgColor} text-white text-xs px-2 py-[3px] rounded`}>
+                          <span className={`${bgColor} text-white text-xs px-2 py-[3px] rounded shrink-0`}>
                             {formatTime(message.timestamp)}
                           </span>
                         </div>
-                        <div className={`${textColor} leading-tight text-sm`}>
+                        <div className={`${textColor} leading-tight text-sm break-words`}>
                           {message.content}
                         </div>
                       </div>
@@ -830,15 +897,15 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
           <div ref={messageEndRef} />
         </div>
 
-        {/* Bottom Input Area */}
-        <div className="p-4 mb-8 mx-auto w-[90%] border-teal text-teal">
+        {/* Bottom Input Area - sticks above the mobile keyboard */}
+        <div className="sticky bottom-0 shrink-0 w-full md:w-[90%] mx-auto p-3 md:p-4 mb-0 md:mb-8 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4 bg-beige/90 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none border-t border-teal md:border-t-0 text-teal">
           <div className="relative">
             <IsolatedInput
               inputRef={inputRef}
               controlRef={inputControlRef}
               onSendMessage={handleSendMessage}
               placeholder="TYPE YOUR REPLY HERE"
-              disabled={!isConnected || isSendingMessage || !userProfile}
+              disabled={!isConnected || !isConnectionHealthy || isSendingMessage || !userProfile}
               className="w-full p-3 pr-12 border border-teal rounded-lg disabled:opacity-50 bg-beige placeholder:text-teal focus:outline-none"
             />
             <button
@@ -848,7 +915,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
                 // input is cleared via React state and text can't be re-sent.
                 inputControlRef.current?.submit();
               }}
-              disabled={!isConnected || isSendingMessage || !userProfile}
+              disabled={!isConnected || !isConnectionHealthy || isSendingMessage || !userProfile}
               aria-label="Send message"
               className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-teal hover:bg-teal text-white p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -857,6 +924,13 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
               </svg>
             </button>
           </div>
+          {!isConnectionHealthy && (
+            <p className="mt-2 text-xs uppercase text-teal">
+              {effectiveConnectionStatus === 'offline'
+                ? "You're offline — you can send again once you're back"
+                : 'Waiting for the connection before you can send'}
+            </p>
+          )}
         </div>
       </div>
 
@@ -867,7 +941,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="end-conversation-title"
-            className="bg-beige border-2 border-teal rounded-lg p-6 max-w-md mx-4"
+            className="bg-beige border-2 border-teal rounded-lg p-6 w-full max-w-md mx-4"
           >
             <div className="text-center">
               <h3 id="end-conversation-title" className="text-teal font-bold text-lg mb-4 uppercase">
@@ -876,7 +950,7 @@ const ChatRoom = memo(function ChatRoom({ chatId: propChatId }) {
               <p className="text-teal mb-6 text-sm uppercase">
                 Are you sure you want to end the conversation? This action cannot be undone.
               </p>
-              <div className="flex space-x-4 justify-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                 <button
                   onClick={() => setShowEndDialog(false)}
                   className="px-4 py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"

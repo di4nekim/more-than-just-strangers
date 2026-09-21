@@ -2,7 +2,7 @@
 
 **A scalable real-time chat application implementing the "36 Questions for Falling in Love" experiment through modern cloud-native architecture.**
 
-[![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#) [![Tests](https://img.shields.io/badge/Tests-325%20passing-brightgreen.svg)](#) [![AWS](https://img.shields.io/badge/AWS-Deployed-orange.svg)](#)
+[![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#) [![Tests](https://img.shields.io/badge/Tests-365%20passing-brightgreen.svg)](#) [![AWS](https://img.shields.io/badge/AWS-Deployed-orange.svg)](#)
 
 ## Project Overview
 
@@ -78,7 +78,7 @@ AWS Serverless Architecture
 
 ### Development & Testing
 
-- **Testing**: Jest + React Testing Library (325 unit tests, coverage gated in CI)
+- **Testing**: Jest + React Testing Library (365 unit tests, coverage gated in CI)
 - **Test Types**: Unit, Integration, E2E, API, WebSocket
 - **Code Quality**: ESLint, comprehensive test suites
 - **Development**: Hot reloading, environment-specific configs
@@ -87,7 +87,7 @@ AWS Serverless Architecture
 
 - **10 Lambda Functions** with optimized performance and error handling
 - **4 DynamoDB Tables** with efficient data access patterns
-- **325 unit tests across 25 suites**, every Lambda and the deploy manifest covered; ~38% statement / ~43% line coverage, gated in CI by a ratcheting threshold
+- **365 unit tests across 27 suites**, every Lambda and the deploy manifest covered; ~40% statement / ~46% line coverage, gated in CI by a ratcheting threshold
 - **Sub-100ms Latency** for real-time message delivery
 - **Scalable Architecture** supporting concurrent users through serverless design
 - **Environment Management** with dev/staging/prod deployment pipelines
@@ -194,7 +194,7 @@ sam build && sam deploy
 
 3. **Database Optimization**: Created efficient DynamoDB data models with GSIs for complex query patterns
 
-4. **Tested at the real contracts**: 325 unit tests that invoke the actual handlers with AWS SDK v3 mocked at the command boundary, a deploy smoke test over `template.yaml`, and a coverage gate in CI
+4. **Tested at the real contracts**: 365 unit tests that invoke the actual handlers with AWS SDK v3 mocked at the command boundary, a deploy smoke test over `template.yaml`, and a coverage gate in CI
 
 5. **Infrastructure as Code**: Built complete AWS infrastructure using SAM with environment parameterization
 

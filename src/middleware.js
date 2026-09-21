@@ -48,6 +48,12 @@ const getOriginPolicy = (origin) => {
   return null;
 };
 
+// Routing: /signin is the canonical sign-in route. /firebase-signin is a legacy alias
+// kept so old links and bookmarks keep working; it is redirected (temporarily, so the
+// mapping stays changeable) with the query string intact.
+const CANONICAL_SIGNIN_PATH = '/signin';
+const LEGACY_SIGNIN_PATHS = ['/firebase-signin', '/firebase-signin/'];
+
 const checkRateLimit = (clientIP) => {
   const now = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW;
@@ -86,7 +92,15 @@ export async function middleware(request) {
     
     return response;
   }
-  
+
+  // Canonicalise the legacy sign-in path. This adds no protection and removes none;
+  // it only collapses the two sign-in routes onto one.
+  if (LEGACY_SIGNIN_PATHS.includes(pathname)) {
+    const canonicalUrl = new URL(request.nextUrl);
+    canonicalUrl.pathname = CANONICAL_SIGNIN_PATH;
+    return NextResponse.redirect(canonicalUrl, 307);
+  }
+
   const response = NextResponse.next();
   
   const originPolicy = getOriginPolicy(origin);

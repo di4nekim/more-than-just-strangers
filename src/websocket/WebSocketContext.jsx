@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { WebSocketClient } from './websocketHandler';
 import { WebSocketActions, createWebSocketActions } from './websocketActions';
 import { UserMetadata, ConversationMetadata, PresenceStatusPayload } from './websocketTypes';
@@ -33,6 +33,14 @@ import { useFirebaseAuth } from '../app/components/auth/FirebaseAuthProvider';
  */
 
 /**
+ * @typedef {Object} PartnerProfile
+ * @property {string} userId
+ * @property {string|null} displayName
+ * @property {string|null} name
+ * @property {string|null} email
+ */
+
+/**
  * @typedef {Object} InitializationState
  * @property {boolean} isInitializing
  * @property {boolean} profileLoaded
@@ -49,6 +57,8 @@ import { useFirebaseAuth } from '../app/components/auth/FirebaseAuthProvider';
  * @property {UserMetadata} userMetadata
  * @property {ConversationMetadata} conversationMetadata
  * @property {UserProfile|null} userProfile
+ * @property {PartnerProfile|null} partnerProfile - Public profile of the other participant, null until loaded
+ * @property {string|null} partnerId - The participant id that is not the signed-in user
  * @property {Message[]} messages
  * @property {InitializationState} initState
  * @property {boolean} hasActiveChat
@@ -57,6 +67,9 @@ import { useFirebaseAuth } from '../app/components/auth/FirebaseAuthProvider';
  * @property {{status: 'online'|'offline'|'away', lastSeen?: string}|null} otherUserPresence
  * @property {Record<string, boolean>} typingStatus
  * @property {{isOnline: boolean, restApiHealthy: boolean, wsConnected: boolean}} networkStatus
+ * @property {'connected'|'connecting'|'reconnecting'|'offline'} connectionStatus - Single derived socket status for the UI
+ * @property {string|null} lastConnectedAt - ISO timestamp of the last time connectionStatus became 'connected'
+ * @property {function(string): string} displayNameFor - Best available name for a participant id (never a fake name)
  * @property {function(string): Promise<void>} initializeUser - Initialize complete user session
  * @property {function(): Promise<Object>} startNewChat - Start matchmaking and create new chat
  * @property {function(): Promise<void>} cancelMatchmaking - Leave the matchmaking queue and abandon a pending startNewChat
@@ -106,6 +119,8 @@ const WebSocketContext = createContext({
   userMetadata: initialUserMetadata,
   conversationMetadata: initialConversationMetadata,
   userProfile: null,
+  partnerProfile: null,
+  partnerId: null,
   messages: [],
   initState: initialInitState,
   hasActiveChat: false,
@@ -118,6 +133,9 @@ const WebSocketContext = createContext({
     restApiHealthy: true,
     wsConnected: false
   },
+  connectionStatus: typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting',
+  lastConnectedAt: null,
+  displayNameFor: () => 'Your match',
   firebaseReady: false,
   initializeUser: async () => {},
   startNewChat: async () => ({}),
@@ -140,6 +158,34 @@ const getParticipantsAsArray = (participants) => {
   if (participants?.SS) return participants.SS;
   return [];
 };
+
+// The server's /api/user/[userId]/profile answers with displayName: 'Anonymous'
+// when the Firebase account has no name set, so that string is a placeholder
+// rather than a real name. Skip it (and blank strings) when picking a name to
+// show, and fall back to a short honest label instead of inventing one.
+const PLACEHOLDER_NAME = 'anonymous';
+
+const firstRealName = (...candidates) => {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed || trimmed.toLowerCase() === PLACEHOLDER_NAME) continue;
+    return trimmed;
+  }
+  return null;
+};
+
+const shortIdLabel = (userId) =>
+  typeof userId === 'string' && userId.length > 0 ? userId.slice(0, 8) : null;
+
+// Normalise whatever the profile endpoint returns into the documented
+// PartnerProfile shape so consumers never have to probe for fields.
+const normalizePartnerProfile = (userId, profile) => ({
+  userId: profile?.userId ?? userId ?? null,
+  displayName: profile?.displayName ?? null,
+  name: profile?.name ?? null,
+  email: profile?.email ?? null
+});
 
 const generateOptimisticId = () => `optimistic-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -171,6 +217,7 @@ export const WebSocketProvider = ({ children }) => {
   const [userMetadata, setUserMetadata] = useState(initialUserMetadata);
   const [conversationMetadata, setConversationMetadata] = useState(initialConversationMetadata);
   const [userProfile, setUserProfile] = useState(null);
+  const [partnerProfile, setPartnerProfile] = useState(null);
   const [messages, setMessages] = useState([]);
   const [initState, setInitState] = useState(initialInitState);
   const [hasActiveChat, setHasActiveChat] = useState(false);
@@ -183,6 +230,8 @@ export const WebSocketProvider = ({ children }) => {
     restApiHealthy: true,
     wsConnected: false
   });
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [lastConnectedAt, setLastConnectedAt] = useState(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [matchmakingPromise, setMatchmakingPromise] = useState(null);
   const matchmakingPromiseRef = useRef(null);
@@ -200,6 +249,70 @@ export const WebSocketProvider = ({ children }) => {
     userMetadataRef.current = userMetadata;
     wsActionsRef.current = wsActions;
   }, [matchmakingPromise, userMetadata, wsActions]);
+
+  // The signed-in user's id. userProfile is the authority once loaded; before that
+  // the Firebase uid is the same id the server puts in conversation participants.
+  const selfId = userProfile?.userId || firebaseUser?.uid || null;
+
+  // The participant that is not us. conversationMetadata.participants is populated
+  // from 'conversationStarted' and 'conversationSync'.
+  const partnerId = useMemo(() => {
+    if (!selfId) return null;
+    const participants = getParticipantsAsArray(conversationMetadata.participants);
+    const other = participants.find(id => typeof id === 'string' && id && id !== selfId);
+    return other || null;
+  }, [conversationMetadata.participants, selfId]);
+
+  // Load the partner's public profile whenever the partner becomes known or changes.
+  // Never throws: a failure is logged and leaves partnerProfile null, which the
+  // displayNameFor fallbacks already cover.
+  useEffect(() => {
+    if (!partnerId) {
+      setPartnerProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+    // Drop a previous partner's profile immediately so nothing renders the wrong name.
+    setPartnerProfile(prev => (prev && prev.userId === partnerId ? prev : null));
+
+    (async () => {
+      try {
+        const profile = await apiClient.getUserProfileById(partnerId);
+        if (!cancelled) {
+          setPartnerProfile(normalizePartnerProfile(partnerId, profile));
+        }
+      } catch (error) {
+        console.error('Failed to load partner profile:', error);
+        if (!cancelled) {
+          setPartnerProfile(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerId]);
+
+  // Best available name for a participant id. Falls back to a short, honest label -
+  // never a made-up name.
+  const displayNameFor = useCallback((userId) => {
+    if (userId && selfId && userId === selfId) {
+      return firstRealName(userProfile?.displayName, userProfile?.name) || 'You';
+    }
+    if (userId && partnerId && userId === partnerId) {
+      return firstRealName(partnerProfile?.displayName, partnerProfile?.name) || 'Your match';
+    }
+    return shortIdLabel(userId) || 'Your match';
+  }, [
+    selfId,
+    partnerId,
+    userProfile?.displayName,
+    userProfile?.name,
+    partnerProfile?.displayName,
+    partnerProfile?.name
+  ]);
 
   // Load initial message history via WebSocket
   const loadInitialMessages = useCallback(async (chatId, limit = 50) => {
@@ -1054,6 +1167,7 @@ export const WebSocketProvider = ({ children }) => {
   const resetInitialization = useCallback(() => {
     setInitState(initialInitState);
     setUserProfile(null);
+    setPartnerProfile(null);
     setUserMetadata(initialUserMetadata);
     setConversationMetadata(initialConversationMetadata);
     setMessages([]);
@@ -1676,7 +1790,10 @@ export const WebSocketProvider = ({ children }) => {
       // Only attempt to reconnect if not already connected and not already connecting
       if (!isConnected && wsClient && !wsClient.isConnecting) {
 //         // console.log('Attempting WebSocket reconnection after network recovery');
-        wsClient.connect().catch(console.error);
+        setIsReconnecting(true);
+        Promise.resolve(wsClient.connect())
+          .catch(console.error)
+          .finally(() => setIsReconnecting(false));
       } else {
 //         // console.log('WebSocket already connected or connecting, skipping reconnection');
       }
@@ -1709,6 +1826,24 @@ export const WebSocketProvider = ({ children }) => {
     };
   }, []);
 
+  // Single derived socket status for the UI. Computed on every render (not memoised)
+  // because wsClient.isConnecting is a plain mutable field on the client, not state.
+  // isConnected is deliberately left untouched for the existing consumers.
+  const connectionStatus = !networkStatus.isOnline
+    ? 'offline'
+    : isConnected
+      ? 'connected'
+      : (isReconnecting || wsClient?.isConnecting)
+        ? 'reconnecting'
+        : 'connecting';
+
+  // Stamp the moment the socket comes up, and retire any in-flight reconnect flag.
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    setLastConnectedAt(new Date().toISOString());
+    setIsReconnecting(false);
+  }, [connectionStatus]);
+
     return (
     <WebSocketContext.Provider value={{ 
       wsClient, 
@@ -1717,6 +1852,8 @@ export const WebSocketProvider = ({ children }) => {
       userMetadata, 
       conversationMetadata,
       userProfile,
+      partnerProfile,
+      partnerId,
       messages,
       initState,
       hasActiveChat,
@@ -1725,6 +1862,9 @@ export const WebSocketProvider = ({ children }) => {
       otherUserPresence,
       typingStatus,
       networkStatus,
+      connectionStatus,
+      lastConnectedAt,
+      displayNameFor,
       firebaseReady,
       initializeUser,
       startNewChat,

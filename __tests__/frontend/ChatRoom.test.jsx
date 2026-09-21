@@ -49,6 +49,20 @@ jest.mock('../../src/app/components/auth/FirebaseAuthProvider', () => ({
   }),
 }));
 
+const SELF_ID = 'test-user-123';
+const PARTNER_ID = 'partner-user-456';
+const SELF_NAME = 'Test User';
+const PARTNER_NAME = 'Ada Partner';
+
+// Mirrors the context's displayNameFor contract: always a non-empty string,
+// never a fabricated name.
+const displayNameFor = (someUserId) => {
+  if (someUserId === SELF_ID) return SELF_NAME;
+  if (someUserId === PARTNER_ID) return PARTNER_NAME;
+  if (typeof someUserId === 'string' && someUserId.length > 0) return someUserId.slice(0, 8);
+  return 'Your match';
+};
+
 const mockUseWebSocket = jest.fn();
 const mockUsePresenceSystem = jest.fn();
 const mockUseTypingIndicator = jest.fn();
@@ -109,6 +123,21 @@ describe('ChatRoom Component', () => {
         email: 'test@example.com',
         name: 'Test User',
       },
+      partnerId: PARTNER_ID,
+      partnerProfile: {
+        userId: PARTNER_ID,
+        displayName: PARTNER_NAME,
+        name: null,
+        email: null,
+      },
+      displayNameFor,
+      connectionStatus: 'connected',
+      lastConnectedAt: '2024-01-01T00:00:00.000Z',
+      networkStatus: {
+        isOnline: true,
+        restApiHealthy: true,
+        wsConnected: true,
+      },
       messages: [
         {
           id: 'msg-1',
@@ -133,13 +162,10 @@ describe('ChatRoom Component', () => {
       hasActiveChat: true,
       isLoadingMessages: false,
       hasMoreMessages: false,
+      // presenceStatus / presenceUpdated deliver {status, lastSeen}
       otherUserPresence: {
-        isOnline: true,
+        status: 'online',
         lastSeen: '2024-01-01T00:00:00.000Z',
-      },
-      typingStatus: {
-        isTyping: false,
-        userId: null,
       },
       initializeUser: jest.fn(),
       sendMessageOptimistic: jest.fn(),
@@ -204,34 +230,89 @@ describe('ChatRoom Component', () => {
     await waitFor(() => expect(messageInput.value).toBe(''));
   });
 
-  test('should handle typing indicator', async () => {
+  test('should keep the composer text local as the user types', async () => {
     render(<ChatRoom />);
-    
+
     const messageInput = await screen.findByPlaceholderText(/TYPE YOUR REPLY HERE/);
-    
+
     fireEvent.change(messageInput, { target: { value: 'Typing...' } });
-    
-    // The typing indicator should be sent via the WebSocket
-    // Since sendTypingStatus is not available in the mock, let's just verify the input works
+
+    // The typingStatus action is deprecated server-side, so nothing is sent
+    // while typing - the composer just owns its own text.
     expect(messageInput.value).toBe('Typing...');
   });
 
-  test('should show typing indicator from partner', async () => {
+  test('should label messages with real identities, not placeholder names', async () => {
+    render(<ChatRoom />);
+
+    await waitFor(() => {
+      expect(screen.getByText(SELF_NAME)).toBeInTheDocument();
+    });
+
+    // The partner name appears on their message and in the header row.
+    expect(screen.getAllByText(PARTNER_NAME).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/QUINCEY/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/JOHNATHAN/i)).not.toBeInTheDocument();
+  });
+
+  test('should fall back to an honest label when no real name is known', async () => {
     mockUseWebSocket.mockReturnValue({
       ...mockUseWebSocket(),
-      typingStatus: {
-        isTyping: true,
-        userId: 'partner-user-456',
-      },
+      partnerProfile: null,
+      displayNameFor: (someUserId) =>
+        someUserId === SELF_ID ? 'You' : 'Your match',
     });
 
     render(<ChatRoom />);
-    
-    // Since the component doesn't display typing indicators as text,
-    // let's just verify the component renders without crashing
+
     await waitFor(() => {
-      expect(screen.getByText(/QUINCEY/)).toBeInTheDocument();
+      expect(screen.getByText('You')).toBeInTheDocument();
     });
+    expect(screen.getAllByText('Your match').length).toBeGreaterThan(0);
+  });
+
+  test('should not show a connection banner while connected', async () => {
+    render(<ChatRoom />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello!')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reconnecting/i)).not.toBeInTheDocument();
+  });
+
+  test('should show a reconnecting banner when the socket is reconnecting', async () => {
+    mockUseWebSocket.mockReturnValue({
+      ...mockUseWebSocket(),
+      connectionStatus: 'reconnecting',
+      isConnected: false,
+    });
+
+    render(<ChatRoom />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/Reconnecting/i);
+    });
+  });
+
+  test('should show an offline banner and block sending when offline', async () => {
+    mockUseWebSocket.mockReturnValue({
+      ...mockUseWebSocket(),
+      connectionStatus: 'offline',
+      isConnected: false,
+    });
+
+    render(<ChatRoom />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/messages will send when you're back/i)
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled();
+    expect(screen.getByPlaceholderText(/TYPE YOUR REPLY HERE/)).toBeDisabled();
   });
 
   test('should handle ready state toggle', async () => {
@@ -320,22 +401,27 @@ describe('ChatRoom Component', () => {
   });
 
   test('should display partner presence status', async () => {
+    render(<ChatRoom />);
+
+    // The presence label sits next to the partner name in the chat header.
+    await waitFor(() => {
+      expect(screen.getByText('Online')).toBeInTheDocument();
+    });
+  });
+
+  test('should display an offline presence label when the partner is away', async () => {
     mockUseWebSocket.mockReturnValue({
       ...mockUseWebSocket(),
       otherUserPresence: {
-        status: 'online',
+        status: 'offline',
         lastSeen: '2024-01-01T00:00:00.000Z',
       },
     });
 
     render(<ChatRoom />);
-    
-    // The presence status should be displayed somewhere in the component
-    // Let me check what's actually being rendered for presence
+
     await waitFor(() => {
-      // Since the component doesn't seem to display the presence status text,
-      // let's just verify the component renders without crashing
-      expect(screen.getByText(/QUINCEY/)).toBeInTheDocument();
+      expect(screen.getByText('Offline')).toBeInTheDocument();
     });
   });
 

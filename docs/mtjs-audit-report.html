@@ -221,22 +221,22 @@
 
     <div class="verdict ok">
       <span class="flag">Blockers cleared</span>
-      <p>All five ship blockers are fixed and pushed, the test suite is green (325 passing, 0 failing) with a coverage gate enforced in CI, and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
+      <p>All five ship blockers are fixed and pushed, the test suite is green (365 passing, 0 failing) with a coverage gate enforced in CI, and the highest-severity backend and frontend defects are closed. What remains is hardening and cleanup — plus credential rotation, which is tracked outside this report.</p>
     </div>
   </header>
 
   <div class="cards">
     <div class="card"><div class="k">Overall health</div><div class="v warn">Stabilizing</div><div class="note">Was “Fragile” — blockers cleared, hardening left</div></div>
     <div class="card"><div class="k">Prod readiness</div><div class="v ok">Unblocked</div><div class="note">5 of 5 blockers fixed · rotate credentials</div></div>
-    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">325 / 325 runnable · 25 of 25 suites · was 68%</div></div>
-    <div class="card"><div class="k">Real coverage</div><div class="v warn">~38%</div><div class="note">Was ~13.5% · ratcheting gate enforced in CI</div></div>
+    <div class="card"><div class="k">Test pass rate</div><div class="v ok">100%</div><div class="note">365 / 365 runnable · 27 of 27 suites · was 68%</div></div>
+    <div class="card"><div class="k">Real coverage</div><div class="v warn">~40%</div><div class="note">Was ~13.5% · ratcheting gate enforced in CI</div></div>
   </div>
 
   <section>
     <div class="sec-head"><span class="sec-num">01</span><h2>Where it's at</h2></div>
     <p class="lede">This is best read as an <b>advanced prototype with real cloud infrastructure</b>, not a shippable product. The full journey — land → sign in → matchmake → 36-question chat → congrats — is wired up, and there are genuinely thoughtful touches: specific Firebase auth error messages, an IO-error recovery screen, confirm-before-end dialogs, and reconnection handling.</p>
     <p class="lede">But it sits on a codebase that has <b>accreted heavily</b>. The data/auth layer has concrete correctness and authorization defects, the UI still ships hardcoded placeholder identities, and the safety nets meant to catch this — TypeScript and the test suite — are themselves compromised. The single most urgent item isn't a code bug: <b>live production credentials sit in cleartext on disk</b> and should be treated as compromised and rotated now.</p>
-    <p class="lede"><b>Update, 2026-09-15.</b> Since the audit: all five blockers were fixed, the backend races and presence bugs were closed with conditional writes, the frontend data-flow bugs were repaired, CORS/CSP were tightened, and the test suite was rebuilt so it exercises the real code — <b>304 tests passing, 0 failing</b>, up from 156 / 73, with every lambda, the messages route and the deploy manifest under test and a coverage gate in CI. Everything below carries a status chip. Credential rotation is being handled outside this report.</p>
+    <p class="lede"><b>Update, 2026-09-15.</b> Since the audit: all five blockers were fixed, the backend races and presence bugs were closed with conditional writes, the frontend data-flow bugs were repaired, CORS/CSP were tightened, and the test suite was rebuilt so it exercises the real code — <b>365 tests passing, 0 failing</b>, up from 156 / 73, with every lambda, the messages route and the deploy manifest under test and a coverage gate in CI. Everything below carries a status chip. Credential rotation is being handled outside this report.</p>
   </section>
 
   <section>
@@ -285,18 +285,18 @@
     <div class="sec-head"><span class="sec-num">03</span><h2>Test results</h2><span class="count">after remediation · 2026-09-15</span></div>
     <div class="test-grid">
       <div class="panel">
-        <h3>Runnable tests — 325 total</h3>
+        <h3>Runnable tests — 365 total</h3>
         <div class="bar">
-          <span class="pass" style="width:100%">325 pass · 0 fail</span>
+          <span class="pass" style="width:100%">365 pass · 0 fail</span>
         </div>
-        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>21.2s wall</span></div>
+        <div class="barcap"><span>100% passing · 32 skipped (gated)</span><span>35.8s wall</span></div>
         <div style="margin-top:16px">
-          <div class="kv"><span>Suites passing</span><span class="n ok">25 of 25</span></div>
+          <div class="kv"><span>Suites passing</span><span class="n ok">27 of 27</span></div>
           <div class="kv"><span>Suites gated (skip without infra)</span><span class="n">2</span></div>
           <div class="kv"><span>Obsolete suites removed</span><span class="n">5</span></div>
           <div class="kv"><span>v3-mocked lambda suites (all 10 lambdas)</span><span class="n ok">10</span></div>
           <div class="kv"><span>Real-handler API route suite · deploy smoke test</span><span class="n ok">✓ · ✓</span></div>
-          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">37.6% / 42.9%</span></div>
+          <div class="kv"><span>Coverage (statements / lines)</span><span class="n">40.2% / 45.7%</span></div>
           <div class="kv"><span>Coverage gate</span><span class="n ok">ratchet (29 / 20 / 24 / 33) in CI</span></div>
         </div>
       </div>
@@ -343,7 +343,7 @@
 
       <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Frontend</span></div><div><h4>Send button doesn't clear the message input <span class="sev fixed">fixed</span></h4><p>The button sets <span class="mono">inputRef.value=''</span> but the input is controlled with a sync effect that re-asserts the old value. Sending via the button leaves the text (re-sendable); only the Enter path clears.</p><div class="loc">src/app/components/ChatRoom.jsx:817-827 vs 56-68</div></div></div>
 
-      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">UX</span></div><div><h4>Hardcoded placeholder identities ship to the UI <span class="sev open">open</span></h4><p>Every message is labeled QUINCEY/JOHNATHAN, congrats greets everyone as "Quincey", home always claims "5* NEW MESSAGES", partner names fall back to "Johnathan". Reads as an unfinished mockup (partly downstream of the dead metadata).</p><div class="loc">HomeContent.jsx:166,173,494 · congrats/page.jsx:74</div></div></div>
+      <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">UX</span></div><div><h4>Hardcoded placeholder identities ship to the UI <span class="sev fixed">fixed — real names via displayNameFor; the profile API must still stop defaulting to "Anonymous"</span></h4><p>Every message is labeled QUINCEY/JOHNATHAN, congrats greets everyone as "Quincey", home always claims "5* NEW MESSAGES", partner names fall back to "Johnathan". Reads as an unfinished mockup (partly downstream of the dead metadata).</p><div class="loc">HomeContent.jsx:166,173,494 · congrats/page.jsx:74</div></div></div>
 
       <div class="frow"><div class="meta"><span class="sev medium">Medium</span><span class="dim">Frontend</span></div><div><h4>No accessibility affordances; key controls are hover-only <span class="sev partial">partial — labels, dialog semantics, focus reveal done</span></h4><p>Zero aria-labels, no <span class="mono">role="dialog"</span>, icon-only buttons with no accessible name, modals with no focus trap/Escape. Sign Out, End Conversation &amp; nav are <span class="mono">opacity-0</span> revealed only on hover — unreachable by keyboard/touch.</p><div class="loc">src/app (0 aria matches) · reveal on focus-within</div></div></div>
 
@@ -368,11 +368,11 @@
   <section>
     <div class="sec-head"><span class="sec-num">05</span><h2>UX inconsistencies &amp; friction</h2></div>
     <ul class="clean">
-      <li><b>Placeholder identities everywhere.</b> QUINCEY/JOHNATHAN on every message, "Quincey" on congrats, "5* NEW MESSAGES" always — the app reads as an unfinished mockup to a real user.</li>
-      <li><b>Navigation is inconsistent &amp; partly unreachable.</b> Two sign-in routes disagree on where to send users; post-login lands on the marketing page; sign out / home / end-chat are hover-only, so they fail on touch and keyboard. <span class="sev partial">hover-only controls now reveal on focus; routing still open</span></li>
-      <li><b>No escape from "Finding a match…".</b> The spinner has no cancel or timeout — a user can hang forever — and there's no clear disconnected/reconnecting state. <span class="sev partial">Cancel + 60 s "still looking" notice added; disconnected state still open</span></li>
-      <li><b>Paid-for feedback is invisible.</b> Typing-indicator and presence systems are imported but never rendered (and the typing module is deprecated yet still in the path).</li>
-      <li><b>Responsiveness gap.</b> Fixed 50/50 split layouts and side-by-side congrats panels will break at phone widths.</li>
+      <li><b>Placeholder identities everywhere.</b> QUINCEY/JOHNATHAN on every message, "Quincey" on congrats, "5* NEW MESSAGES" always — the app reads as an unfinished mockup to a real user. <span class="sev fixed">fixed — every name now resolves through displayNameFor, the fake count is a truthful last-message preview; the server still needs to return real display names</span></li>
+      <li><b>Navigation is inconsistent &amp; partly unreachable.</b> Two sign-in routes disagree on where to send users; post-login lands on the marketing page; sign out / home / end-chat are hover-only, so they fail on touch and keyboard. <span class="sev fixed">fixed — one canonical /signin, legacy route redirects, post-login → /home, controls visible on touch</span></li>
+      <li><b>No escape from "Finding a match…".</b> The spinner has no cancel or timeout — a user can hang forever — and there's no clear disconnected/reconnecting state. <span class="sev fixed">fixed — Cancel + 60 s notice; connection banner, disabled composer and presence dot in the chat</span></li>
+      <li><b>Paid-for feedback is invisible.</b> Typing-indicator and presence systems are imported but never rendered (and the typing module is deprecated yet still in the path). <span class="sev fixed">fixed — presence rendered; typing UI removed since the server deprecated the action</span></li>
+      <li><b>Responsiveness gap.</b> Fixed 50/50 split layouts and side-by-side congrats panels will break at phone widths. <span class="sev fixed">fixed — single-column layouts below md on chat, home, congrats and sign-in (not yet device-verified)</span></li>
       <li><b>Off-by-one completion.</b> Reaching question 36 jumps to congrats, apparently skipping the final question. <span class="sev fixed">fixed</span></li>
       <li class="bright"><b>Worth preserving.</b> Specific Firebase auth error messages, the IO-error recovery screen, confirm-before-end dialogs, and reconnection handling are genuine bright spots.</li>
     </ul>

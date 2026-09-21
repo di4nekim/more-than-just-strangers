@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useFirebaseAuth } from './auth/FirebaseAuthProvider';
@@ -12,6 +12,45 @@ import HOME_BG from '../../../public/HOME_BG.svg';
 // SOFT timeout: the search keeps running, the user just gets an explicit choice
 // between cancelling and carrying on waiting.
 const MATCHMAKING_SOFT_TIMEOUT_MS = 60000;
+
+// How much of the last message we show as a preview before eliding it.
+const LAST_MESSAGE_PREVIEW_LENGTH = 60;
+
+// The placeholder the profile endpoint returns when an account has no name set -
+// it is not a real name, so it must never be shown as one.
+const PLACEHOLDER_NAME = 'anonymous';
+
+// First usable name out of the candidates, or null. Mirrors the context's own
+// rule: blanks and the 'Anonymous' placeholder count as "no name".
+const firstRealName = (...candidates) => {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed || trimmed.toLowerCase() === PLACEHOLDER_NAME) continue;
+    return trimmed;
+  }
+  return null;
+};
+
+// The local part of an email, used only as a last resort for the signed-in user's
+// own name. Never invents anything the user did not supply.
+const emailPrefix = (email) => {
+  if (typeof email !== 'string') return null;
+  const local = email.split('@')[0]?.trim();
+  return local || null;
+};
+
+// conversationMetadata.lastMessage is stored server-side as { content, sentAt }.
+// Be tolerant of a bare string in case an older record arrives that way.
+const lastMessagePreview = (lastMessage) => {
+  const raw = typeof lastMessage === 'string' ? lastMessage : lastMessage?.content;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.length > LAST_MESSAGE_PREVIEW_LENGTH
+    ? `${trimmed.slice(0, LAST_MESSAGE_PREVIEW_LENGTH)}…`
+    : trimmed;
+};
 
 export default function HomeContent() {
   const router = useRouter();
@@ -32,8 +71,14 @@ export default function HomeContent() {
     endChat,
     initState,
     wsActions, // Added wsActions to the hook
-    wsClient // Added wsClient to the hook
+    wsClient, // Added wsClient to the hook
+    partnerId = null,
+    displayNameFor
   } = useWebSocket();
+
+  // displayNameFor always returns a real, non-empty label; guard only against a
+  // context value that predates it so the page never crashes on an older provider.
+  const nameFor = typeof displayNameFor === 'function' ? displayNameFor : () => 'Your match';
   
   // Key State
   const [currentChatId, setCurrentChatId] = useState(null);
@@ -45,7 +90,6 @@ export default function HomeContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [partnerName, setPartnerName] = useState("Anonymous");
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [matchmakingTakingLong, setMatchmakingTakingLong] = useState(false);
   const [keepWaitingAt, setKeepWaitingAt] = useState(0);
@@ -95,9 +139,9 @@ export default function HomeContent() {
       setIsInMatchmakingQueue(false);
       
       if (router && typeof router.push === 'function') {
-        router.push('/firebase-signin');
+        router.push('/signin');
       } else {
-        window.location.href = '/firebase-signin';
+        window.location.href = '/signin';
       }
     } catch (error) {
       console.error('Failed to sign out:', error);
@@ -109,7 +153,7 @@ export default function HomeContent() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/firebase-signin');
+      router.push('/signin');
     }
   }, [authLoading, isAuthenticated, router]);
 
@@ -118,35 +162,6 @@ export default function HomeContent() {
       loadUserData();
     }
   }, [user, isAuthenticated, authLoading]);
-
-  const getPartnerName = useCallback(async () => {
-    try {
-      if (!currentChatId || !conversationMetadata.participants || conversationMetadata.participants.length === 0) {
-        return "Anonymous";
-      }
-
-      const currentUserId = user?.uid || null;
-      if (!currentUserId) {
-        return "Anonymous";
-      }
-
-      const participantsArray = Array.isArray(conversationMetadata.participants) 
-        ? conversationMetadata.participants 
-        : [];
-      
-      const partnerUserId = participantsArray.find(id => id !== currentUserId);
-      
-      if (!partnerUserId) {
-        return "Anonymous";
-      }
-
-      const partnerProfile = await apiClient.getUserProfileById(partnerUserId);
-      return partnerProfile.name || partnerProfile.displayName || "Anonymous";
-    } catch (error) {
-      console.error('Failed to get partner name:', error);
-      return "Anonymous";
-    }
-  }, [currentChatId, conversationMetadata.participants, user?.uid]);
 
   // Update local state when WebSocket state changes
   useEffect(() => {
@@ -178,25 +193,6 @@ export default function HomeContent() {
 
     return () => clearTimeout(timeoutId);
   }, [isInMatchmakingQueue, keepWaitingAt]);
-
-  // Update partner name when conversation metadata changes
-  useEffect(() => {
-    const updatePartnerName = async () => {
-      try {
-        const name = await getPartnerName();
-        setPartnerName(name);
-      } catch (error) {
-        console.error('Failed to update partner name:', error);
-        setPartnerName("Johnathan");
-      }
-    };
-
-    if (currentChatId && conversationMetadata.participants && conversationMetadata.participants.length > 0) {
-      updatePartnerName();
-    } else {
-      setPartnerName("Johnathan");
-    }
-  }, [currentChatId, conversationMetadata.participants, getPartnerName]);
 
   const loadUserData = async () => {
     try {
@@ -417,6 +413,16 @@ export default function HomeContent() {
 
   const questionProgress = getQuestionProgress();
 
+  // Real identities only: the partner's name comes from the context (which falls
+  // back to an honest label), and the greeting uses whatever the signed-in user
+  // actually gave us.
+  const partnerDisplayName = nameFor(partnerId);
+  const ownDisplayName =
+    firstRealName(userProfile?.displayName, userProfile?.name) ||
+    emailPrefix(userProfile?.email) ||
+    'there';
+  const messagePreview = lastMessagePreview(conversationMetadata?.lastMessage);
+
   return (
     <div className="min-h-screen relative font-jetbrains-mono">
       {/* HOME_BG image */}
@@ -432,7 +438,7 @@ export default function HomeContent() {
       <div className="relative z-10 flex flex-col min-h-screen">
         {/* NavBar */}
         <nav>
-          <div className="max-w-7xl mx-auto sm:px-6 lg:px-4 mt-20">
+          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-4 mt-10 sm:mt-20">
             <div className="flex justify-between items-center h-16">
               {/* App Logo */}
               <div className="flex-shrink-0">
@@ -456,7 +462,9 @@ export default function HomeContent() {
                   </button>
 
                   {/* Sign Out Button */}
-                  <div className="absolute top-full right-0 mt-2 w-40 py-1 bg-transparent rounded-md opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                  {/* Hover reveals it on a pointer device; focus-within keeps it
+                      reachable on touch, where there is no hover. */}
+                  <div className="absolute top-full right-0 mt-2 w-40 py-1 bg-transparent rounded-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-50">
                     <button
                       onClick={(e) => {
                         e.preventDefault();
@@ -478,8 +486,8 @@ export default function HomeContent() {
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-md mx-auto">
+        <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center w-full max-w-md mx-auto">
             {/* Error Display */}
             {error && (
               <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
@@ -494,16 +502,20 @@ export default function HomeContent() {
             )}
 
             {/* Greeting and Progress */}
-            <div className="mb-8 text-left text-teal text-2xl">
+            <div className="mb-8 text-left text-teal text-xl sm:text-2xl">
               <div className="mb-2">
-                Hi, {userProfile?.name || 'there.'}
+                Hi, {ownDisplayName}.
               </div>
-              <div>
-                You&apos;re currently on question
-              </div>
-              <div className='font-semibold'>
-                {questionProgress.current}/{questionProgress.total} with {partnerName}.
-              </div>
+              {currentChatId && (
+                <>
+                  <div>
+                    You&apos;re currently on question
+                  </div>
+                  <div className='font-semibold'>
+                    {questionProgress.current}/{questionProgress.total} with {partnerDisplayName}.
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Loading indicator for matchmaking */}
@@ -527,17 +539,17 @@ export default function HomeContent() {
                     Still looking. This is taking longer than usual — you can keep waiting or cancel the search.
                   </p>
                 )}
-                <div className="flex space-x-4 justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button
                     onClick={handleLeaveMatchmakingQueue}
-                    className="px-4 py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"
+                    className="w-full sm:w-auto min-h-[44px] px-4 py-3 sm:py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"
                   >
                     Cancel Search
                   </button>
                   {matchmakingTakingLong && (
                     <button
                       onClick={handleKeepWaiting}
-                      className="px-4 py-2 bg-teal text-beige rounded hover:bg-opacity-80 transition-colors uppercase"
+                      className="w-full sm:w-auto min-h-[44px] px-4 py-3 sm:py-2 bg-teal text-beige rounded hover:bg-opacity-80 transition-colors uppercase"
                     >
                       Keep Waiting
                     </button>
@@ -548,26 +560,38 @@ export default function HomeContent() {
 
             {/* Action Buttons */}
             <div className="space-y-4">
-              {/* New Messages Button Container */}
+              {/* Conversation summary: only ever states what we actually know.
+                  No invented unread counts. */}
+              {currentChatId && (
+                <p className="text-left text-teal text-sm break-words">
+                  {messagePreview
+                    ? `Last message: ${messagePreview}`
+                    : `Continue your conversation with ${partnerDisplayName}.`}
+                </p>
+              )}
+
+              {/* Enter Conversation Button Container */}
               <div className="relative group">
-                {/* New Messages Button */}
+                {/* Enter Conversation Button */}
                 <button
                   onClick={handleEnterConversation}
                   disabled={!currentChatId || isInMatchmakingQueue || !wsConnected}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold bg-teal text-beige border-[3px] border-beige hover:bg-beige hover:text-teal hover:font-bold hover:border-teal transition-colors ${
+                  className={`w-full min-h-[44px] py-3 px-6 rounded-lg font-semibold bg-teal text-beige border-[3px] border-beige hover:bg-beige hover:text-teal hover:font-bold hover:border-teal transition-colors ${
                     currentChatId && !isInMatchmakingQueue && wsConnected
                       ? 'cursor-pointer'
                       : 'opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  {currentChatId ? 'YOU HAVE 5* NEW MESSAGES →' : 'NO NEW MESSAGES'}
+                  {currentChatId ? 'CONTINUE YOUR CONVERSATION →' : 'NO ACTIVE CONVERSATION'}
                 </button>
 
-                {/* End Conversation Button - use WebSocket state to determine if conversation is active */}
+                {/* End Conversation Button - use WebSocket state to determine if conversation is active.
+                    Always visible on touch widths (there is no hover there); the
+                    desktop hover-reveal overlay is preserved from md up. */}
                 {(hasActiveChat || userMetadata.chatId || currentChatId) && wsConnected && (
                   <button
                     onClick={handleLeaveConversation}
-                    className="absolute top-full left-0 right-0 mt-2 w-full py-3 px-6 rounded-lg font-semibold text-beige bg-teal hover:bg-beige hover:text-teal hover:font-semibold hover:border-beige transition-colors opacity-0 group-hover:opacity-80"
+                    className="relative mt-2 w-full min-h-[44px] py-3 px-6 rounded-lg font-semibold text-beige bg-teal hover:bg-beige hover:text-teal hover:font-semibold hover:border-beige transition-colors opacity-80 md:absolute md:top-full md:left-0 md:right-0 md:opacity-0 md:group-hover:opacity-80 md:group-focus-within:opacity-80"
                   >
                     END CONVERSATION
                   </button>
@@ -579,7 +603,7 @@ export default function HomeContent() {
                 <button
                   onClick={handleToggleMatchmaking}
                   disabled={initState.isInitializing}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold text-blue-800 transition-colors ${
+                  className={`w-full min-h-[44px] py-3 px-6 rounded-lg font-semibold text-blue-800 transition-colors ${
                     !initState.isInitializing
                       ? 'bg-blue-200 hover:bg-blue-300 cursor-pointer'
                       : 'bg-gray-200 opacity-50 cursor-not-allowed'
@@ -607,7 +631,7 @@ export default function HomeContent() {
         {/* Custom End Conversation Dialog */}
         {showEndDialog && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-beige border-2 border-teal rounded-lg p-6 max-w-md mx-4">
+            <div className="bg-beige border-2 border-teal rounded-lg p-6 w-full max-w-md mx-4">
               <div className="text-center">
                 <h3 className="text-teal font-bold text-lg mb-4 uppercase">
                   End Conversation?
@@ -615,16 +639,16 @@ export default function HomeContent() {
                 <p className="text-teal mb-6 text-sm uppercase">
                   Are you sure you want to end the conversation? This action cannot be undone.
                 </p>
-                <div className="flex space-x-4 justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button
                     onClick={() => setShowEndDialog(false)}
-                    className="px-4 py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"
+                    className="w-full sm:w-auto min-h-[44px] px-4 py-3 sm:py-2 border border-teal text-teal rounded hover:bg-teal hover:text-beige transition-colors uppercase"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmEndConversation}
-                    className="px-4 py-2 bg-teal text-beige rounded hover:bg-opacity-80 transition-colors uppercase"
+                    className="w-full sm:w-auto min-h-[44px] px-4 py-3 sm:py-2 bg-teal text-beige rounded hover:bg-opacity-80 transition-colors uppercase"
                   >
                     End Conversation
                   </button>

@@ -31,6 +31,8 @@ const mockWsClient = {
   send: jest.fn(),
   onMessage: jest.fn(),
   isConnected: true,
+  // The provider reads this plain field (not state) when deriving connectionStatus.
+  isConnecting: false,
 };
 
 const mockWsActions = {
@@ -98,6 +100,7 @@ const { apiClient } = require('../../src/app/lib/api-client');
 const { WebSocketClient } = require('../../src/websocket/websocketHandler');
 
 const USER_ID = 'test-user-123';
+const PARTNER_ID = 'partner-user-456';
 const CHAT_ID = 'test-chat-123';
 
 // Exposes the live context value to the tests without a component per action.
@@ -109,6 +112,9 @@ const Probe = () => {
       <div data-testid="profile-id">{ctx.userProfile?.userId || 'No user'}</div>
       <div data-testid="chat-id">{ctx.conversationMetadata?.chatId || 'No chat'}</div>
       <div data-testid="is-connected">{ctx.isConnected ? 'Connected' : 'Disconnected'}</div>
+      <div data-testid="connection-status">{ctx.connectionStatus}</div>
+      <div data-testid="partner-id">{ctx.partnerId || 'No partner'}</div>
+      <div data-testid="partner-name">{ctx.partnerProfile?.displayName || 'No partner profile'}</div>
       <div data-testid="init">{ctx.initState.isInitializing ? 'Loading' : 'Ready'}</div>
       <div data-testid="init-error">{ctx.initState.error || ''}</div>
     </div>
@@ -149,6 +155,9 @@ describe('WebSocketProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockConnectionState.callback = null;
+    // isConnecting is a plain mutable field on the real client, so reset it by hand:
+    // clearAllMocks only touches jest.fn()s.
+    mockWsClient.isConnecting = false;
     process.env.NEXT_PUBLIC_WEBSOCKET_API_URL = 'wss://test-websocket-url.com';
   });
 
@@ -345,6 +354,138 @@ describe('WebSocketProvider', () => {
         chatId: CHAT_ID,
         endReason: 'user_ended',
       });
+    });
+  });
+
+  describe('partner profile', () => {
+    // conversationStarted / conversationSync are the only places the participant
+    // list arrives, so the partner lookup hangs off conversationMetadata.participants.
+    const startConversation = () =>
+      handlers().conversationStarted({
+        chatId: CHAT_ID,
+        participants: [USER_ID, PARTNER_ID],
+        matched: true,
+        createdAt: new Date().toISOString(),
+      });
+
+    test('loads the other participant\'s profile once a conversation starts', async () => {
+      renderProvider();
+      await initializeUser();
+
+      // Delivered outside act() for the same reason as the startNewChat test: the
+      // provider kicks off a chat-history load whose pending work never settles.
+      startConversation();
+
+      await untilDom(() => screen.getByTestId('partner-name').textContent === 'Partner User');
+      expect(apiClient.getUserProfileById).toHaveBeenCalledWith(PARTNER_ID);
+      expect(screen.getByTestId('partner-id')).toHaveTextContent(PARTNER_ID);
+      expect(ctx.partnerProfile).toMatchObject({
+        userId: PARTNER_ID,
+        displayName: 'Partner User',
+        name: 'Partner User',
+      });
+    });
+
+    test('never throws and leaves the profile null when the lookup fails', async () => {
+      apiClient.getUserProfileById.mockRejectedValueOnce(new Error('profile unavailable'));
+
+      renderProvider();
+      await initializeUser();
+
+      startConversation();
+
+      await untilDom(() => screen.getByTestId('partner-id').textContent === PARTNER_ID);
+      await waitFor(() => expect(apiClient.getUserProfileById).toHaveBeenCalledWith(PARTNER_ID));
+      expect(screen.getByTestId('partner-name')).toHaveTextContent('No partner profile');
+      expect(ctx.partnerProfile).toBeNull();
+      // The fallback still names the partner in a way that is not a made-up name.
+      expect(ctx.displayNameFor(PARTNER_ID)).toBe('Your match');
+    });
+
+    test('resetInitialization clears the partner profile', async () => {
+      renderProvider();
+      await initializeUser();
+
+      startConversation();
+      await untilDom(() => screen.getByTestId('partner-name').textContent === 'Partner User');
+
+      await act(async () => { ctx.resetInitialization(); });
+
+      await waitFor(() => expect(screen.getByTestId('partner-name')).toHaveTextContent('No partner profile'));
+      expect(ctx.partnerProfile).toBeNull();
+      expect(ctx.partnerId).toBeNull();
+    });
+  });
+
+  describe('displayNameFor', () => {
+    test('falls back to "You" for the signed-in user before the profile loads', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      // No profile yet, but the Firebase uid already identifies us.
+      expect(ctx.displayNameFor(USER_ID)).toBe('You');
+    });
+
+    test('resolves self, partner and unknown ids', async () => {
+      renderProvider();
+      await initializeUser();
+
+      await dispatch('conversationSync', {
+        chatId: CHAT_ID,
+        participants: [USER_ID, PARTNER_ID],
+      });
+      await untilDom(() => screen.getByTestId('partner-name').textContent === 'Partner User');
+
+      expect(ctx.displayNameFor(USER_ID)).toBe('Test User');
+      expect(ctx.displayNameFor(PARTNER_ID)).toBe('Partner User');
+      // Anyone else: a short id prefix, never an invented name.
+      expect(ctx.displayNameFor('someone-else-999')).toBe('someone-');
+      expect(ctx.displayNameFor(null)).toBe('Your match');
+    });
+  });
+
+  describe('connectionStatus', () => {
+    const status = () => screen.getByTestId('connection-status').textContent;
+
+    test('is "connected" once the socket is up, and stamps lastConnectedAt', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      expect(status()).toBe('connected');
+      expect(typeof ctx.lastConnectedAt).toBe('string');
+      expect(Number.isNaN(Date.parse(ctx.lastConnectedAt))).toBe(false);
+    });
+
+    test('flips from connected to offline when the browser drops the network', async () => {
+      renderProvider();
+      await waitForConnection();
+      expect(status()).toBe('connected');
+
+      await act(async () => {
+        window.dispatchEvent(new Event('offline'));
+        mockConnectionState.callback(false);
+      });
+
+      // Offline wins over every socket-level state.
+      expect(status()).toBe('offline');
+      expect(screen.getByTestId('is-connected')).toHaveTextContent('Disconnected');
+    });
+
+    test('is "connecting" when the socket is down with no attempt in flight, "reconnecting" when there is one', async () => {
+      renderProvider();
+      await waitForConnection();
+
+      mockWsClient.isConnecting = false;
+      await act(async () => { mockConnectionState.callback(false); });
+      expect(status()).toBe('connecting');
+
+      // Back up, then drop again while the client reports a connect attempt in flight.
+      await act(async () => { mockConnectionState.callback(true); });
+      expect(status()).toBe('connected');
+
+      mockWsClient.isConnecting = true;
+      await act(async () => { mockConnectionState.callback(false); });
+      expect(status()).toBe('reconnecting');
     });
   });
 
