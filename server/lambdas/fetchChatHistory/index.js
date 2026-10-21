@@ -2,6 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, QueryCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent } = require("../shared/logging");
 
 // Configure DynamoDB client for AWS SDK v3
 const client = new DynamoDBClient({
@@ -27,7 +28,7 @@ const handlerLogic = async (event, context) => {
     console.log('Authenticated user requesting chat history:', userId);
     
     try {
-        console.log('Event:', JSON.stringify(event, null, 2));
+        console.log('Event:', JSON.stringify(redactEvent(event), null, 2));
         
         // Parse the WebSocket message body
         let body;
@@ -49,7 +50,14 @@ const handlerLogic = async (event, context) => {
 
         // Extract parameters from the action/data structure
         const data = body.data || {};
-        const { chatId, limit = 20, lastEvaluatedKey } = data;
+        const { chatId, lastEvaluatedKey } = data;
+
+        // Sanitize client-supplied limit: integer, default 20 on NaN, clamped to [1, 100]
+        let limit = parseInt(data.limit, 10);
+        if (isNaN(limit)) {
+            limit = 20;
+        }
+        limit = Math.max(1, Math.min(100, limit));
 
         if (!chatId) {
             await apiGateway.send(new PostToConnectionCommand({

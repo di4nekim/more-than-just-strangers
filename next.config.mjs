@@ -1,9 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Production optimizations
-  compiler: {
-    // Aggressively remove console statements in production
-    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  // Type-check the production build; do not silence errors before deploy.
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+  eslint: {
+    ignoreDuringBuilds: false,
   },
   
   // Production-specific optimizations
@@ -120,9 +122,7 @@ const nextConfig = {
   serverExternalPackages: [
     '@aws-sdk/client-dynamodb',
     '@aws-sdk/lib-dynamodb',
-    'ws',
-    'wscat',
-    'boto3'
+    'ws'
   ]
 };
 

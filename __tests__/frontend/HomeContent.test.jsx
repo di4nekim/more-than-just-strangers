@@ -57,10 +57,14 @@ jest.mock('../../src/app/lib/api-client', () => ({
   },
 }));
 
+// Mirrors the context's displayNameFor contract: a real name for known ids, an
+// honest fallback otherwise - never a fabricated name.
+const makeDisplayNameFor = (names = {}) => jest.fn((userId) => names[userId] || 'Your match');
+
 describe('HomeContent Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Default mock implementation for active chat scenario
     mockUseWebSocket.mockReturnValue({
       userMetadata: {
@@ -83,6 +87,19 @@ describe('HomeContent Component', () => {
       },
       hasActiveChat: true,
       isConnected: true,
+      connectionStatus: 'connected',
+      lastConnectedAt: '2024-01-01T00:00:00.000Z',
+      partnerId: 'partner-user-456',
+      partnerProfile: {
+        userId: 'partner-user-456',
+        displayName: 'Partner User',
+        name: 'Partner User',
+        email: null,
+      },
+      displayNameFor: makeDisplayNameFor({
+        'partner-user-456': 'Partner User',
+        'test-user-123': 'Test User',
+      }),
       initializeUser: jest.fn(),
       startNewChat: jest.fn(),
       endChat: jest.fn(),
@@ -114,10 +131,41 @@ describe('HomeContent Component', () => {
 
   test('should display partner name when available', async () => {
     render(<HomeContent />);
-    
+
     await waitFor(() => {
-      expect(screen.getByText(/Partner User/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Partner User/).length).toBeGreaterThan(0);
     });
+  });
+
+  test('should never render the hardcoded placeholder partner name', async () => {
+    render(<HomeContent />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Partner User/).length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryByText(/Johnathan/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Anonymous/)).not.toBeInTheDocument();
+  });
+
+  test('should fall back to an honest label when the partner has no real name', async () => {
+    mockUseWebSocket.mockReturnValue({
+      ...mockUseWebSocket(),
+      partnerProfile: {
+        userId: 'partner-user-456',
+        displayName: null,
+        name: null,
+        email: null,
+      },
+      displayNameFor: makeDisplayNameFor({ 'test-user-123': 'Test User' }),
+    });
+
+    render(<HomeContent />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Your match/).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/Johnathan/)).not.toBeInTheDocument();
   });
 
   test('should display question progress', async () => {
@@ -141,11 +189,65 @@ describe('HomeContent Component', () => {
     });
   });
 
-  test('should show new messages button when chat is active', async () => {
+  test('should show a truthful enter-conversation button instead of a fake unread count', async () => {
     render(<HomeContent />);
-    
+
     await waitFor(() => {
-      expect(screen.getByText(/YOU HAVE 5\* NEW MESSAGES/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /CONTINUE YOUR CONVERSATION/ })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/5\* NEW MESSAGES/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/NEW MESSAGES/)).not.toBeInTheDocument();
+  });
+
+  test('should describe the conversation without inventing a count when no last message is known', async () => {
+    render(<HomeContent />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Continue your conversation with Partner User.')
+      ).toBeInTheDocument();
+    });
+  });
+
+  test('should preview the last message when one is present', async () => {
+    const base = mockUseWebSocket();
+    mockUseWebSocket.mockReturnValue({
+      ...base,
+      conversationMetadata: {
+        ...base.conversationMetadata,
+        lastMessage: {
+          content: 'What would constitute a perfect day for you?',
+          sentAt: '2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    render(<HomeContent />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Last message: What would constitute a perfect day for you\?/)
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/5\* NEW MESSAGES/)).not.toBeInTheDocument();
+  });
+
+  test('should truncate a long last message preview', async () => {
+    const base = mockUseWebSocket();
+    const longContent = 'a'.repeat(200);
+    mockUseWebSocket.mockReturnValue({
+      ...base,
+      conversationMetadata: {
+        ...base.conversationMetadata,
+        lastMessage: { content: longContent, sentAt: '2024-01-01T00:00:00.000Z' },
+      },
+    });
+
+    render(<HomeContent />);
+
+    await waitFor(() => {
+      expect(screen.getByText(`Last message: ${'a'.repeat(60)}…`)).toBeInTheDocument();
     });
   });
 
@@ -167,6 +269,70 @@ describe('HomeContent Component', () => {
     await waitFor(() => {
       expect(mockSignOut).toHaveBeenCalled();
     });
+  });
+
+  test('should offer a cancel button while searching for a match', async () => {
+    const mockCancelMatchmaking = jest.fn().mockResolvedValue(undefined);
+    const mockSetReady = jest.fn().mockResolvedValue(undefined);
+
+    // ready with no chat === waiting in the matchmaking queue
+    mockUseWebSocket.mockReturnValue({
+      userMetadata: {
+        userId: 'test-user-123',
+        connectionId: 'test-connection-123',
+        chatId: null,
+        ready: true,
+        questionIndex: 0,
+        lastSeen: '2024-01-01T00:00:00.000Z',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      conversationMetadata: {
+        chatId: null,
+        participants: [],
+        lastMessage: null,
+        lastUpdated: null,
+        endedBy: null,
+        endReason: null,
+        createdAt: null,
+      },
+      hasActiveChat: false,
+      isConnected: true,
+      connectionStatus: 'connected',
+      lastConnectedAt: '2024-01-01T00:00:00.000Z',
+      partnerId: null,
+      partnerProfile: null,
+      displayNameFor: makeDisplayNameFor({ 'test-user-123': 'Test User' }),
+      initializeUser: jest.fn(),
+      startNewChat: jest.fn(),
+      cancelMatchmaking: mockCancelMatchmaking,
+      endChat: jest.fn(),
+      initState: {
+        isInitializing: false,
+        profileLoaded: true,
+        chatContextLoaded: true,
+        wsConnected: true,
+        error: null,
+      },
+      wsActions: {
+        setReady: mockSetReady,
+      },
+      wsClient: {
+        disconnect: jest.fn(),
+      },
+    });
+
+    render(<HomeContent />);
+
+    const cancelButton = await screen.findByRole('button', { name: /cancel search/i });
+    expect(screen.getByText(/LOOKING FOR YOUR NEXT PARTNER/)).toBeInTheDocument();
+
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(mockCancelMatchmaking).toHaveBeenCalled();
+    });
+    // The context function owns leaving the queue; the raw action is only a fallback.
+    expect(mockSetReady).not.toHaveBeenCalled();
   });
 
   test('should show loading state during initialization', async () => {
@@ -191,6 +357,11 @@ describe('HomeContent Component', () => {
       },
       hasActiveChat: false,
       isConnected: false,
+      connectionStatus: 'connecting',
+      lastConnectedAt: null,
+      partnerId: null,
+      partnerProfile: null,
+      displayNameFor: makeDisplayNameFor(),
       initializeUser: jest.fn(),
       startNewChat: jest.fn(),
       endChat: jest.fn(),

@@ -10,9 +10,8 @@ export const useTypingIndicator = () => {
 
   /**
    * @deprecated No-op function for API compatibility.
-   * @param {boolean} isTyping - Ignored
    */
-  const sendTypingStatus = useCallback(async (isTyping) => {
+  const sendTypingStatus = useCallback(async () => {
     if (process.env.NODE_ENV === 'development') {
 //       // console.warn('sendTypingStatus is deprecated and has been disabled. Typing status will not be sent.');
     }

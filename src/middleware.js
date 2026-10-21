@@ -5,41 +5,54 @@ const RATE_LIMIT_WINDOW = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 100;
 
 // Enhanced CORS configuration for production
+// Exact, fully-trusted origins. Only these receive Access-Control-Allow-Credentials.
 const getAllowedOrigins = () => {
   const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [];
   const defaultOrigins = ['http://localhost:3000'];
-  
-  // In production, also allow Vercel preview and production domains
+
+  // In production, also allow the exact Vercel preview and production domains
   if (process.env.NODE_ENV === 'production') {
     const vercelUrl = process.env.VERCEL_URL;
     const vercelProjectUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    
+
     if (vercelUrl) defaultOrigins.push(`https://${vercelUrl}`);
     if (vercelProjectUrl) defaultOrigins.push(`https://${vercelProjectUrl}`);
-    
-    // Allow common Vercel domain patterns
-    defaultOrigins.push(/^https:\/\/.*\.vercel\.app$/);
   }
-  
+
   return [...new Set([...envOrigins, ...defaultOrigins])];
 };
 
 const allowedOrigins = getAllowedOrigins();
 
-// Enhanced origin checking for regex patterns
-const isOriginAllowed = (origin) => {
-  if (!origin) return false;
-  
-  return allowedOrigins.some(allowedOrigin => {
-    if (typeof allowedOrigin === 'string') {
-      return allowedOrigin === origin;
-    }
-    if (allowedOrigin instanceof RegExp) {
-      return allowedOrigin.test(origin);
-    }
-    return false;
-  });
+// Broad Vercel preview pattern. These origins are attacker-registerable, so they
+// are reflected for CORS but are NOT trusted with credentials (see getOriginPolicy).
+const vercelPreviewPattern = process.env.NODE_ENV === 'production'
+  ? /^https:\/\/.*\.vercel\.app$/
+  : null;
+
+// Determine the CORS policy for an origin.
+// - Exact allowlist match  -> reflect origin AND allow credentials.
+// - Vercel preview match    -> reflect origin WITHOUT credentials.
+// - No match                -> no CORS headers.
+// Auth here is bearer-token (Authorization header), not cookies, so a broad
+// wildcard match must never be granted Allow-Credentials.
+const getOriginPolicy = (origin) => {
+  if (!origin) return null;
+
+  if (allowedOrigins.includes(origin)) {
+    return { origin, credentials: true };
+  }
+  if (vercelPreviewPattern && vercelPreviewPattern.test(origin)) {
+    return { origin, credentials: false };
+  }
+  return null;
 };
+
+// Routing: /signin is the canonical sign-in route. /firebase-signin is a legacy alias
+// kept so old links and bookmarks keep working; it is redirected (temporarily, so the
+// mapping stays changeable) with the query string intact.
+const CANONICAL_SIGNIN_PATH = '/signin';
+const LEGACY_SIGNIN_PATHS = ['/firebase-signin', '/firebase-signin/'];
 
 const checkRateLimit = (clientIP) => {
   const now = Date.now();
@@ -66,9 +79,12 @@ export async function middleware(request) {
   if (request.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 200 });
     
-    if (isOriginAllowed(origin)) {
-      response.headers.set('Access-Control-Allow-Origin', origin);
-      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    const optionsPolicy = getOriginPolicy(origin);
+    if (optionsPolicy) {
+      response.headers.set('Access-Control-Allow-Origin', optionsPolicy.origin);
+      if (optionsPolicy.credentials) {
+        response.headers.set('Access-Control-Allow-Credentials', 'true');
+      }
     }
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -76,19 +92,33 @@ export async function middleware(request) {
     
     return response;
   }
-  
+
+  // Canonicalise the legacy sign-in path. This adds no protection and removes none;
+  // it only collapses the two sign-in routes onto one.
+  if (LEGACY_SIGNIN_PATHS.includes(pathname)) {
+    const canonicalUrl = new URL(request.nextUrl);
+    canonicalUrl.pathname = CANONICAL_SIGNIN_PATH;
+    return NextResponse.redirect(canonicalUrl, 307);
+  }
+
   const response = NextResponse.next();
   
-  if (isOriginAllowed(origin)) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  const originPolicy = getOriginPolicy(origin);
+  if (originPolicy) {
+    response.headers.set('Access-Control-Allow-Origin', originPolicy.origin);
+    if (originPolicy.credentials) {
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
   }
   
   // Enhanced security headers for production
   const getCSP = () => {
     const baseCSP = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://apis.google.com https://accounts.google.com",
+      // 'unsafe-eval' removed: no app code uses eval/new Function/WebAssembly.
+      // 'unsafe-inline' retained: Next.js injects inline bootstrap/hydration
+      // scripts and this build has no nonce/hash pipeline to allow them otherwise.
+      "script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com",
       "style-src 'self' 'unsafe-inline'", 
       "img-src 'self' data: https:",
       "font-src 'self' https:",

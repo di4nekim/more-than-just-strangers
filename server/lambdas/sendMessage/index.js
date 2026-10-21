@@ -15,8 +15,9 @@ const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws
 
 // Shared module imports
 const { authenticateWebSocketEvent } = require("../shared/auth");
-const { 
-    createErrorResponse, 
+const { redactEvent, redactBody } = require("../shared/logging");
+const {
+    createErrorResponse,
     createSuccessResponse, 
     extractAction, 
     extractRequestId,
@@ -28,7 +29,7 @@ const {
 const handlerLogic = async (event) => {
     console.log('=== HANDLER LOGIC STARTING ===');
     console.log('Lambda invoked');
-    console.log('Event received:', JSON.stringify(event, null, 2));
+    console.log('Event received:', JSON.stringify(redactEvent(event), null, 2));
     
             // Declare variables that will be used throughout the function
         let userId, email, dynamoDbClient, apiGatewayClient, connectionId;
@@ -125,7 +126,7 @@ const handlerLogic = async (event) => {
         let body;
         try {
             body = JSON.parse(event.body);
-            console.log('Request body parsed successfully:', JSON.stringify(body, null, 2));
+            console.log('Request body parsed successfully:', JSON.stringify(redactBody(body), null, 2));
         } catch (error) {
             console.log('Failed to parse request body:', error.message);
             const action = extractAction(event);
@@ -477,6 +478,23 @@ const handlerLogic = async (event) => {
                 }, requestId);
             }
 
+            // Authorization: the authenticated sender must be a participant in this conversation.
+            // Without this, any authenticated user could inject messages into any chatId.
+            const participantList = Array.isArray(conversation.participants)
+                ? conversation.participants
+                : (conversation.participants instanceof Set ? [...conversation.participants] : []);
+            const senderIsParticipant = participantList.includes(userId)
+                || conversation.userAId === userId
+                || conversation.userBId === userId;
+            if (!senderIsParticipant) {
+                console.log('sendMessage: sender not a participant in conversation:', userId);
+                const requestId = extractRequestId(event);
+                return createErrorResponse(403, 'Not a participant in this conversation', action, {
+                    operation: 'participant_authorization',
+                    chatId
+                }, requestId);
+            }
+
             // Get receiver's metadata - determine receiver from participants (Array or Set)
             let receiverId;
             console.log('Looking up receiver from participants...');
@@ -583,7 +601,9 @@ const handlerLogic = async (event) => {
                     content,
                     sentAt,
                     queued: !receiverMetadata.Item.connectionId
-                }
+                },
+                // Guard against overwriting an existing message with a duplicate client-supplied messageId
+                ConditionExpression: 'attribute_not_exists(SK)'
             };
 
             console.log('Storing message in DynamoDB with params:', JSON.stringify(messageParams, null, 2));
@@ -619,6 +639,18 @@ const handlerLogic = async (event) => {
                     errorCode: error.code,
                     errorName: error.name
                 });
+                // A failed attribute_not_exists(SK) condition means this messageId already exists.
+                if (error.name === 'ConditionalCheckFailedException') {
+                    console.log('Duplicate messageId detected, message already stored:', messageId);
+                    const requestId = extractRequestId(event);
+                    return createErrorResponse(409, 'Duplicate messageId', action, {
+                        operation: 'message_storage',
+                        resource: 'messages',
+                        tableName: process.env.MESSAGES_TABLE,
+                        messageId,
+                        chatId
+                    }, requestId);
+                }
                 return handleDynamoDBError(error, action, {
                     operation: 'message_storage',
                     resource: 'messages',
@@ -864,14 +896,15 @@ module.exports.handler = async (event, context) => {
     } catch (error) {
         console.error('Authentication failed:', error.message);
         
-        if (error.message === 'JWT_TOKEN_MISSING') {
+        // shared/auth throws FIREBASE_TOKEN_* codes; the legacy JWT_* codes are kept for compatibility.
+        if (error.message === 'FIREBASE_TOKEN_MISSING' || error.message === 'JWT_TOKEN_MISSING') {
             const action = extractAction(event);
             const requestId = extractRequestId(event);
-            return createErrorResponse(401, 'Authentication required. JWT token missing.', action, {
+            return createErrorResponse(401, 'Authentication required. Firebase ID token missing.', action, {
                 operation: 'authentication',
-                authType: 'jwt'
+                authType: 'firebase'
             }, requestId);
-        } else if (error.message === 'JWT_TOKEN_INVALID') {
+        } else if (['FIREBASE_TOKEN_INVALID', 'FIREBASE_TOKEN_EXPIRED', 'FIREBASE_TOKEN_REVOKED', 'JWT_TOKEN_INVALID'].includes(error.message)) {
             const action = extractAction(event);
             const requestId = extractRequestId(event);
             return createErrorResponse(401, 'Invalid or expired JWT token', action, {

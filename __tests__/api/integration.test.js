@@ -12,13 +12,21 @@ import { createFirebaseTestJWT } from '../helpers/jwt-helper.js';
 const BASE_URL = process.env.TEST_API_URL || 'http://localhost:3000';
 const TEST_TIMEOUT = 10000; // 10 seconds
 
-describe('API Integration Tests', () => {
+// Makes real HTTP requests to a running dev server (BASE_URL); skipped unless
+// explicitly enabled:  ENABLE_INTEGRATION_TESTS=true TEST_API_URL=... jest __tests__/api/integration
+const describeIntegration = process.env.ENABLE_INTEGRATION_TESTS === 'true' ? describe : describe.skip;
+
+describeIntegration('API Integration Tests', () => {
   let testToken;
   let testChatId;
 
   beforeAll(() => {
-    // Create a test JWT token
-    testToken = createFirebaseTestJWT({
+    // jest.setup replaces global.fetch with a mock; these tests need the real one.
+    if (global.__nativeFetch) global.fetch = global.__nativeFetch;
+    // The API verifies tokens with firebase-admin, which only accepts real Firebase
+    // ID tokens — supply one via FIREBASE_TEST_ID_TOKEN. The locally-signed JWT is
+    // kept only as a fallback so the negative (invalid-token) cases still exercise.
+    testToken = process.env.FIREBASE_TEST_ID_TOKEN || createFirebaseTestJWT({
       uid: 'integration-test-user-123',
       email: 'integration-test@example.com',
       displayName: 'Integration Test User'

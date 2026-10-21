@@ -2,9 +2,10 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent } = require("../shared/logging");
 
 
-const { 
+const {
     createErrorResponse, 
     createSuccessResponse, 
     extractAction, 
@@ -27,7 +28,7 @@ const apiGateway = new ApiGatewayManagementApiClient({
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('endConversation: Function started');
-    console.log('endConversation: Event received:', JSON.stringify(event, null, 2));
+    console.log('endConversation: Event received:', JSON.stringify(redactEvent(event), null, 2));
     
     // Get authenticated user info
     const { userId } = event.userInfo;
@@ -47,7 +48,11 @@ const handlerLogic = async (event) => {
         }
 
         // Validate required fields
-        const { chatId, reason } = payload;
+        // The client sends { action, data: { chatId, endReason } } (see websocketActions);
+        // the legacy top-level { chatId, reason } shape is still accepted.
+        const source = payload.data || payload;
+        const chatId = source.chatId;
+        const reason = source.endReason || source.reason;
         if (!chatId) {
             console.log('endConversation: Missing chatId');
             return {
@@ -109,6 +114,20 @@ const handlerLogic = async (event) => {
         // Determine the other user in the conversation
         const otherUserId = conversation.Item.userAId === userId ? conversation.Item.userBId : conversation.Item.userAId;
 
+        // Clear both participants' conversation state so they can be rematched.
+        // Without this, startConversation keeps rejecting them as "already in a conversation".
+        const clearUserState = (participantId) => dynamoDB.send(new UpdateCommand({
+            TableName: process.env.USER_METADATA_TABLE,
+            Key: { PK: `USER#${participantId}` },
+            UpdateExpression: 'SET ready = :notReady, lastUpdated = :lastUpdated REMOVE chatId, questionIndex',
+            ExpressionAttributeValues: {
+                ':notReady': false,
+                ':lastUpdated': timestamp
+            }
+        }));
+        await Promise.all([clearUserState(userId), clearUserState(otherUserId)]);
+        console.log('endConversation: Cleared conversation state for both participants');
+
         // Get other user's connection status
         const otherUserMetadata = await dynamoDB.send(new GetCommand({
             TableName: process.env.USER_METADATA_TABLE,
@@ -158,5 +177,33 @@ const handlerLogic = async (event) => {
                 data: { error: 'Internal server error' }
             })
         };
+    }
+};
+
+// Wrap the handler with authentication middleware.
+// template.yaml configures `Handler: endConversation/index.handler`, so this export
+// must exist (previously only handlerLogic was defined, making the lambda fail to load).
+exports.handler = async (event, context) => {
+    try {
+        const userInfo = await authenticateWebSocketEvent(event);
+        event.userInfo = userInfo;
+        return await handlerLogic(event, context);
+    } catch (error) {
+        console.error('endConversation: Authentication failed:', error.message);
+        const action = extractAction(event);
+        const requestId = extractRequestId(event);
+        if (error.message === 'FIREBASE_TOKEN_MISSING') {
+            return createErrorResponse(401, 'Authentication required. Firebase ID token missing.', action, {
+                operation: 'authentication'
+            }, requestId);
+        } else if (error.message === 'FIREBASE_TOKEN_INVALID') {
+            return createErrorResponse(401, 'Invalid or expired Firebase ID token', action, {
+                operation: 'authentication'
+            }, requestId);
+        }
+        return createErrorResponse(500, 'Internal Server Error', action, {
+            operation: 'authentication',
+            error: error.message
+        }, requestId);
     }
 };

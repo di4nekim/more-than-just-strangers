@@ -8,6 +8,7 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, UpdateCommand, DeleteCommand, GetCommand, QueryCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const { authenticateWebSocketEvent } = require("../shared/auth");
+const { redactEvent, redactBody, redactString } = require("../shared/logging");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { 
     createErrorResponse, 
@@ -44,12 +45,12 @@ try {
 // Main handler logic
 const handlerLogic = async (event) => {
     console.log('setReady: Function started');
-    console.log('setReady: Event received:', JSON.stringify(event, null, 2));
-    console.log('setReady: Event body:', event.body);
+    console.log('setReady: Event received:', JSON.stringify(redactEvent(event), null, 2));
+    console.log('setReady: Event body:', redactString(event.body));
     console.log('setReady: Event body type:', typeof event.body);
-    console.log('setReady: Event requestContext:', event.requestContext);
-    console.log('setReady: Event headers:', event.headers);
-    console.log('setReady: Event queryStringParameters:', event.queryStringParameters);
+    console.log('setReady: Event requestContext:', redactBody(event.requestContext));
+    console.log('setReady: Event headers:', redactBody(event.headers));
+    console.log('setReady: Event queryStringParameters:', redactBody(event.queryStringParameters));
     
     // Get authenticated user info
     const { userId } = event.userInfo;
@@ -60,9 +61,9 @@ const handlerLogic = async (event) => {
         let payload;
         try {
             payload = JSON.parse(event.body);
-            console.log('setReady: Parsed payload:', JSON.stringify(payload, null, 2));
+            console.log('setReady: Parsed payload:', JSON.stringify(redactBody(payload), null, 2));
             console.log('setReady: Payload keys:', Object.keys(payload));
-            console.log('setReady: Payload.data:', payload.data);
+            console.log('setReady: Payload.data:', redactBody(payload.data));
             console.log('setReady: Payload.data keys:', payload.data ? Object.keys(payload.data) : 'No data field');
         } catch (error) {
             const action = extractAction(event);
@@ -77,7 +78,7 @@ const handlerLogic = async (event) => {
         const { ready } = payload.data || payload;
         if (typeof ready !== 'boolean') {
             console.log('setReady: Invalid ready value:', ready);
-            console.log('setReady: Full payload:', JSON.stringify(payload, null, 2));
+            console.log('setReady: Full payload:', JSON.stringify(redactBody(payload), null, 2));
             const action = extractAction(event);
             const requestId = extractRequestId(event);
             return createErrorResponse(400, 'Invalid ready value. Must be a boolean.', action, {
@@ -85,7 +86,7 @@ const handlerLogic = async (event) => {
                 requiredField: 'ready',
                 providedValue: ready,
                 expectedType: 'boolean',
-                payloadStructure: payload
+                payloadStructure: redactBody(payload)
             }, requestId);
         }
 
@@ -232,37 +233,73 @@ const handlerLogic = async (event) => {
                     if (otherUserResult.Item && otherUserResult.Item.ready) {
                         console.log('setReady: Both users are ready, advancing question');
                         
-                        // Both users are ready, advance the question
+                        // Both users are ready, advance the question.
+                        // Use an atomic, conditional increment so two near-simultaneous
+                        // ready toggles cannot advance past the same question twice
+                        // (which would skip a question). The ConditionExpression makes
+                        // the advance idempotent per question: it only fires while the
+                        // user is still on the expected questionIndex.
                         const currentQuestionIndex = currentUserMetadata.Item.questionIndex || 1;
                         const newQuestionIndex = currentQuestionIndex + 1;
-                        
-                        // Update question index for current user
-                        const currentUserUpdateResult = await dynamoDB.send(new UpdateCommand({
-                            TableName: process.env.USER_METADATA_TABLE,
-                            Key: { PK: `USER#${userId}` },
-                            UpdateExpression: 'SET questionIndex = :questionIndex, ready = :ready',
-                            ExpressionAttributeValues: {
-                                ':questionIndex': newQuestionIndex,
-                                ':ready': false
-                            },
-                            ReturnValues: 'ALL_NEW'
-                        }));
+                        let didAdvance = false;
 
-                        // Update question index for other user
-                        const otherUserUpdateResult = await dynamoDB.send(new UpdateCommand({
-                            TableName: process.env.USER_METADATA_TABLE,
-                            Key: { PK: `USER#${otherUserId}` },
-                            UpdateExpression: 'SET questionIndex = :questionIndex, ready = :ready',
-                            ExpressionAttributeValues: {
-                                ':questionIndex': newQuestionIndex,
-                                ':ready': false
-                            },
-                            ReturnValues: 'ALL_NEW'
-                        }));
+                        try {
+                            // Advance current user only if still on the expected question
+                            await dynamoDB.send(new UpdateCommand({
+                                TableName: process.env.USER_METADATA_TABLE,
+                                Key: { PK: `USER#${userId}` },
+                                UpdateExpression: 'SET ready = :ready ADD questionIndex :one',
+                                ConditionExpression: 'questionIndex = :currentIndex',
+                                ExpressionAttributeValues: {
+                                    ':ready': false,
+                                    ':one': 1,
+                                    ':currentIndex': currentQuestionIndex
+                                },
+                                ReturnValues: 'ALL_NEW'
+                            }));
+                            didAdvance = true;
+                        } catch (error) {
+                            if (error.name === 'ConditionalCheckFailedException') {
+                                // A concurrent ready toggle already advanced this question.
+                                // Skip the duplicate advance so we don't double-increment.
+                                console.log('setReady: Question already advanced by a concurrent request, skipping duplicate advance');
+                            } else {
+                                throw error;
+                            }
+                        }
+
+                        if (didAdvance) {
+                            // Advance the other user, guarded the same way so it stays
+                            // idempotent if their own invocation already advanced them.
+                            try {
+                                await dynamoDB.send(new UpdateCommand({
+                                    TableName: process.env.USER_METADATA_TABLE,
+                                    Key: { PK: `USER#${otherUserId}` },
+                                    UpdateExpression: 'SET ready = :ready ADD questionIndex :one',
+                                    ConditionExpression: 'questionIndex = :currentIndex',
+                                    ExpressionAttributeValues: {
+                                        ':ready': false,
+                                        ':one': 1,
+                                        ':currentIndex': currentQuestionIndex
+                                    },
+                                    ReturnValues: 'ALL_NEW'
+                                }));
+                            } catch (error) {
+                                if (error.name === 'ConditionalCheckFailedException') {
+                                    console.log('setReady: Other user already advanced by a concurrent request');
+                                } else {
+                                    throw error;
+                                }
+                            }
+                        }
 
                         console.log('setReady: Question advanced to index:', newQuestionIndex);
                         console.log('setReady: Note: Users will see the new question on their next page refresh or when they reconnect');
 
+                        // Only the invocation that actually advanced the question notifies
+                        // both clients, so a suppressed duplicate advance does not send a
+                        // second advanceQuestion message.
+                        if (didAdvance) {
                         // Send advanceQuestion message to both users
                         const advanceQuestionMessage = {
                             action: 'advanceQuestion',
@@ -327,6 +364,7 @@ const handlerLogic = async (event) => {
                                 }
                             }
                         }
+                        } // end if (didAdvance)
                     } else {
                         console.log('setReady: Other user is not ready yet, waiting for them');
                     }

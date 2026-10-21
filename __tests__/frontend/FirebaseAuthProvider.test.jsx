@@ -18,6 +18,9 @@ import React from 'react';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { FirebaseAuthProvider, useFirebaseAuth } from '../../src/app/components/auth/FirebaseAuthProvider';
+// The provider subscribes through the module-level onAuthStateChanged(auth, cb)
+// from 'firebase/auth' (mocked globally in jest.setup), not auth.onAuthStateChanged.
+import { onAuthStateChanged } from 'firebase/auth';
 
 describe('FirebaseAuthProvider', () => {
   let mockOnAuthStateChanged;
@@ -54,7 +57,7 @@ describe('FirebaseAuthProvider', () => {
 
   test('should show loading state initially', () => {
     // Don't call the callback - let the component show loading
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       // Don't call callback yet
       return () => {};
     });
@@ -72,7 +75,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });
@@ -103,7 +106,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });
@@ -142,7 +145,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });
@@ -190,7 +193,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });
@@ -244,7 +247,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });
@@ -292,7 +295,7 @@ describe('FirebaseAuthProvider', () => {
     let authCallback;
     
     // Capture the callback for later use
-    mockAuth.onAuthStateChanged.mockImplementation((callback) => {
+    onAuthStateChanged.mockImplementation((_auth, callback) => {
       authCallback = callback;
       return () => {};
     });

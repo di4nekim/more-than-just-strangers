@@ -12,10 +12,11 @@ const { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } = requir
 
 // Shared utility imports
 const { authenticateWebSocketEvent } = require("../shared/auth");
-const { 
-    createErrorResponse, 
-    createSuccessResponse, 
-    extractAction, 
+const { redactEvent } = require("../shared/logging");
+const {
+    createErrorResponse,
+    createSuccessResponse,
+    extractAction,
     extractRequestId,
     handleDynamoDBError
 } = require("../shared/errorHandler");
@@ -23,7 +24,7 @@ const {
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 
 const handlerLogic = async (event) => {
-    console.log('Lambda triggered with event:', JSON.stringify(event, null, 2));
+    console.log('Lambda triggered with event:', JSON.stringify(redactEvent(event), null, 2));
     
     const { userId, email } = event.userInfo;
     console.log('Firebase token validated successfully for user:', userId);

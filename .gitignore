@@ -3,6 +3,7 @@ node_modules
 venv/
 .env.*
 .env
+!.env.example
 myenv/
 dynamodb/data/*
 coverage/
@@ -19,3 +20,11 @@ test.env.example
 
 # Lambda build artifacts
 **/dist/
+# Firebase / service-account keys
+*-adminsdk-*.json
+*firebase*key*.json
+serviceAccount*.json
+
+# macOS
+.DS_Store
+**/.DS_Store

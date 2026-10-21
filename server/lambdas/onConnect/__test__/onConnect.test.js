@@ -1,254 +1,203 @@
-const { handler } = require('../index');
-const jwt = require('jsonwebtoken');
-
-// Mock the JWT module
-jest.mock('jsonwebtoken');
-
-// Mock Firebase Admin SDK
+/**
+ * Unit tests for the onConnect lambda ($connect route).
+ *
+ * Token verification is mocked at the shared firebase-config boundary — that is
+ * what shared/auth.js actually calls — and DynamoDB at the SDK v3 command
+ * boundary, so no Firebase Admin initialisation or network is involved.
+ */
 const mockVerifyIdToken = jest.fn();
-jest.mock('firebase-admin/auth', () => ({
-  getAuth: jest.fn(() => ({
-    verifyIdToken: mockVerifyIdToken
-  }))
-}));
+const mockSend = jest.fn();
 
-jest.mock('firebase-admin/app', () => ({
-  initializeApp: jest.fn(),
-  getApps: jest.fn(() => [])
+jest.mock('../../shared/firebase-config.js', () => ({
+  verifyIdToken: mockVerifyIdToken,
+  getUserByUid: jest.fn()
 }));
-
-// Mock AWS SDK
 jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({}))
+  DynamoDBClient: jest.fn(() => ({}))
 }));
-
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
-  DynamoDBDocumentClient: {
-    from: jest.fn().mockReturnValue({
-      send: jest.fn()
-    })
-  },
-  GetCommand: jest.fn().mockImplementation((params) => ({ commandType: 'GetCommand', ...params })),
-  PutCommand: jest.fn().mockImplementation((params) => ({ commandType: 'PutCommand', ...params })),
-  UpdateCommand: jest.fn().mockImplementation((params) => ({ commandType: 'UpdateCommand', ...params }))
+  DynamoDBDocumentClient: { from: jest.fn(() => ({ send: mockSend })) },
+  GetCommand: jest.fn((params) => ({ commandType: 'Get', ...params })),
+  PutCommand: jest.fn((params) => ({ commandType: 'Put', ...params })),
+  UpdateCommand: jest.fn((params) => ({ commandType: 'Update', ...params }))
 }));
 
-describe('onConnect Lambda with Firebase Authentication', () => {
-  const mockConnectionId = 'test-connection-id-123';
-  const mockUserId = 'user-123-456';
-  const mockUserEmail = 'test@example.com';
-  const mockToken = 'mock-firebase-token';
-  
-  let mockDynamoSend;
-  let mockDynamoGet;
-  let mockDynamoPut;
-  let mockDynamoUpdate;
-  
-  beforeEach(() => {
-    // Set up environment variables
-    process.env.USER_METADATA_TABLE = 'test-user-metadata-table';
-    process.env.AWS_REGION = 'us-east-1';
-    
-    // Get the mocked send function
-    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
-    const client = DynamoDBDocumentClient.from();
-    mockDynamoSend = client.send;
-    
-    // Clear all mocks
-    jest.clearAllMocks();
+const { handler } = require('../index');
+const { PutCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
+
+const CONNECTION_ID = 'test-connection-id-123';
+const USER_ID = 'user-123-456';
+const EMAIL = 'test@example.com';
+const TOKEN = 'mock-firebase-token';
+
+const decodedToken = { uid: USER_ID, email: EMAIL, iat: 1700000000, exp: 1700003600 };
+
+const eventWithQueryToken = {
+  requestContext: { connectionId: CONNECTION_ID },
+  queryStringParameters: { token: TOKEN }
+};
+const eventWithBodyToken = {
+  requestContext: { connectionId: CONNECTION_ID },
+  body: JSON.stringify({ token: TOKEN })
+};
+const eventWithoutToken = {
+  requestContext: { connectionId: CONNECTION_ID }
+};
+
+// Route DynamoDB reads so each test declares whether the user already exists.
+function seedDynamo({ existingUser = null } = {}) {
+  mockSend.mockImplementation(async (cmd) => {
+    if (cmd.commandType === 'Get') return { Item: existingUser };
+    return {};
   });
-  
-  const mockDecodedToken = {
-    uid: mockUserId,
-    email: mockUserEmail,
-    aud: 'test-project',
-    iss: 'https://securetoken.google.com/test-project'
-  };
+}
 
-  const mockEventWithToken = {
-    requestContext: {
-      connectionId: mockConnectionId
-    },
-    queryStringParameters: {
-      token: mockToken
-    }
-  };
+const parseBody = (response) => JSON.parse(response.body);
 
-  const mockEventWithAuthHeader = {
-    requestContext: {
-      connectionId: mockConnectionId
-    },
-    headers: {
-      Authorization: `Bearer ${mockToken}`
-    }
-  };
+describe('onConnect lambda', () => {
+  beforeAll(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    console.log.mockRestore();
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Setup mock send function to route to appropriate handlers
-    mockDynamoSend.mockImplementation((command) => {
-      if (command.commandType === 'GetCommand') {
-        return mockDynamoGet();
-      } else if (command.commandType === 'PutCommand') {
-        return mockDynamoPut();
-      } else if (command.commandType === 'UpdateCommand') {
-        return mockDynamoUpdate();
-      }
-    });
-
-    // Mock successful Firebase token verification by default
-    mockVerifyIdToken.mockResolvedValue(mockDecodedToken);
+    mockVerifyIdToken.mockResolvedValue(decodedToken);
+    seedDynamo();
   });
 
-  describe('Firebase Token Validation', () => {
-    test('successfully connects with valid Firebase token in query parameters', async () => {
-      // Mock user doesn't exist, will create new user
-      mockDynamoGet.mockResolvedValue({ Item: null });
-      mockDynamoPut.mockResolvedValue({});
+  describe('authentication', () => {
+    test('accepts a Firebase token passed as a query parameter', async () => {
+      const response = await handler(eventWithQueryToken);
 
-      const response = await handler(mockEventWithToken);
-      
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.message).toBe('New user connection established');
-      expect(body.userId).toBe(mockUserId);
-      expect(body.connectionId).toBe(mockConnectionId);
-      
-      // Verify Firebase token was validated
-      expect(mockVerifyIdToken).toHaveBeenCalledWith(mockToken);
+      expect(mockVerifyIdToken).toHaveBeenCalledWith(TOKEN, null);
     });
 
-    test('successfully connects with valid Firebase token in Authorization header', async () => {
-      // Mock user doesn't exist, will create new user
-      mockDynamoGet.mockResolvedValue({ Item: null });
-      mockDynamoPut.mockResolvedValue({});
+    test('accepts a Firebase token passed at the root of the body', async () => {
+      const response = await handler(eventWithBodyToken);
 
-      const response = await handler(mockEventWithAuthHeader);
-      
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.message).toBe('New user connection established');
-      expect(body.userId).toBe(mockUserId);
-      expect(body.connectionId).toBe(mockConnectionId);
-      
-      // Verify Firebase token was validated
-      expect(mockVerifyIdToken).toHaveBeenCalledWith(mockToken);
+      expect(mockVerifyIdToken).toHaveBeenCalledWith(TOKEN, null);
     });
 
-    test('returns 401 for invalid Firebase token', async () => {
+    test('returns 401 when no token is supplied', async () => {
+      const response = await handler(eventWithoutToken);
+
+      expect(response.statusCode).toBe(401);
+      expect(parseBody(response)).toMatchObject({
+        error: 'Authentication failed',
+        message: 'FIREBASE_TOKEN_MISSING'
+      });
+      expect(mockVerifyIdToken).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    test('returns 401 when the token is invalid', async () => {
       mockVerifyIdToken.mockRejectedValue(new Error('Invalid token'));
 
-      const response = await handler(mockEventWithToken);
-      
+      const response = await handler(eventWithQueryToken);
+
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('Invalid token');
+      expect(parseBody(response)).toMatchObject({
+        error: 'Authentication failed',
+        message: 'FIREBASE_TOKEN_INVALID'
+      });
+      expect(mockSend).not.toHaveBeenCalled();
     });
 
-    test('returns 401 for missing token', async () => {
-      const mockEventNoToken = {
-        requestContext: {
-          connectionId: mockConnectionId
-        }
-      };
+    test('returns 401 with the expired code when the token has expired', async () => {
+      const expired = new Error('Token expired');
+      expired.code = 'auth/id-token-expired';
+      mockVerifyIdToken.mockRejectedValue(expired);
 
-      const response = await handler(mockEventNoToken);
-      
+      const response = await handler(eventWithQueryToken);
+
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('No token provided');
-    });
-
-    test('returns 401 for expired Firebase token', async () => {
-      mockVerifyIdToken.mockRejectedValue(new Error('Token expired'));
-
-      const response = await handler(mockEventWithToken);
-      
-      expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('Token expired');
+      expect(parseBody(response).message).toBe('FIREBASE_TOKEN_EXPIRED');
     });
   });
 
-  describe('User Management', () => {
-    test('creates new user when user does not exist', async () => {
-      mockDynamoGet.mockResolvedValue({ Item: null });
-      mockDynamoPut.mockResolvedValue({});
+  describe('request validation', () => {
+    test('returns 400 when the event carries no connectionId', async () => {
+      const response = await handler({ queryStringParameters: { token: TOKEN } });
 
-      const response = await handler(mockEventWithToken);
-      
-      expect(response.statusCode).toBe(200);
-      expect(mockDynamoPut).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            TableName: expect.any(String),
-            Item: expect.objectContaining({
-              userId: mockUserId,
-              connectionId: mockConnectionId,
-              email: mockUserEmail
-            })
-          })
-        })
-      );
-    });
-
-    test('updates existing user connection', async () => {
-      const existingUser = {
-        userId: mockUserId,
-        email: mockUserEmail,
-        lastSeen: '2024-01-01T00:00:00.000Z'
-      };
-      
-      mockDynamoGet.mockResolvedValue({ Item: existingUser });
-      mockDynamoUpdate.mockResolvedValue({});
-
-      const response = await handler(mockEventWithToken);
-      
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.message).toBe('User reconnected');
-      expect(body.userId).toBe(mockUserId);
-      expect(body.connectionId).toBe(mockConnectionId);
-      
-      expect(mockDynamoUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          input: expect.objectContaining({
-            TableName: expect.any(String),
-            Key: { userId: mockUserId },
-            UpdateExpression: expect.stringContaining('connectionId'),
-            ExpressionAttributeValues: expect.objectContaining({
-              ':connectionId': mockConnectionId
-            })
-          })
-        })
-      );
+      expect(response.statusCode).toBe(400);
+      expect(parseBody(response).error).toMatch(/Missing connectionId/);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
-  describe('Error Handling', () => {
-    test('handles DynamoDB errors gracefully', async () => {
-      mockDynamoGet.mockRejectedValue(new Error('DynamoDB error'));
+  describe('user management', () => {
+    test('creates a metadata record for a first-time user', async () => {
+      const response = await handler(eventWithQueryToken);
 
-      const response = await handler(mockEventWithToken);
-      
+      expect(response.statusCode).toBe(200);
+      expect(parseBody(response)).toEqual({
+        message: 'New user connection established',
+        connectionId: CONNECTION_ID,
+        userId: USER_ID
+      });
+      expect(PutCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: process.env.USER_METADATA_TABLE,
+          Item: expect.objectContaining({
+            PK: `USER#${USER_ID}`,
+            userId: USER_ID,
+            email: EMAIL,
+            connectionId: CONNECTION_ID
+          })
+        })
+      );
+      expect(UpdateCommand).not.toHaveBeenCalled();
+    });
+
+    test('updates the connectionId for a returning user', async () => {
+      seedDynamo({ existingUser: { PK: `USER#${USER_ID}`, userId: USER_ID, email: EMAIL, connectionId: 'stale' } });
+
+      const response = await handler(eventWithQueryToken);
+
+      expect(response.statusCode).toBe(200);
+      expect(parseBody(response)).toEqual({
+        message: 'User connection updated',
+        connectionId: CONNECTION_ID,
+        userId: USER_ID
+      });
+      expect(UpdateCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: process.env.USER_METADATA_TABLE,
+          Key: { PK: `USER#${USER_ID}` },
+          UpdateExpression: expect.stringContaining('connectionId'),
+          ExpressionAttributeValues: expect.objectContaining({ ':connectionId': CONNECTION_ID })
+        })
+      );
+      expect(PutCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling', () => {
+    test('returns 500 when the user lookup fails', async () => {
+      mockSend.mockRejectedValue(new Error('DynamoDB error'));
+
+      const response = await handler(eventWithQueryToken);
+
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Internal server error');
+      expect(parseBody(response).error).toBe('Internal Server Error');
     });
 
-    test('handles Firebase service errors', async () => {
-      mockVerifyIdToken.mockRejectedValue(new Error('Firebase service unavailable'));
+    test('returns 500 when creating the user record fails', async () => {
+      mockSend.mockImplementation(async (cmd) => {
+        if (cmd.commandType === 'Get') return { Item: null };
+        throw new Error('write failed');
+      });
 
-      const response = await handler(mockEventWithToken);
-      
-      expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('Firebase service unavailable');
+      const response = await handler(eventWithQueryToken);
+
+      expect(response.statusCode).toBe(500);
+      expect(parseBody(response).error).toBe('Failed to create user');
     });
   });
-}); 
+});

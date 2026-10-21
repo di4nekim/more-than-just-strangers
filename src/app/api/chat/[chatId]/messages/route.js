@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { validateToken, handleAuthError } from '@/lib/auth';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 
 const dynamoDB = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' })
@@ -11,10 +11,29 @@ export async function GET(request, { params }) {
   try {
     const { chatId } = await params;
     const { user } = await validateToken(request);
+    const authenticatedUserId = user.uid || user.sub;
+
+    // Authorization: the caller must be a participant in this conversation (prevents IDOR).
+    const conversation = await dynamoDB.send(new GetCommand({
+      TableName: process.env.CONVERSATIONS_TABLE || 'Conversations',
+      Key: { PK: `CHAT#${chatId}` }
+    }));
+    if (!conversation.Item) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+    }
+    if (
+      conversation.Item.userAId !== authenticatedUserId &&
+      conversation.Item.userBId !== authenticatedUserId
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
+    // Clamp the client-supplied limit so NaN/huge values never reach DynamoDB.
+    const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const limit = Number.isNaN(parsedLimit) ? 50 : Math.min(Math.max(parsedLimit, 1), 100);
     const before = searchParams.get('before');
-    
+
     const queryParams = {
       TableName: process.env.MESSAGES_TABLE || 'MessagesV2',
       KeyConditionExpression: 'PK = :chatId',

@@ -2,8 +2,9 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 const { authenticateWebSocketEvent } = require("../shared/auth");
-const { 
-    createErrorResponse, 
+const { redactEvent } = require("../shared/logging");
+const {
+    createErrorResponse,
     extractAction, 
     extractRequestId
 } = require("../shared/errorHandler");
@@ -31,7 +32,7 @@ const handlerLogic = async (event) => {
     console.log('Authenticated user requesting current state:', userId, email);
     
     try {
-        console.log('Event:', JSON.stringify(event, null, 2));
+        console.log('Event:', JSON.stringify(redactEvent(event), null, 2));
         
         if (!connectionId) {
             throw new Error('Missing connectionId');
@@ -174,9 +175,10 @@ module.exports.handler = async (event, context) => {
                     Data: JSON.stringify({
                         action: 'error',
                         data: { 
-                            error: error.message === 'JWT_TOKEN_MISSING' 
-                                ? 'Authentication required. JWT token missing.' 
-                                : 'Invalid or expired JWT token'
+                            // shared/auth throws FIREBASE_TOKEN_*; the legacy JWT_* code is kept for compatibility.
+                            error: ['FIREBASE_TOKEN_MISSING', 'JWT_TOKEN_MISSING'].includes(error.message)
+                                ? 'Authentication required. Firebase ID token missing.'
+                                : 'Invalid or expired Firebase ID token'
                         }
                     })
                 }));

@@ -4,6 +4,7 @@
  */
 const { verifyIdToken, getUserByUid: firebaseGetUserByUid } = require('./firebase-config.js');
 const { createErrorResponse, extractAction, extractRequestId } = require('./errorHandler.js');
+const { redactString } = require('./logging.js');
 
 /**
  * Validate Firebase ID token
@@ -33,7 +34,7 @@ const validateFirebaseToken = async (token, environment = null) => {
         
         return decodedToken;
     } catch (error) {
-        console.error('FIREBASE: Token validation failed:', error.message);
+        console.error('FIREBASE: Token validation failed:', redactString(error.message));
         console.error('FIREBASE: Error code:', error.code);
         
         // Provide more specific error messages
@@ -150,7 +151,7 @@ const authenticateWebSocketEvent = async (event, environment = null) => {
             name: decodedToken.name || decodedToken.email?.split('@')[0]
         };
     } catch (error) {
-        console.error('Authentication error:', error.message);
+        console.error('Authentication error:', redactString(error.message));
         throw error;
     }
 };
@@ -192,7 +193,7 @@ const withAuth = (handler) => {
             event.userInfo = userInfo;
             return await handler(event, context);
         } catch (error) {
-            console.error('Authentication failed:', error.message);
+            console.error('Authentication failed:', redactString(error.message));
             
             const action = extractAction(event);
             const requestId = extractRequestId(event);
